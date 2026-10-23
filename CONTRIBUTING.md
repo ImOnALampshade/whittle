@@ -18,7 +18,8 @@ problem or idea before a large change saves everyone time.
 - Keep to the style around you: plain functions, few comments that say why, the stdlib
   only outside `whittle/addon/` (bpy) and `whittle/agent/runner.py` (the SDK).
 - Add or update tests with the change, and run the whole suite: `./run_tests.sh`. For a
-  sidebar change, run `./screens.sh` for the affected scenarios and look at the images.
+  sidebar change, run `./screens.sh` for the affected scenarios and look at the images;
+  when it changes what the README shows, refresh its images with `./screens.sh --docs`.
   For a change to sketching, undo, start points, saving or anything else the GUI checks
   cover (`tests/gui/catalog.py`), run `./gui_checks.sh` too.
 - Keep `README.md` and `docs/` in step with what you change (`docs/progress.md` lists

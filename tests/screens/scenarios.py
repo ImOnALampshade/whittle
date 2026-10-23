@@ -149,6 +149,13 @@ class Stage:
             yield self.finished(nodes[-1])
         return nodes
 
+    def scroll_sidebar_to_end(self) -> None:
+        """Scrolls the sidebar to its last panel, where the prompt box is."""
+        override = self.override()
+        override["region"] = next(r for r in override["area"].regions if r.type == "UI")
+        with bpy.context.temp_override(**override):
+            bpy.ops.view2d.scroll_down(deltay=100000)
+
     def tools(self, status: str) -> list:
         ctl = self.ctl
         return [e for e in ctl.stream.entries() if e.kind == "tool" and e.status == status] if ctl else []
@@ -176,12 +183,13 @@ class Stage:
 SCENARIOS = {}
 
 
-def scenario(fn=None, *, open_panels: bool = False, viewport: bool = False):
+def scenario(fn=None, *, open_panels: bool = False, viewport: bool = False, window: bool = False):
     """Registers a scenario; with viewport, the harness shoots the 3D
-    viewport instead of the sidebar."""
+    viewport instead of the sidebar, and with window the whole window."""
     def add(fn):
         fn.open_panels = open_panels
         fn.viewport = viewport
+        fn.window = window
         SCENARIOS[fn.__name__] = fn
         return fn
     return add(fn) if fn is not None else add
@@ -301,7 +309,7 @@ def conversation(stage: Stage):
 
 MARKDOWN_REPLY = """## What I changed
 
-I grew **two horns** out of the sphere's top, so it is still *one closed mesh*:
+I grew **two horns** out of the crate's top, so it is still *one closed mesh*:
 
 - Each horn is 5 rings, tapering to a point
 - They curve outwards, mirrored left and right
@@ -809,3 +817,121 @@ def model_menu(stage: Stage):
 def model_menu_older(stage: Stage):
     yield from _model_chat(stage, "claude-opus-4-6")
     return Popup("operator", "wm.call_menu", {"name": "WHITTLE_MT_models_older"})
+
+
+# -- the README's hero shot ---------------------------------------------------
+
+BEVEL_AND_LID = """crate = bpy.data.objects['Crate']
+bevel = crate.modifiers.new('Bevel', 'BEVEL')
+bevel.width, bevel.segments = 0.02, 3
+mesh = bpy.data.meshes.new('Crate_Lid')
+bm = bmesh.new()
+bmesh.ops.create_cube(bm, size=1.0)
+bm.to_mesh(mesh)
+bm.free()
+lid = bpy.data.objects.new('Crate_Lid', mesh)
+lid.scale = (0.56, 0.56, 0.05)
+lid.location = (0, 0, 0.525)
+bpy.context.scene.collection.objects.link(lid)
+lid.modifiers.new('Bevel', 'BEVEL').segments = 3
+lid.modifiers['Bevel'].width = 0.012
+paint = bpy.data.materials.new('Lid')
+paint.diffuse_color = (0.62, 0.45, 0.26, 1)
+mesh.materials.append(paint)"""
+
+ROPE_HANDLES = """import math
+rope = bpy.data.materials.new('Rope')
+rope.diffuse_color = (0.78, 0.66, 0.42, 1)
+for side in (-1, 1):
+    ring, tube, rings, sides = 0.08, 0.014, 32, 10
+    verts, faces = [], []
+    for i in range(rings):
+        a = 2 * math.pi * i / rings
+        for j in range(sides):
+            b = 2 * math.pi * j / sides
+            r = ring + tube * math.cos(b)
+            verts.append((side * (0.25 + tube * math.sin(b)), r * math.cos(a), 0.3 + r * math.sin(a)))
+            n = (i + 1) % rings
+            faces.append((i * sides + j, i * sides + (j + 1) % sides,
+                          n * sides + (j + 1) % sides, n * sides + j))
+    mesh = bpy.data.meshes.new('Handle')
+    mesh.from_pydata(verts, [], faces)
+    mesh.shade_smooth()
+    mesh.materials.append(rope)
+    handle = bpy.data.objects.new('Handle', mesh)
+    bpy.context.scene.collection.objects.link(handle)"""
+
+DARKEN = "bpy.data.materials['Wood'].diffuse_color = (0.32, 0.19, 0.09, 1)"
+
+# The next request, sketched over the result: a stroke of each kind.
+HERO_STROKES = [
+    # A latch to add on the front, below the lid.
+    ("add", True, [(-0.06, -0.262, 0.47), (0.06, -0.262, 0.47), (0.06, -0.262, 0.38),
+                   (-0.06, -0.262, 0.38)]),
+    # A finger slot to carve into the lid.
+    ("carve", True, [(-0.13 + 0.26 * k / 12, -0.035, 0.552) for k in range(13)]
+     + [(0.13 - 0.26 * k / 12, 0.035, 0.552) for k in range(13)]),
+    # The lid's front edge to sharpen.
+    ("crease", False, [(-0.28 + 0.56 * k / 10, -0.282, 0.552) for k in range(11)]),
+    # The side panel to paint.
+    ("region", True, [(-0.262, -0.2, 0.04), (-0.262, 0.2, 0.04), (-0.262, 0.2, 0.18), (-0.262, -0.2, 0.18)]),
+    # A note pointing at the latch.
+    ("note", False, [(-0.55, -0.45, 0.78), (-0.4, -0.38, 0.66), (-0.24, -0.32, 0.55), (-0.09, -0.28, 0.46)]),
+    ("note", False, [(-0.16, -0.29, 0.44), (-0.09, -0.28, 0.46), (-0.14, -0.31, 0.53)]),
+]
+
+
+def _orbit(stage: Stage, direction, distance: float, look_at=(0.0, 0.0, 0.28)) -> None:
+    rv3d = stage.override()["region"].data
+    rv3d.view_perspective = "PERSP"
+    rv3d.view_rotation = Vector(direction).to_track_quat("Z", "Y")
+    rv3d.view_location = look_at
+    rv3d.view_distance = distance
+
+
+@scenario(window=True)
+def hero(stage: Stage):
+    """The whole window: a crate built over three turns, matcap shading, and
+    the next request sketched over it with a stroke of every kind."""
+    stage.crate()
+    script = stage.script("hero", [
+        {"steps": [say("Bevelling the edges, then a lid that overhangs a little."),
+                   exec_("bevel and lid", BEVEL_AND_LID), render((1.5, -1.5, 1.2), mode="matcap"),
+                   say("Done: soft edges and a lid.")], "finish": done("Bevelled, added a lid.")},
+        {"steps": [say("Looping a rope handle through each side."),
+                   exec_("rope handles", ROPE_HANDLES), render((1.6, -1.2, 0.9), mode="matcap"),
+                   say("Both sides have a rope handle.")], "finish": done("Added rope handles.")},
+        {"steps": [say("Darkening the wood so the lid and rope stand out."),
+                   exec_("darken", DARKEN), render((1.5, -1.5, 1.2), mode="matcap"),
+                   say("The crate is darker; the lid and handles read clearly against it.")],
+         "finish": done("Darkened the wood.")},
+    ])
+    yield from stage.turns(["Bevel the edges and add a lid.", "Add rope handles on both sides.",
+                            "Make the wood darker."], script)
+    space = stage.override()["area"].spaces.active
+    space.shading.type = "SOLID"
+    space.shading.light = "MATCAP"
+    space.shading.studio_light = "basic_side.exr"
+    space.shading.color_type = "MATERIAL"
+    space.overlay.show_cursor = False
+    space.overlay.show_outline_selected = False
+    obj = sketch.ensure_sketch_layers(stage.scene)
+    stage.run(sketch.start_session)
+    yield Until(lambda: sketch.current_session() is not None, "sketch mode")
+    space.show_region_asset_shelf = False
+    # A side view first, then the one the strokes are drawn from.
+    _orbit(stage, (-6.0, -1.0, 1.5), 2.0)
+    yield 0.3
+    sketch.current_session().capture()
+    _orbit(stage, (-2.4, -4.0, 2.4), 1.55)
+    yield 0.3
+    sketch.current_session().capture()
+    for stroke_type, cyclic, points in HERO_STROKES:
+        add_stroke(obj, stroke_type, points, radius=0.007, cyclic=cyclic, view=1 if stroke_type == "region" else 2)
+    sketch.ensure_region_fills(obj)
+    sketch.set_active_type(obj, "note")
+    stage.props.prompt = ("Add a brass latch here, carve a finger slot in the lid, sharpen its front edge "
+                          "and paint the side panel.")
+    yield 0.5
+    stage.scroll_sidebar_to_end()
+    yield 0.3

@@ -11,11 +11,10 @@ open-source project, not made by, endorsed by or affiliated with Anthropic.
 
 I made this because Claude Design is going away, and I found it extremely useful for quick modeling tasks when using my Wacom tablet to draw redlines over a 3D object. This project is the evolution of that feature. Everything here has been vibe coded over the course of a few days, so don’t expect it to be perfect - but it does everything I need it to, so I’m happy with it.
 
-![The Whittle sidebar: a conversation of three finished turns with their tool calls and
-render thumbnails](build/screens/wide/conversation.png)
-
-(The image is generated, not committed: `./screens.sh conversation` writes it, see
-[Sidebar screenshots](#sidebar-screenshots).)
+![Blender with a wooden crate in the 3D viewport, sketched over in coloured strokes: a green
+outline where a latch should go, a red slot to carve into the lid, a yellow line along the
+lid's edge, a blue region on the side and a grey arrow. Beside it the Whittle sidebar shows
+the earlier turns with their renders and the next prompt, ready to send](docs/images/hero.png)
 
 See [docs/design.md](docs/design.md) for the original design, [docs/architecture.md](docs/architecture.md)
 for how it is built, [docs/decisions.md](docs/decisions.md) for the choices behind it,
@@ -24,6 +23,16 @@ works today and what is still rough.
 
 Requirements: Blender 5.2 on Linux x86_64 (its Python 3.14), and an Anthropic API key.
 The agent environment is only built for that platform for now.
+
+## Screenshots
+
+| A conversation | Sketching | A reply in Markdown |
+|---|---|---|
+| ![The sidebar after three finished turns: each prompt, Claude's replies, the tools it used and a render of the result](docs/images/conversation.png) | ![The sidebar in sketch mode: the stroke types, three strokes from two captured views and the prompt](docs/images/sketching.png) | ![A reply rendered from Markdown: a heading, bold and italic text, nested lists, a quote and a code block with a copy button](docs/images/markdown.png) |
+
+| The chat menu | The model menu |
+|---|---|
+| ![The chat menu: New Chat, three conversations with their turns, age and size, and the rename and delete items](docs/images/chat-menu.png) | ![The model menu: Opus, Sonnet, Haiku and Fable, Older Models, Other Model, and the Effort choices Low, Medium and High](docs/images/model-menu.png) |
 
 ## Status and limitations
 
@@ -297,6 +306,7 @@ Environment variables Whittle reads:
 ```sh
 ./screens.sh                       # every scenario, about 1.5 minutes
 ./screens.sh conversation asking   # only these
+./screens.sh --docs                # the README's images, into docs/images/
 ```
 
 `screens.sh` opens a real GUI Blender (`--factory-startup`, one at a time, each under a
@@ -304,9 +314,15 @@ Environment variables Whittle reads:
 scenario builds a scene, drives the fake agent through the add-on's own controller to a
 state (a finished turn, a question, a turn mid-stream, a branched history, …) and the
 harness crops the Whittle sidebar out of a screenshot, scrolling and stitching when the
-panels are taller than the window (`view_markers` shoots the viewport instead). Results go to `build/screens/<scenario>.png`, plus
-`build/screens/wide/conversation.png` with a 1.6× wider sidebar and `build/screens/index.json`
-describing each image. The script exits non-zero if any image is missing; a failed
+panels are taller than the window (`view_markers` shoots the viewport instead, and `hero`
+the whole 1600×1000 window). Results go to `build/screens/<scenario>.png`, plus
+`build/screens/wide/` for `conversation`, `markdown` and `long_session` with a 1.6× wider
+sidebar, and `build/screens/index.json` describing each image.
+
+The README's images are committed under `docs/images/`, since `build/` is not. After a
+change to how the sidebar looks, regenerate them with `./screens.sh --docs`, which shoots
+just those scenarios (`DOCS` in `tests/screens/catalog.py` says which file comes from
+which shot) and copies them there; look at each before you commit it. The script exits non-zero if any image is missing; a failed
 scenario's Blender log is in `build/screens-work/<scenario>/blender.log`. Blender's user
 folders point into `build/screens-work/`, so the runs never touch your own preferences or
 recent files. The windows open in a hidden, nested Wayland session (`kwin_wayland

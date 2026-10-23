@@ -4,7 +4,8 @@ Blender, one Blender at a time: `./screens.sh [scenario ...]`.
 
 Writes build/screens/<scenario>.png (and wide/<scenario>.png for the
 scenarios in catalog.WIDE) plus build/screens/index.json, and exits non-zero
-when any scenario did not produce its image. Stdlib only."""
+when any scenario did not produce its image. `./screens.sh --docs` shoots
+only the README's images and copies them into docs/images/. Stdlib only."""
 
 import argparse
 import json
@@ -23,6 +24,7 @@ if str(REPO) not in sys.path:
 from tests.screens import catalog  # noqa: E402
 
 OUT = REPO / "build" / "screens"
+DOCS = REPO / "docs" / "images"
 WORK = REPO / "build" / "screens-work"
 HARNESS = REPO / "tests" / "screens" / "harness.py"
 AGENT_PYTHON = REPO / ".venv" / "bin" / "python"
@@ -134,13 +136,15 @@ def shoot(name: str, wide: bool, base: Path) -> dict | None:
     png = OUT / f"{label}.png"
     png.unlink(missing_ok=True)
     meta = work / "meta.json"
-    width, height = catalog.WINDOW
+    (width, height), factor = catalog.window(name)
+    if wide:
+        factor = catalog.WIDE_FACTOR
     cmd = ["timeout", str(SCENARIO_TIMEOUT), "blender", "--factory-startup", "--enable-event-simulate",
            "--no-window-focus", "--window-geometry", "0", "0", str(width), str(height),
            str(blend), "--python", str(HARNESS), "--",
            "--scenario", name, "--out", str(png), "--meta", str(meta), "--work", str(work)]
-    if wide:
-        cmd += ["--wide", str(catalog.WIDE_FACTOR)]
+    if factor != 1.0:
+        cmd += ["--wide", str(factor)]
     log = work / "blender.log"
     print(f"screens: {label} ...", flush=True)
     with open(log, "w") as out:
@@ -159,15 +163,34 @@ def shoot(name: str, wide: bool, base: Path) -> dict | None:
     return data
 
 
+def copy_docs(out: Path = OUT, docs: Path = DOCS) -> list[Path]:
+    """Copies the README's shots into docs/images/ under their own names."""
+    docs.mkdir(parents=True, exist_ok=True)
+    written = []
+    for name, label in catalog.DOCS.items():
+        target = docs / f"{name}.png"
+        shutil.copyfile(out / f"{label}.png", target)
+        written.append(target)
+        print(f"screens: {label} -> {target.name} ({target.stat().st_size // 1024} KB)", flush=True)
+    return written
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="screens.sh", description=__doc__.split("\n\n")[0])
     parser.add_argument("scenarios", nargs="*", help="scenarios to shoot (default: all): "
                                                      + ", ".join(catalog.SCENARIOS))
+    parser.add_argument("--docs", action="store_true",
+                        help="shoot only the README's images and copy them into docs/images/")
     args = parser.parse_args(argv)
     unknown = [n for n in args.scenarios if n not in catalog.SCENARIOS]
     if unknown:
         parser.error(f"unknown scenario(s): {', '.join(unknown)}")
-    names = args.scenarios or list(catalog.SCENARIOS)
+    if args.docs and args.scenarios:
+        parser.error("--docs shoots its own scenarios; name none")
+    if args.docs:
+        names = list(dict.fromkeys(label.removeprefix("wide/") for label in catalog.DOCS.values()))
+    else:
+        names = args.scenarios or list(catalog.SCENARIOS)
     runs = [(n, False) for n in names] + [(n, True) for n in names if n in catalog.WIDE]
 
     OUT.mkdir(parents=True, exist_ok=True)
@@ -196,6 +219,8 @@ def main(argv=None) -> int:
     if failed:
         print(f"screens: {len(failed)} failed: {', '.join(failed)}", file=sys.stderr)
         return 1
+    if args.docs:
+        copy_docs()
     print(f"screens: {len(runs)} image(s) in {OUT.relative_to(REPO)}; index in {index_path.relative_to(REPO)}")
     return 0
 

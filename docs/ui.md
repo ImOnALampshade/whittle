@@ -1425,7 +1425,8 @@ Every feature of the old panels, and where it lives now.
 
 The sidebar is accepted on real screenshots from `./screens.sh`, looked at, not only on
 headless tests. Every scenario below must exist and pass its check, at the default
-width and, for `conversation` and `long_session`, the wide variant too.
+width and, for `conversation`, `markdown` and `long_session`, the wide variant too.
+`hero` is the one whole-window shot, the README's first image.
 
 | Scenario | Check |
 |---|---|
@@ -1466,6 +1467,7 @@ width and, for `conversation` and `long_session`, the wide variant too.
 | `delete_confirm` | the confirmation of 🗑 on a chat: its title, turns and size, "leaves this file the next time you save" |
 | `delete_many` | the Delete Chats dialog on `Older Than a Month`, with the count and size line |
 | `model_menu` | the model menu over a chat on Sonnet 5.5: Opus 5.5, Sonnet 5.5 (✓), Haiku 5.5, Fable 5.1, then Older Models ▸ and Other Model…, `Use Sonnet 5.5 for New Chats`, the dim source line `Listed by the Models API 1 hour ago`; names whole, icons in one column |
+| `hero` | the whole window at 1600×1000, no desktop around it: the crate with its lid and rope handles in matcap shading, no selection outlines; one stroke of each kind (add, carve, crease, a filled region, a note arrow) in its colour; the sidebar widened, in sketch mode, scrolled to its end: the last turn with its render, the sketch row on Note, `6 strokes · 2 views`, the prompt typed |
 | `model_menu_older` | the Older Models submenu with the chat on Opus 4.6: one column per family under its dim name, newest first, ✓ on Opus 4.6; no title or rule over the first column alone |
 
 Popover and menu scenarios end by returning a `Popup` (`tests/screens/scenarios.py`):

@@ -7,16 +7,19 @@ tests/screens/run.py as
 
 The scenario reaches its state through the add-on's own controller and
 operator functions on real timers; the harness then screenshots the 3D
-viewport, crops the sidebar (or, for a viewport scenario, the viewport) out of it with Blender's image API (scrolling
+viewport, crops the sidebar (or, for a viewport scenario, the viewport; a window
+scenario keeps the whole window) out of it with Blender's image API (scrolling
 and stitching when the panels are taller than the sidebar) and writes the
 PNG plus a small JSON of what it shot. Any failure exits with code 1."""
 
 import argparse
 import json
 import os
+import struct
 import sys
 import time
 import traceback
+import zlib
 from pathlib import Path
 
 import bpy
@@ -188,16 +191,50 @@ def trim_bottom(pixels: np.ndarray, tabs: int = TAB_STRIP, margin: int = 12) -> 
     return pixels[max(0, used[0] - margin):]
 
 
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+
+def _png_rows(rows: np.ndarray, bpp: int) -> bytes:
+    """The image rows (top first), each with the PNG filter whose output
+    sums smallest, libpng's own heuristic, its filter byte first."""
+    x = rows.astype(np.int16)
+    left = np.zeros_like(x)
+    left[:, bpp:] = x[:, :-bpp]
+    up = np.zeros_like(x)
+    up[1:] = x[:-1]
+    corner = np.zeros_like(x)
+    corner[1:, bpp:] = x[:-1, :-bpp]
+    guess = left + up - corner
+    da, db, dc = np.abs(guess - left), np.abs(guess - up), np.abs(guess - corner)
+    paeth = np.where((da <= db) & (da <= dc), left, np.where(db <= dc, up, corner))
+    options = np.stack([x, x - left, x - up, x - (left + up) // 2, x - paeth]) & 0xFF
+    cost = np.where(options > 127, 256 - options, options).sum(axis=2)
+    best = cost.argmin(axis=0)
+    out = np.empty((x.shape[0], x.shape[1] + 1), dtype=np.uint8)
+    out[:, 0] = best
+    out[:, 1:] = options[best, np.arange(x.shape[0])]
+    return out.tobytes()
+
+
 def save_png(pixels: np.ndarray, path: Path) -> None:
-    height, width = pixels.shape[:2]
-    img = bpy.data.images.new("whittle-screen", width, height, alpha=True)
-    try:
-        img.pixels.foreach_set(pixels.ravel())
-        img.filepath_raw = str(path)
-        img.file_format = "PNG"
-        img.save()
-    finally:
-        bpy.data.images.remove(img)
+    """Writes pixels (bottom row first) as a small, lossless 8-bit PNG
+    without alpha: indexed when it holds 256 colours or fewer, else RGB.
+    Written here rather than by Blender, whose writer keeps the alpha and
+    whose save of a render would apply the scene's view transform."""
+    rgb = np.clip(np.round(pixels[::-1, :, :3] * 255.0), 0, 255).astype(np.uint8)
+    height, width = rgb.shape[:2]
+    flat = rgb.reshape(-1, 3).astype(np.uint32)
+    colours, index = np.unique((flat[:, 0] << 16) | (flat[:, 1] << 8) | flat[:, 2], return_inverse=True)
+    if len(colours) <= 256:
+        palette = np.stack([colours >> 16, colours >> 8, colours], axis=1) & 0xFF
+        header = struct.pack(">IIBBBBB", width, height, 8, 3, 0, 0, 0)
+        body = (_png_chunk(b"PLTE", palette.astype(np.uint8).tobytes())
+                + _png_chunk(b"IDAT", zlib.compress(_png_rows(index.reshape(height, width).astype(np.uint8), 1), 9)))
+    else:
+        header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+        body = _png_chunk(b"IDAT", zlib.compress(_png_rows(rgb.reshape(height, width * 3), 3), 9))
+    Path(path).write_bytes(b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", header) + body + _png_chunk(b"IEND", b""))
 
 
 # -- the run ------------------------------------------------------------------
@@ -342,6 +379,11 @@ class Run:
         return self._write(pixels)
 
     def _shoot(self):
+        if getattr(scenarios.SCENARIOS[self.args.scenario], "window", False):
+            # The whole window, as Blender draws it: no desktop around it.
+            pixels = screenshot_window(self.work / "window.png")
+            self.pages = [(0, pixels)]
+            return self._write(pixels)
         if getattr(scenarios.SCENARIOS[self.args.scenario], "viewport", False):
             # One shot of the viewport, for what the scenario shows there.
             pixels = screenshot_region(self.work / "viewport.png", viewport=True)

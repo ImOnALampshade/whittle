@@ -348,9 +348,17 @@ shot in a GUI Blender without a person at the keyboard.
 
 - `./screens.sh [scenario ...]` runs `tests/screens/run.py`: one factory-startup GUI Blender
   per scenario (sequentially, each under `timeout 120`), writing `build/screens/<name>.png`,
-  `build/screens/wide/{conversation,long_session}.png` and `build/screens/index.json`
+  `build/screens/wide/{conversation,markdown,long_session}.png` and `build/screens/index.json`
   (scenario, image, one-line description, size, pages). It exits non-zero when an image is
-  missing.
+  missing. `--docs` shoots only the README's images (`catalog.DOCS`) and copies them into
+  `docs/images/`, which is committed, so the README's pictures show on the forge.
+- A scenario can run in a window of its own size and sidebar width (`catalog.WINDOWS`) and
+  be shot whole (`@scenario(window=True)`): `hero`, the README's first image, is the
+  1600×1000 window with a built crate, a stroke of every kind and the sidebar in sketch mode.
+- The harness writes its PNGs itself (numpy and zlib): 8-bit, no alpha, indexed when a shot
+  has 256 colours or fewer, each row with the filter that suits it. Lossless, and smaller
+  than Blender's RGBA writer (the hero is under 300 KB); Blender's render save would have
+  applied the scene's view transform.
 - `tests/screens/harness.py` runs inside Blender: registers the in-repo add-on from
   `sys.path`, unregisters the other Python sidebar panels and selects the Whittle tab
   (Blender's built-in Item panel cannot be unregistered), turns region overlap and tooltips
@@ -373,8 +381,8 @@ shot in a GUI Blender without a person at the keyboard.
 - Blender's user folders (`BLENDER_USER_*`) point into `build/screens-work/blender-user/`,
   with factory preferences saved there first, and the harness refuses to run if Blender's
   config folder is anywhere else.
-- Tests: `test_screens.py` (scenario list vs catalog, stitching, trimming) and the fake
-  runner's delayed call.
+- Tests: `test_screens.py` (scenario list vs catalog, stitching, trimming, the PNG writer's
+  round trip, the README images' names) and the fake runner's delayed call.
 
 **GUI checks.** What background tests cannot reach is driven in a real GUI Blender, with
 simulated input and the fake agent, by script (opt-in: `./gui_checks.sh [check ...]`, or

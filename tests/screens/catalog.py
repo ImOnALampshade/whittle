@@ -43,14 +43,37 @@ SCENARIOS = {
     "delete_many": "The Delete Chats dialog on Older Than a Month.",
     "model_menu": ("The model menu from the button beside Send: the newest of each family, Sonnet 5.5 checked, "
                    "and the Effort section with High checked."),
+    "hero": ("The whole window: a crate built over three turns in matcap shading, the next request "
+             "sketched over it with a stroke of every kind, the sidebar in sketch mode."),
     "model_menu_older": "The Older Models submenu, one column per family, with the chat on Opus 4.6.",
 }
 
 # Scenarios also shot with the sidebar widened to this factor of its default
 # width, into wide/<scenario>.png.
-WIDE = ("conversation", "long_session")
+WIDE = ("conversation", "markdown", "long_session")
 WIDE_FACTOR = 1.6
 
 # The window every scenario runs in: tall, so most panels fit without
 # scrolling; the harness scrolls and stitches the ones that do not.
 WINDOW = (1400, 2000)
+
+# Scenarios shot in a window of their own size, with the sidebar widened to
+# a factor of its default width (1.0 leaves it).
+WINDOWS = {"hero": ((1600, 1000), 1.5)}
+
+
+def window(name: str) -> tuple[tuple[int, int], float]:
+    """The window size and sidebar factor a scenario runs with."""
+    return WINDOWS.get(name, (WINDOW, 1.0))
+
+
+# The README's images, docs/images/<name>.png, by the shot each is copied
+# from (wide/ for the widened sidebar): ./screens.sh --docs makes them.
+DOCS = {
+    "hero": "hero",
+    "conversation": "wide/conversation",
+    "sketching": "sketching",
+    "markdown": "wide/markdown",
+    "chat-menu": "chat_menu",
+    "model-menu": "model_menu",
+}
