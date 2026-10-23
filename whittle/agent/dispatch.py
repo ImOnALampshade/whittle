@@ -5,7 +5,7 @@ import asyncio
 import time
 from typing import Protocol
 
-from ..models import DEFAULT_MODEL
+from ..models import DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS
 from ..protocol import ErrorCode, Method
 from .connection import BridgeCallError
 
@@ -13,7 +13,8 @@ from .connection import BridgeCallError
 class Runner(Protocol):
     async def start_session(self, params: dict) -> None: ...
     async def submit(self, turn_id: str, bundle_dir: str, prompt: str,
-                     context: tuple[str, ...] = (), model: str | None = None) -> None: ...
+                     context: tuple[str, ...] = (), model: str | None = None,
+                     effort: str | None = None) -> None: ...
     async def amend(self, turn_id: str, text: str, bundle_dir: str | None,
                     number: int | None) -> None: ...
     async def interrupt(self, turn_id: str) -> None: ...
@@ -37,6 +38,13 @@ def _as_tuple(types) -> tuple:
     return types if isinstance(types, tuple) else (types,)
 
 
+def require_effort(params: dict, **kwargs) -> str | None:
+    effort = require(params, "effort", str, **kwargs)
+    if effort is not None and effort not in EFFORTS:
+        raise BridgeCallError(ErrorCode.BAD_REQUEST, f"parameter 'effort' must be one of {', '.join(EFFORTS)}")
+    return effort
+
+
 def session_params(params: dict) -> dict:
     """Normalises start_session params, filling defaults for optional fields."""
     settings = require(params, "settings", dict, default={})
@@ -49,6 +57,7 @@ def session_params(params: dict) -> dict:
         "session_dir": require(params, "session_dir", str),
         "store_dir": require(params, "store_dir", str, optional=True),
         "model": require(params, "model", str, default=DEFAULT_MODEL),
+        "effort": require_effort(params, default=DEFAULT_EFFORT),
         "resume": require(params, "resume", str, optional=True),
         "fork": require(params, "fork", bool, default=False),
         "resume_at": require(params, "resume_at", str, optional=True),
@@ -75,7 +84,9 @@ def make_dispatcher(runner: Runner, shutdown: asyncio.Event):
                                 require(params, "prompt", str, default=""),
                                 tuple(context),
                                 # The chat's model: the runner switches a session on another one.
-                                model=require(params, "model", str, optional=True))
+                                model=require(params, "model", str, optional=True),
+                                # Its effort, likewise switched on the live session.
+                                effort=require_effort(params, optional=True))
             return {"accepted": True}
         if method == Method.AMEND:
             await runner.amend(require(params, "turn_id", str),

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import asyncio
+import base64
 import io
 import json
 import os
@@ -18,6 +19,27 @@ from whittle.agent.tools import TOOL_NAMES, ToolContext, build_servers
 
 PARAMS = {"session_dir": "/tmp/whittle-session", "model": "claude-haiku-5-5", "resume": None,
           "fork": False, "settings": {"poly_budget": 777, "max_turns": 4, "max_budget_usd": 0.1}}
+
+
+def _varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        out.append((value & 0x7F) | (0x80 if value > 0x7F else 0))
+        value >>= 7
+        if not value:
+            return bytes(out)
+
+
+def _field(number: int, payload: bytes) -> bytes:
+    return _varint(number << 3 | 2) + _varint(len(payload)) + payload
+
+
+def signature(kind: str) -> str:
+    """A thinking signature shaped as the CLI reads it: field 2, then 1, then
+    8 holds the kind; other fields (a varint, a fixed64) around it."""
+    meta = _varint(1 << 3) + _varint(300) + _field(8, kind.encode())
+    inner = _field(1, meta) + _varint(3 << 3 | 1) + bytes(8)
+    return base64.b64encode(_field(1, b"opaque") + _field(2, inner)).decode()
 EXEC_DATA = {"stdout": "4\n", "error": None, "diff": {"added": [], "removed": [], "changed": []}, "notes": []}
 
 
@@ -50,6 +72,17 @@ class OptionsTest(unittest.TestCase):
         self.assertIn("777 triangles", system)
         self.assertIn("whittle:boolean-carve", system)
         self.assertFalse([c for c in cmd if c.startswith("--resume")])
+        self.assertNotIn("--effort", cmd, "no effort given, none set")
+
+    def test_effort_and_thinking_display(self):
+        options = build_options({**PARAMS, "effort": "medium"}, build_servers(ToolContext(None)),
+                                inline_skills=False)
+        cmd = argv(options)
+        self.assertEqual(flag(cmd, "--effort"), "medium")
+        # Left unset, the CLI requests display "updates" itself; an explicit
+        # display would turn the mid-turn notes off.
+        self.assertFalse([c for c in cmd if c.startswith(("--thinking", "--max-thinking-tokens"))])
+        self.assertEqual(options.env["CLAUDE_CODE_THINKING_DISPLAY_UPDATES"], "1")
 
     def test_options(self):
         options = build_options({**PARAMS, "resume": "sess-0", "fork": True},
@@ -118,6 +151,25 @@ class MapMessageTest(unittest.TestCase):
         self.assertEqual([e[0] for e in events], ["text", "thinking", "tool_use"])
         self.assertEqual(events[2][1]["tool"], "exec")
         self.assertEqual(events[2][1]["input"], {"code": "x"})
+
+    def test_thinking_kind(self):
+        self.assertEqual(runner.thinking_kind(signature("narration")), "narration")
+        self.assertEqual(runner.thinking_kind(signature("summary")), "summary")
+        for bad in ("", "sig", "!!not base64", base64.b64encode(b"\xff\xff\xff").decode(),
+                    base64.b64encode(_field(2, b"\x0a\x7f")).decode()):
+            self.assertIsNone(runner.thinking_kind(bad), bad)
+
+    def test_progress_updates_are_text(self):
+        msg = AssistantMessage(content=[
+            ThinkingBlock("", signature("narration")),
+            ThinkingBlock("  Carving the handle next.\n", signature("narration")),
+            ThinkingBlock("Weighing a bevel.", signature("summary")),
+            ThinkingBlock("Older model thinking.", "opaque-signature"),
+            ToolUseBlock("tu1", "mcp__blender__exec", {"code": "x"})], model="m")
+        events = map_message(msg, "n1")
+        self.assertEqual([(n, d["text"]) for n, d in events[:4]],
+                         [("thinking", ""), ("text", "Carving the handle next."),
+                          ("thinking", "Weighing a bevel."), ("thinking", "Older model thinking.")])
 
     def test_tool_result(self):
         content = [{"type": "text", "text": "overlay\nimage: /r/001.png"}, {"type": "image", "data": "..."}]
@@ -196,6 +248,23 @@ class SdkRunnerTest(RunnerTestCase):
         await r.close()
         self.assertTrue(client.disconnected)
         self.assertEqual(client.task_violations, [])
+
+    async def test_progress_updates_reach_the_stream_as_text(self):
+        turn = [
+            init_message(),
+            AssistantMessage(content=[ThinkingBlock("", signature("summary")),
+                                      ThinkingBlock("Adding the lid first.", signature("narration"))], model="m"),
+            ("tool", "mcp__blender__exec", {"code": "print(2 + 2)", "label": "probe"}, "tu1"),
+            AssistantMessage(content=[TextBlock("Done.")], model="m"),
+            result_message(),
+        ]
+        r = self.make_runner(turn)
+        await r.start_session(PARAMS)
+        await r.submit("n0001", "/bundle", "Add a lid")
+        await self.wait_for("turn_finished")
+        said = [(n, d["text"]) for n, d in self.conn.events if n in ("text", "thinking")]
+        self.assertEqual(said, [("thinking", ""), ("text", "Adding the lid first."), ("text", "Done.")])
+        await r.close()
 
     async def test_message_uuid_is_the_turns_last_message(self):
         first = [init_message(),
@@ -470,6 +539,41 @@ class ModelTest(RunnerTestCase):
         self.assertEqual(client.log[1], ("set_model", "claude-sonnet-5-5"))
         self.assertEqual(r.model, "claude-sonnet-5-5")
         self.assertEqual(len(FakeSdkClient.instances), 1, "the session and its conversation stay")
+        await r.close()
+
+    async def test_a_submit_at_another_effort_switches_the_live_session(self):
+        r = self.make_runner([init_message(), result_message()], [result_message()], [result_message()])
+        await r.start_session({**PARAMS, "effort": "high"})
+        self.assertEqual(flag(argv(FakeSdkClient.instances[0].options), "--effort"), "high")
+        await r.submit("n0001", "/b", "one", effort="high")
+        await self.wait_for("turn_finished")
+        await r.submit("n0002", "/b", "two", model="claude-sonnet-5-5", effort="low")
+        await self.wait_for("turn_finished", 2)
+        await r.submit("n0003", "/b", "three")
+        await self.wait_for("turn_finished", 3)
+        client = FakeSdkClient.instances[0]
+        self.assertEqual([kind for kind, _ in client.log],
+                         ["query", "set_model", "apply_flag_settings", "query", "query"],
+                         "the session's own effort needs no switch, nor does a submit without one")
+        self.assertEqual(client.log[2][1], {"subtype": "apply_flag_settings", "settings": {"effortLevel": "low"}})
+        self.assertEqual(r.effort, "low")
+        self.assertIn("switched to effort low", [d["message"] for _, d in self.events("log")])
+        self.assertEqual(len(FakeSdkClient.instances), 1, "the session and its conversation stay")
+        await r.close()
+
+    async def test_a_failed_effort_switch_fails_the_turn(self):
+        class Refusing(FakeSdkClient):
+            async def _send_control_request(self, request, timeout=60.0):
+                raise RuntimeError("apply_flag_settings: unrecognized effortLevel")
+
+        r = SdkRunner(self.conn, inline_skills=False,
+                      client_factory=lambda options: Refusing(options=options, script=[[result_message()]]))
+        await r.start_session({**PARAMS, "effort": "high"})
+        with self.assertLogs("whittle.agent", "ERROR"):
+            await r.submit("n0001", "/b", "one", effort="medium")
+            finished = await self.wait_for("turn_finished")
+        self.assertTrue(finished["is_error"])
+        self.assertEqual(r.effort, "high", "the session runs on at the effort it had")
         await r.close()
 
     async def test_a_failed_switch_fails_the_turn(self):

@@ -205,6 +205,13 @@ def model_for(folder) -> str | None:
     return found[0].model(found[1]) if found is not None else None
 
 
+def effort_for(folder) -> str | None:
+    """The effort of the chat a session folder is; None when it runs at the
+    default, or the folder is not one of the file's chats."""
+    found = chat_of(folder)
+    return found[0].effort(found[1]) if found is not None else None
+
+
 def switch_note(folder) -> list[str]:
     """The context lines a turn about to be sent in a chat carries for the
     agent: after a switch, that the scene may have changed since the chat's

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The model menu on the Blender side: the list it offers (the agent's last
 report, kept in the user folder, over the bundled list), which model the
-current chat runs on, the composer's model button and the menu itself.
+current chat runs on and at what effort, the composer's model button and
+the menu itself.
 whittle/models.py reads the ids and keeps the cache (architecture §15)."""
 
 import logging
@@ -77,6 +78,25 @@ def set_chat_model(model: str) -> str:
     return chat
 
 
+def chat_effort(found=None) -> str:
+    """The effort the current chat runs at: its own, else the default."""
+    found = chats.get() if found is None else found
+    return store.effort_level(found.effort(found.current) if found is not None else None)
+
+
+def set_chat_effort(effort: str) -> str:
+    """The current chat runs at effort from its next turn; a file without a
+    chat yet gets one. Returns the chat."""
+    if effort not in store.EFFORTS:
+        raise ValueError(f"effort must be one of {', '.join(store.EFFORTS)}")
+    found = chats.get(create=True)
+    if found is None:
+        raise RuntimeError("the current chat cannot be opened")
+    chat = found.ensure_current()
+    found.set_effort(chat, effort)
+    return chat
+
+
 def blocker(ctl) -> str | None:
     """Why the model cannot change now: never during a turn."""
     from . import operators
@@ -109,10 +129,29 @@ def _item(layout, model: store.Model, current: str) -> None:
                     icon="CHECKMARK" if model.id == current else "BLANK1").model = model.id
 
 
-def draw_models(layout, current: str, found: store.Catalog, default: str, now: float | None = None) -> None:
+EFFORT_LABEL = "Effort"
+EFFORT_HINTS = {
+    "low": "Least thinking: fastest and cheapest, for small, clear edits",
+    "medium": "Some thinking: quicker turns for routine edits",
+    "high": "The most thinking Whittle offers: best for multi-step edits (the default)",
+}
+
+
+def draw_efforts(layout, effort: str) -> None:
+    """The Effort section: a dim heading and the levels, ✓ on the chat's."""
+    row = layout.row()
+    row.active = False
+    row.label(text=EFFORT_LABEL, icon="BLANK1")
+    for level in store.EFFORTS:
+        layout.operator("whittle.chat_effort", text=level.title(),
+                        icon="CHECKMARK" if level == effort else "BLANK1").effort = level
+
+
+def draw_models(layout, current: str, found: store.Catalog, default: str, now: float | None = None,
+                effort: str = store.DEFAULT_EFFORT) -> None:
     """The model menu: the newest of each family with ✓ on the chat's, the
-    Older Models submenu, another id by hand, and making the chat's model
-    the default for new chats."""
+    Older Models submenu, another id by hand, the chat's effort, and making
+    the chat's model the default for new chats."""
     latest = found.latest()
     if current not in {m.id for m in latest}:
         # An older or custom model the chat runs on stays in sight, first.
@@ -129,6 +168,8 @@ def draw_models(layout, current: str, found: store.Catalog, default: str, now: f
     row = layout.row()
     row.operator_context = "INVOKE_DEFAULT"
     row.operator("whittle.chat_model", text="Other Model…", icon="BLANK1").model = ""
+    layout.separator()
+    draw_efforts(layout, effort)
     if current != default:
         layout.separator()
         layout.operator("whittle.default_model", text=f"Use {store.short_name(current)} for New Chats",
@@ -163,7 +204,7 @@ class WHITTLE_MT_models(bpy.types.Menu):
     bl_description = MENU_DESCRIPTION
 
     def draw(self, context):
-        draw_models(self.layout, chat_model(), catalog(), default_model())
+        draw_models(self.layout, chat_model(), catalog(), default_model(), effort=chat_effort())
 
 
 class WHITTLE_MT_models_older(bpy.types.Menu):
@@ -224,6 +265,40 @@ class WHITTLE_OT_chat_model(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class WHITTLE_OT_chat_effort(bpy.types.Operator):
+    bl_idname = "whittle.chat_effort"
+    bl_label = "Effort"
+    bl_description = "How much Claude thinks in this chat, from its next turn"
+    bl_options = {"INTERNAL"}
+
+    effort: StringProperty(name="Effort", default=store.DEFAULT_EFFORT, options={"SKIP_SAVE"})
+
+    @classmethod
+    def poll(cls, context):
+        from . import turn
+
+        reason = blocker(turn.current())
+        if reason:
+            cls.poll_message_set(reason)
+        return reason is None
+
+    @classmethod
+    def description(cls, context, properties):
+        hint = EFFORT_HINTS.get(properties.effort)
+        return f"{hint}\n{cls.bl_description}" if hint else cls.bl_description
+
+    def execute(self, context):
+        try:
+            set_chat_effort(self.effort)
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.report({"ERROR"}, f"Could not change the effort: {exc}")
+            return {"CANCELLED"}
+        from .bridge import redraw_view3d
+
+        redraw_view3d()
+        return {"FINISHED"}
+
+
 class WHITTLE_OT_default_model(bpy.types.Operator):
     bl_idname = "whittle.default_model"
     bl_label = "Use for New Chats"
@@ -241,4 +316,5 @@ class WHITTLE_OT_default_model(bpy.types.Operator):
         return {"FINISHED"}
 
 
-CLASSES = (WHITTLE_MT_models, WHITTLE_MT_models_older, WHITTLE_OT_chat_model, WHITTLE_OT_default_model)
+CLASSES = (WHITTLE_MT_models, WHITTLE_MT_models_older, WHITTLE_OT_chat_model, WHITTLE_OT_chat_effort,
+           WHITTLE_OT_default_model)

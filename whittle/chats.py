@@ -318,6 +318,8 @@ class Entry:
     # taken as every install's own.
     origin: str | None = None
     adopted: list[str] = field(default_factory=list)
+    # The chat's effort (models.EFFORTS); None runs at the default.
+    effort: str | None = None
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -326,7 +328,7 @@ class Entry:
 _ENTRY_SPEC = {"title": str, "created": str, "updated": str, "turns": int, "size": int,
                "digest": (str, None)}
 # Keys an index from an earlier version may lack.
-_ENTRY_OPTIONAL = {"model": (str, None), "origin": (str, None), "adopted": list}
+_ENTRY_OPTIONAL = {"model": (str, None), "effort": (str, None), "origin": (str, None), "adopted": list}
 
 
 @dataclass
@@ -467,8 +469,8 @@ class Chats:
 
     def _write_chat(self, chat: str, **values) -> None:
         data = {"format": CHAT_FORMAT, "version": 1, "id": chat, "title": NEW_TITLE,
-                "title_custom": False, "created": now_iso(), "model": None, "origin": None,
-                "adopted": []}
+                "title_custom": False, "created": now_iso(), "model": None, "effort": None,
+                "origin": None, "adopted": []}
         data.update({k: v for k, v in self.read_chat(chat).items() if k in data})
         data.update(values)
         formats.write_json_atomic(self.folder(chat) / CHAT_NAME, data)
@@ -501,11 +503,12 @@ class Chats:
         found = self._tree(chat)
         created = info.get("created") or (found.created if found else "") or now_iso()
         model = info.get("model") if isinstance(info.get("model"), str) else None
+        effort = info.get("effort") if isinstance(info.get("effort"), str) else None
         origin = info.get("origin") if isinstance(info.get("origin"), str) else None
         adopted = [i for i in info.get("adopted") or [] if isinstance(i, str)] \
             if isinstance(info.get("adopted"), list) else []
         entry = Entry(title=info.get("title") or NEW_TITLE, created=created, updated=created, model=model,
-                      origin=origin, adopted=adopted)
+                      effort=effort, origin=origin, adopted=adopted)
         if found is not None:
             turns = self._turns(found)
             entry.turns = len(turns)
@@ -590,6 +593,7 @@ class Chats:
             entry = self.index.chats.get(chat)
             self._write_chat(chat, title=entry.title if entry else NEW_TITLE,
                              model=entry.model if entry else None,
+                             effort=entry.effort if entry else None,
                              origin=entry.origin if entry else self.origin,
                              adopted=list(entry.adopted) if entry else [])
 
@@ -616,6 +620,18 @@ class Chats:
         model = (model or "").strip() or None
         self._write_chat(chat, model=model)
         self.index.chats[chat].model = model
+        self.save()
+
+    def effort(self, chat: str | None) -> str | None:
+        """The chat's own effort; None when it runs at the default."""
+        entry = self.index.chats.get(chat) if chat else None
+        return entry.effort if entry is not None else None
+
+    def set_effort(self, chat: str, effort: str | None) -> None:
+        """The effort the chat's next turn runs at."""
+        effort = (effort or "").strip() or None
+        self._write_chat(chat, effort=effort)
+        self.index.chats[chat].effort = effort
         self.save()
 
     def foreign(self, chat: str | None) -> bool:
@@ -769,7 +785,8 @@ class Chats:
                 if not folder.is_dir():
                     folder.mkdir(parents=True, exist_ok=True)
                     self._write_chat(chat, title=entry.title, created=entry.created, model=entry.model,
-                                     origin=entry.origin, adopted=list(entry.adopted))
+                                     effort=entry.effort, origin=entry.origin,
+                                     adopted=list(entry.adopted))
                 report["in_step"].append(chat)
                 continue
             digest = hashlib.sha256(data).hexdigest()

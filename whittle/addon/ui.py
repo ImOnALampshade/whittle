@@ -483,9 +483,11 @@ def draw_agent(layout, ctl) -> None:
         col.active = False
         for line in Ctx(scene=None, hist=None, ctl=None, comparing=None, width=240).lines(reason, 240, 4):
             col.label(text=line, icon="BLANK1")
-    model = current_model(ctl, chats.get())
+    found = chats.get()
+    model = current_model(ctl, found)
     short = models.button_text(model)
     layout.label(text=f"Model: {short} ({model})" if short != model else f"Model: {model}", icon="BLANK1")
+    layout.label(text=f"Effort: {models.chat_effort(found).title()}", icon="BLANK1")
     if ctl is not None:
         blend = paths.blend_path()
         if blend is None:

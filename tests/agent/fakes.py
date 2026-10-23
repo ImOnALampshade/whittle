@@ -160,8 +160,8 @@ class FakeSdkClient:
     run the registered tool handler and yield the assistant tool-use message and
     the user tool-result message, as the CLI would. ("wait", name) pauses the
     turn until the test sets gates[name]. server_info is what
-    get_server_info returns (the CLI's initialize response); set_model and
-    query calls are logged in order in `log`."""
+    get_server_info returns (the CLI's initialize response); set_model,
+    control requests and query calls are logged in order in `log`."""
 
     instances: list["FakeSdkClient"] = []
     # The initialize response every new client reports; a test sets it.
@@ -226,6 +226,16 @@ class FakeSdkClient:
 
     async def set_model(self, model=None):
         self.log.append(("set_model", model))
+
+    async def _send_control_request(self, request, timeout=60.0):
+        """The SDK query's control request, reached as client._query: logged
+        as (subtype, request)."""
+        self.log.append((request["subtype"], request))
+        return {}
+
+    @property
+    def _query(self):
+        return self
 
     async def get_server_info(self):
         return FakeSdkClient.server_info

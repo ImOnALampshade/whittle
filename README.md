@@ -148,7 +148,9 @@ agent's state: click it for the model, the session folder and Start/Stop.
    from its next turn: the newest of each family (Opus, Sonnet, Haiku, Fable), older
    versions under **Older Models**, or **Other Model…** for any id. The list is the one
    the Models API reported for your key when the agent last started, kept in Whittle's
-   user folder; before that, a built-in list.
+   user folder; before that, a built-in list. The same menu sets the chat's **Effort**,
+   how much Claude thinks: High by default, Low or Medium for quicker, cheaper turns on
+   small edits.
 6. **Send** (Enter, or the Send button), then watch the turn. While it works, type into the
    field and press Enter or **Amend**,
    answer Claude's questions, or **Stop ▾** (keep the changes or undo the turn).
