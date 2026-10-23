@@ -302,7 +302,7 @@ class TurnController:
         obj = sketch.find_sketch_object()
         if obj is not None:
             sketch.ensure_region_fills(obj)
-        settings = {**prefs.session_settings(), **self.settings_overrides}
+        settings = {**prefs.session_settings(scene), **self.settings_overrides}
         dest = self.session.request_dir(node)
         # The scene reflects the current history node, so the turn grows from it.
         parent = self.history.current or history.ROOT
@@ -558,7 +558,7 @@ class TurnController:
                  "returned": False, "scene": scene}
         if pending:
             dest = self.session.amend_dir(node, number)
-            settings = {**prefs.session_settings(), **self.settings_overrides}
+            settings = {**prefs.session_settings(scene), **self.settings_overrides}
             sketch.ensure_region_fills(obj)
             written = bundle.write_bundle(
                 dest, scene=scene, sketch_obj=obj, node=node, parent=self.bundle.request.parent,

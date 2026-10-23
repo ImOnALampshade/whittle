@@ -4,7 +4,7 @@
 import bpy
 from bpy.props import BoolProperty, CollectionProperty, IntProperty, PointerProperty, StringProperty
 
-from . import enter, targets
+from . import enter, prefs, targets
 
 
 class WhittleRef(bpy.types.PropertyGroup):
@@ -26,6 +26,49 @@ def _target_poll(_self, obj) -> bool:
 
 class WhittleTarget(bpy.types.PropertyGroup):
     object: PointerProperty(name="Object", type=bpy.types.Object, poll=_target_poll)
+
+
+# Per-file overrides of the preferences' defaults (design §10 guardrails):
+# setting -> the custom property on scene.whittle that holds it, saved with the
+# file. An unset field reads the preference, so it always shows what the next
+# session gets; editing it sets the override, and reset_file_setting clears it.
+FILE_SETTINGS = {"poly_budget": "file_poly_budget", "style_notes": "file_style_notes"}
+
+
+def _clean(key: str, value):
+    return max(value, prefs.MIN_POLY_BUDGET) if key == "poly_budget" else value
+
+
+def file_settings(scene) -> dict:
+    """The overrides the scene sets, by setting name. A value of the wrong
+    type (a hand-edited file) counts as unset."""
+    props = getattr(scene, "whittle", None) if scene is not None else None
+    if props is None:
+        return {}
+    found = {}
+    for key, store in FILE_SETTINGS.items():
+        value = props.get(store)
+        if type(value) is type(prefs.DEFAULTS[key]):
+            found[key] = _clean(key, value)
+    return found
+
+
+def reset_file_setting(scene, key: str) -> None:
+    props = scene.whittle
+    if FILE_SETTINGS[key] in props:
+        del props[FILE_SETTINGS[key]]
+
+
+def _file_setting(key: str) -> dict:
+    """get and set for a per-file setting's property."""
+    def getter(props):
+        found = file_settings(props.id_data).get(key)
+        return found if found is not None else getattr(prefs.get(), key)
+
+    def setter(props, value):
+        props[FILE_SETTINGS[key]] = _clean(key, value)
+
+    return {"get": getter, "set": setter}
 
 
 class WhittleSceneProps(bpy.types.PropertyGroup):
@@ -53,6 +96,14 @@ class WhittleSceneProps(bpy.types.PropertyGroup):
         name="Auto", default=True, update=_auto_changed,
         description="Follow the selection: Claude works on the selected objects (or the active one). "
                     "Turn off to pick the objects by hand")
+    poly_budget: IntProperty(
+        name="Triangle Budget", min=prefs.MIN_POLY_BUDGET, **_file_setting("poly_budget"),
+        description="Rough triangle budget for the whole target, for this file. Unset, it is the "
+                    "preferences' Triangle Budget")
+    style_notes: StringProperty(
+        name="Style Notes", **_file_setting("style_notes"),
+        description="Extra style guidance for the agent, for this file, e.g. 'chunky bevels'. "
+                    "Unset, it is the preferences' Style Notes")
 
 
 CLASSES = (WhittleRef, WhittleTarget, WhittleSceneProps)
