@@ -381,6 +381,16 @@ def remove_turn_strokes(obj, turn_number: int) -> int:
     return removed
 
 
+def view_depth(obj, view: formats.View) -> float | None:
+    """How far in front of the view's eye its strokes lie on average, or
+    None when it has none in front of it."""
+    eye, forward = views.eye_and_forward(view)
+    depths = [(Vector(p) - eye).dot(forward) for s in iter_strokes(obj, include_hidden=True)
+              if s.view == view.id for p in s.points]
+    depths = [d for d in depths if d > 0.0]
+    return sum(depths) / len(depths) if depths else None
+
+
 def used_views(obj) -> set[int]:
     return {v for _layer, drawing in _type_layers(obj, True)
             for v in _curve_ints(drawing, VIEW_ATTRIBUTE) if v}
@@ -554,7 +564,7 @@ class SketchSession:
         if viewport is None:
             raise RuntimeError("there is no 3D viewport to capture")
         obj = ensure_sketch_object(self.scene)
-        current = views.latest_view(obj.data)
+        current = views.current_view(obj.data)
         if current is not None:
             tag_strokes(obj, current.id)
         return self._store(obj, viewport)
@@ -591,7 +601,7 @@ class SketchSession:
                 return
             depsgraph = depsgraph or bpy.context.evaluated_depsgraph_get()
             candidate = views.view_from_region(0, viewport.rv3d, viewport.region, self.scene, depsgraph)
-            current = views.latest_view(obj.data)
+            current = views.current_view(obj.data)
             distance = float(getattr(viewport.rv3d, "view_distance", 1.0))
             if current is None or views.substantially_different(current, candidate, distance):
                 current = views.add_view(obj.data, lambda view_id: candidate)

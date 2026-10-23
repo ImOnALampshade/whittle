@@ -154,15 +154,17 @@ def write_bundle(dest, *, scene, sketch_obj, node: str, parent: str | None, prom
     depsgraph = depsgraph or bpy.context.evaluated_depsgraph_get()
     stored = views.load_views(sketch_obj.data) if sketch_obj is not None else []
     by_id = {v.id: v for v in stored}
-    latest = max(stored, key=lambda v: v.id, default=None)
+    # Untagged strokes, and a request without strokes, go with the view new
+    # strokes go to.
+    current = views.current_view(sketch_obj.data) if sketch_obj is not None else None
 
     strokes = []
     if sketch_obj is not None:
-        strokes = gather_strokes(scene, depsgraph, sketch_obj, by_id, latest.id if latest else None,
+        strokes = gather_strokes(scene, depsgraph, sketch_obj, by_id, current.id if current else None,
                                  stroke_filter)
     used = sorted({s.view for s in strokes})
-    if not strokes and latest is not None:
-        used = [latest.id]
+    if not strokes and current is not None:
+        used = [current.id]
     bundle_views = [by_id[i] for i in used]
     present = {s.type for s in strokes}
 

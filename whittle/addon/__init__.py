@@ -6,12 +6,12 @@ import logging
 import bpy
 
 from . import autotarget, chats, compare, enter, history, models, operators, prefs, previews, props, refs, setup, sketch, start, turn, ui
-from . import shortcut
+from . import keys, shortcut, viewmarks
 
 log = logging.getLogger("whittle")
 
 CLASSES = (*prefs.CLASSES, *props.CLASSES, *operators.CLASSES, *setup.CLASSES, *start.CLASSES,
-           *refs.CLASSES, *enter.CLASSES, *shortcut.CLASSES, *models.CLASSES, *ui.CLASSES)
+           *refs.CLASSES, *enter.CLASSES, *shortcut.CLASSES, *models.CLASSES, *ui.CLASSES, *viewmarks.CLASSES)
 
 
 def _filepath(args) -> str | None:
@@ -129,6 +129,7 @@ def register():
     autotarget.register()
     enter.register_keymap()
     shortcut.register_keymap()
+    keys.register_keymap()
     _find_open_file_chats()
 
 
@@ -152,6 +153,7 @@ def _remove_asset_entry():
 
 
 def unregister():
+    keys.unregister_keymap()
     shortcut.unregister_keymap()
     enter.unregister_keymap()
     autotarget.unregister()

@@ -7,7 +7,7 @@ tests/screens/run.py as
 
 The scenario reaches its state through the add-on's own controller and
 operator functions on real timers; the harness then screenshots the 3D
-viewport, crops the sidebar out of it with Blender's image API (scrolling
+viewport, crops the sidebar (or, for a viewport scenario, the viewport) out of it with Blender's image API (scrolling
 and stitching when the panels are taller than the sidebar) and writes the
 PNG plus a small JSON of what it shot. Any failure exits with code 1."""
 
@@ -100,9 +100,11 @@ def open_whittle_panels() -> None:
 
 # -- capture ------------------------------------------------------------------
 
-def screenshot_region(path: Path) -> np.ndarray:
-    """The sidebar region's pixels, bottom row first, as (h, w, 4) floats."""
-    win, area, _main, ui = view3d()
+def screenshot_region(path: Path, *, viewport: bool = False) -> np.ndarray:
+    """The sidebar region's pixels (or, with viewport, the viewport's own),
+    bottom row first, as (h, w, 4) floats."""
+    win, area, main, ui = view3d()
+    region = main if viewport else ui
     with bpy.context.temp_override(window=win, screen=win.screen, area=area, region=ui):
         bpy.ops.screen.screenshot_area(filepath=str(path))
     img = bpy.data.images.load(str(path), check_existing=False)
@@ -115,8 +117,8 @@ def screenshot_region(path: Path) -> np.ndarray:
     finally:
         bpy.data.images.remove(img)
     pixels = pixels.reshape(height, width, 4)
-    x0, y0 = ui.x - area.x, ui.y - area.y
-    return pixels[y0:y0 + ui.height, x0:x0 + ui.width].copy()
+    x0, y0 = region.x - area.x, region.y - area.y
+    return pixels[y0:y0 + region.height, x0:x0 + region.width].copy()
 
 
 def screenshot_window(path: Path) -> np.ndarray:
@@ -340,6 +342,11 @@ class Run:
         return self._write(pixels)
 
     def _shoot(self):
+        if getattr(scenarios.SCENARIOS[self.args.scenario], "viewport", False):
+            # One shot of the viewport, for what the scenario shows there.
+            pixels = screenshot_region(self.work / "viewport.png", viewport=True)
+            self.pages = [(0, pixels)]
+            return self._write(pixels)
         _win, _area, _main, ui = view3d()
         if ui.active_panel_category != "Whittle":
             raise RuntimeError(f"the sidebar shows the {ui.active_panel_category!r} tab, not Whittle")

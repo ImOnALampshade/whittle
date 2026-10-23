@@ -33,8 +33,7 @@ Whittle is young (0.1.0); expect rough edges.
   wheels for that platform and Python 3.14; Windows and macOS are not built yet.
 - **Sign-in**: an Anthropic API key only (API key and cost). Every turn calls Claude
   and costs tokens.
-- **Not built yet**: view gizmos and snap-to-view, default keys for the sketch operators,
-  and per-file overrides of the triangle budget and style notes.
+- **Not built yet**: per-file overrides of the triangle budget and style notes.
 - **Checked only headlessly so far**: some flows run in tests but not yet by hand in the
   GUI, such as a real Ctrl+Z during a turn; [docs/progress.md](docs/progress.md) lists
   them under Known gaps, with a manual checklist.
@@ -137,7 +136,13 @@ agent's state: click it for the model, the session folder and Start/Stop.
    Typing a prompt and pressing Send works too: node 0 is the scene as it is.
 3. **Sketch**: press Sketch, pick a stroke type (free, add, carve, crease, region, note; the
    tooltips say which is which) and draw; strokes stick to surfaces, and off a surface they
-   land on the view plane at the 3D cursor. Orbit and draw from more angles.
+   land on the view plane at the 3D cursor. Orbit and draw from more angles: each angle
+   becomes a view, marked in the viewport by a small camera while you sketch. Click a
+   marker (or the view's row under the stroke count) to go back to that view.
+   Keys for a tablet's express keys, over the viewport in any mode: **Shift+Alt+D**
+   toggles Sketch mode, **Shift+Alt+N** picks the next stroke type, **Shift+Alt+V**
+   captures a view and **Shift+Alt+Enter** sends. Rebind them in Preferences → Keymap
+   (3D View → 3D View (Global)).
 4. **Describe**: type a prompt (Shift+Enter adds a line); 📎 adds reference images. Pin a reference to send it with
    every request; its ⋯ menu places it in the scene as a half-transparent image empty.
    **Shift+Alt+C** from anywhere, in any mode, opens the sidebar and a prompt field under
@@ -293,7 +298,7 @@ Environment variables Whittle reads:
 scenario builds a scene, drives the fake agent through the add-on's own controller to a
 state (a finished turn, a question, a turn mid-stream, a branched history, …) and the
 harness crops the Whittle sidebar out of a screenshot, scrolling and stitching when the
-panels are taller than the window. Results go to `build/screens/<scenario>.png`, plus
+panels are taller than the window (`view_markers` shoots the viewport instead). Results go to `build/screens/<scenario>.png`, plus
 `build/screens/wide/conversation.png` with a 1.6× wider sidebar and `build/screens/index.json`
 describing each image. The script exits non-zero if any image is missing; a failed
 scenario's Blender log is in `build/screens-work/<scenario>/blender.log`. Blender's user

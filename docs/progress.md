@@ -85,10 +85,21 @@ Whittle writes a request bundle from the live sketch and runs it.
   and `request.parent` names the current history node (`n0000` for the first). A successful turn removes its strokes and
   prunes unused views; strokes drawn during the turn stay pending. A failed or
   interrupted turn keeps its strokes for the next run.
-- Operators: `whittle.sketch`, `whittle.sketch_stop`, `whittle.stroke_type`,
-  `whittle.next_stroke_type`, `whittle.capture_view`, `whittle.submit` (Send),
-  `whittle.clear_sketch`, `whittle.ref_add`, `whittle.ref_remove`; the sidebar's sketch
-  strip and composer hold them.
+- Operators: `whittle.sketch`, `whittle.sketch_stop`, `whittle.sketch_toggle`,
+  `whittle.stroke_type`, `whittle.next_stroke_type`, `whittle.capture_view`,
+  `whittle.view_snap`, `whittle.submit` (Send), `whittle.clear_sketch`,
+  `whittle.ref_add`, `whittle.ref_remove`; the sidebar's sketch strip and composer hold
+  them.
+- Default keys (`addon/keys.py`), in the 3D View keymap so they work in Draw Mode:
+  Shift+Alt+D toggles Sketch mode, Shift+Alt+N the next stroke type, Shift+Alt+V
+  captures a view, Shift+Alt+Enter sends. Free in Blender 5.2's default keymap (a test
+  checks), rebindable in Preferences → Keymap, meant for a tablet's express keys.
+- View markers and Snap to View (`addon/viewmarks.py`, `views.snap_viewport`): while
+  sketching, a small camera marks each view's eye in the viewport (a gizmo group, the
+  current view orange); clicking it, or the view's row in the view list, puts the
+  viewport back at that view's eye, direction and field of view, with the pivot at the
+  view's strokes, and makes it the view new strokes go to. The view list's **Markers
+  While Sketching** turns them off.
 - Agent side: `mcp__whittle__request` prints a summary line per stroke type, names each
   view's `strokes.png`, and decimates a dense stroke list (keeping endpoints, never
   cutting the JSON) while pointing at the full `strokes.json`.
@@ -594,10 +605,15 @@ them at each save. Nothing is written beside the `.blend`.
   real turn has shown a narration block or switched effort yet. If notes never show,
   check the CLI log (`cli:` lines) for the `thinking-display-updates` beta; if a
   switch fails, the turn fails with the CLI's reason.
-
+- **View markers and sketch keys** were checked in a hidden GUI Blender with simulated
+  events: a marker highlights under the pointer, a click on it in Draw Mode snaps the
+  viewport (view and projection matrices equal to the stored view's) without drawing a
+  stroke, an orthographic snap matches too, and Shift+Alt+N, V and D work over the
+  viewport in Draw Mode. Not yet tried with a real pen and express keys (checklist).
+  Snapping does not bring back lens shift (not stored), and a view captured in a
+  portrait viewport snapped into a landscape one keeps its field of view across the
+  long side, not the short one.
 - **Not built yet**:
-  - view gizmos and snap-to-view, default keymap entries for the sketch operators (they
-    can be bound by hand, e.g. to tablet buttons);
   - per-file overrides of the triangle budget and style notes (design §10 guardrails): the
     preferences are the defaults for every file;
   - Windows and macOS: the manifest lists `linux-x64` only and the lock holds manylinux
@@ -798,3 +814,9 @@ Extras on; the scripts named are under `tests/fixtures/fake/`).
     the second and the first's line goes.
 20. **Shift+Alt+C**: the popup shows the dim hint under its field, whole, at your UI
     scale; while Claude asks, the field's placeholder is `Ask Claude…` like the sidebar's.
+21. **Tablet keys and markers**: map the tablet's express keys to Shift+Alt+D, N, V and
+    Enter. With the pen over the viewport: D starts sketching, N cycles the type (the
+    sidebar names it), V captures a view, D stops and starts again, Enter sends. Draw
+    from two angles, orbit away: a camera marks each view; tap one with the pen: the
+    viewport goes back there, and a stroke drawn now joins that view (its row's count
+    goes up, no new view). Untick Markers While Sketching: they go.
