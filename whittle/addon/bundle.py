@@ -20,9 +20,14 @@ from .. import formats
 from . import render, sketch, views
 
 UID_PROP = "whittle_uid"
-# A point is on a surface when the first hit along its view ray lies within
-# this distance of it: metres plus a fraction of the point's depth.
+# A point is on a surface when it lies within this distance of the first hit
+# along its view ray, measured across the surface: metres plus a fraction of
+# the point's depth. The draw tool places points short of an oblique surface
+# along the line of sight (exact head-on, about 5 cm at 2.5 m on a face seen
+# at 11 degrees), so the gap along the ray would grow as 1/cos of the angle;
+# along the ray it may be this many times the tolerance.
 SURFACE_TOLERANCE = (0.001, 0.01)
+SURFACE_GRAZING = 10.0
 SETTINGS_KEYS = ("self_check_rounds", "poly_budget", "style_notes")
 
 
@@ -68,7 +73,9 @@ def surface_info(scene, depsgraph, view: formats.View, points) -> tuple[list, li
             origin = p - forward * depth
             direction = forward
         hit, location, normal, _index, obj, _matrix = scene.ray_cast(depsgraph, origin, direction)
-        if hit and abs((location - origin).length - depth) <= abs_tol + rel_tol * abs(depth):
+        tol = abs_tol + rel_tol * abs(depth)
+        if (hit and abs((p - location).dot(normal.normalized())) <= tol
+                and abs((location - origin).length - depth) <= SURFACE_GRAZING * tol):
             on_surface.append(True)
             normals.append([_r(c, 4) for c in normal.normalized()])
             hits.append(obj.name if obj is not None else None)

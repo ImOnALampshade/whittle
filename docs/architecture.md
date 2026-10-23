@@ -1003,8 +1003,14 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
   does not hit Grease Pencil objects, so the sketch never occludes itself. Perspective:
   from the eye towards the point. Orthographic: along the view axis from the render
   camera's eye plane (which lies in front of everything visible). A point is on a
-  surface when the first hit lies within 1 mm + 1 % of the point's depth of it; the
-  normal (world space, 4 dp) and object name are recorded only then.
+  surface when it lies within 1 mm + 1 % of its depth of the first hit, measured along
+  the hit's normal, and within ten times that along the ray; the normal (world space,
+  4 dp) and object name are recorded only then. Measured across the surface because
+  the real draw tool puts points short of an oblique surface along the line of sight
+  (exact head-on; about 1 cm above the crate-sized cube's top, 5 cm along the ray, at
+  2.5 m and an 11° grazing angle, growing with distance; `tests/gui`'s
+  `blank_sketch`): along the ray alone, strokes drawn on a surface seen at a slant
+  were sent as off it.
 - **Submitted vs pending strokes**: curve-domain INT attribute `whittle_turn`, 0 for
   pending. `TurnController.run_sketch` writes the bundle, then stamps every visible
   stroke with the node number. Strokes drawn during the turn stay 0. When a sketch turn
