@@ -7,6 +7,10 @@ scene while you watch and steer. Every turn becomes a node in a branching histor
 Whittle is powered by Claude, through your own Anthropic API key. It is an independent
 open-source project, not made by, endorsed by or affiliated with Anthropic.
 
+## Why I made this
+
+I made this because Claude Design is going away, and I found it extremely useful for quick modeling tasks when using my Wacom tablet to draw redlines over a 3D object. This project is the evolution of that feature. Everything here has been vibe coded over the course of a few days, so don’t expect it to be perfect - but it does everything I need it to, so I’m happy with it.
+
 ![The Whittle sidebar: a conversation of three finished turns with their tool calls and
 render thumbnails](build/screens/wide/conversation.png)
 
