@@ -296,6 +296,22 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(obj.mode, "OBJECT")
         self.assertIs(bpy.context.view_layer.objects.active, crate)
 
+    def test_exit_after_undo_freed_the_scene(self):
+        # Ctrl+Z while sketching frees the Scene the session began with
+        # (tests/gui's sketch_undo); background Blender cannot undo, so the
+        # session is given a Scene that is then removed.
+        tools = self.scene.tool_settings
+        tools.gpencil_stroke_placement_view3d = "CURSOR"
+        self.session.enter(bpy.context)
+        gone = bpy.data.scenes.new("Freed by undo")
+        self.session._scene = gone
+        self.session._scene_name = self.scene.name
+        bpy.data.scenes.remove(gone)
+        self.assertEqual(self.session.scene, self.scene)
+        self.session.exit(bpy.context)
+        self.assertEqual(tools.gpencil_stroke_placement_view3d, "CURSOR")
+        self.assertEqual(sketch.find_sketch_object().mode, "OBJECT")
+
     def test_poll_captures_and_tags(self):
         self.session.enter(bpy.context)
         obj = sketch.find_sketch_object()

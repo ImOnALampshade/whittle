@@ -478,7 +478,8 @@ class SketchSession:
     def __init__(self, scene, *, viewport_provider: Callable[[], views.Viewport | None] | None = None,
                  clock: Callable[[], float] = time.monotonic, use_timer: bool = True,
                  window_manager=None):
-        self.scene = scene
+        self._scene = scene
+        self._scene_name = scene.name
         self.viewport_provider = viewport_provider
         self._window_manager = window_manager
         self.clock = clock
@@ -493,6 +494,17 @@ class SketchSession:
         self._timer = self._tick
         self._handler = self._on_depsgraph_update
         self._tagging = False
+
+    @property
+    def scene(self):
+        """The scene being sketched in. Ctrl+Z reads the undo step back in
+        and frees the Scene the session began with, so a stale one gives way
+        to the scene of that name."""
+        try:
+            self._scene.name
+        except ReferenceError:
+            self._scene = bpy.data.scenes.get(self._scene_name) or bpy.context.scene
+        return self._scene
 
     def enter(self, context) -> None:
         obj = ensure_sketch_layers(self.scene)
