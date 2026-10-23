@@ -41,7 +41,8 @@ whittle/                          repo root
 │   │   ├── meshcheck.py          whittle.mesh_report / whittle.weld for agent code
 │   │   ├── render.py             Workbench renders, view cameras, overlay compositing
 │   │   ├── sketch.py             Whittle Sketch GP object, type layers, stroke tagging
-│   │   ├── views.py              view capture from RegionView3D, camera.json
+│   │   ├── views.py              view capture from RegionView3D, camera.json, snapping back to a view
+│   │   ├── viewmarks.py          view markers: a gizmo per sketch view, clicked to snap back
 │   │   ├── bundle.py             gathers strokes/views/refs from bpy → formats.write_request
 │   │   ├── snapshot.py           libraries.write / load for history nodes and checkpoints
 │   │   ├── history.py            History: node snapshots, thumbnails, restore, branch
@@ -59,6 +60,7 @@ whittle/                          repo root
 │   │   ├── editors.py            showing an image or text in an editor from the sidebar
 │   │   ├── operators.py          WHITTLE_OT_* operators
 │   │   ├── shortcut.py           Shift+Alt+C: the sidebar plus a prompt popup, ready to type
+│   │   ├── keys.py               default sketch keys (Shift+Alt+D/N/V/Enter) in the 3D View keymap
 │   │   └── ui.py                 WHITTLE_PT_* panels and plain draw functions
 │   └── agent/                    agent process; NEVER imports bpy
 │       ├── __init__.py
@@ -980,7 +982,10 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
 - **View storage**: views live on the GreasePencil datablock as ID properties:
   `whittle_views` (a JSON list of camera.json objects) and `whittle_next_view` (the id
   counter). They are saved with the file. Ids start at 1 and are never reused; 0 means
-  untagged. The current view is always the latest one.
+  untagged. The current view (where new strokes go) is the latest one, unless the
+  viewport snapped back to an earlier one since: `whittle_current_view` then names it,
+  and storing a new view (or clearing them) drops it. `prune_views` keeps the current
+  view.
 - **View tagging**: curve-domain INT attribute `whittle_view` on each drawing. While a
   sketch session is active, a 0.25 s timer (`SketchSession.poll`) looks for strokes
   with view 0; when there are some it builds a candidate view from the active viewport,
@@ -989,8 +994,32 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
   on stroke counts or order, so draw-on-back insertion and erasing are harmless.
   **Capture View** (`whittle.capture_view`) first tags pending strokes with the old
   view, then stores a new one from the operator's own viewport; it works without a
-  sketch session. Untagged strokes at submit get the latest view; with no view at all
+  sketch session. Untagged strokes at submit get the current view; with no view at all
   the submit fails and asks for one.
+- **Snap to View** (`whittle.view_snap`, `operators.snap_to_view`): tags pending strokes
+  with the current view, moves the operator's viewport to the stored view
+  (`views.snap_viewport`) and makes that view current, so strokes drawn there are tagged
+  with it rather than starting a new one. The pose (`views.snap_pose`) keeps the view's
+  eye and direction: out of camera view; perspective puts the pivot at the mean depth
+  of the view's own strokes (else the viewport's current distance) and sets
+  `SpaceView3D.lens = 36 / tan(angle / 2)`, since a viewport shows `2·atan(36 / lens)`
+  across its long side; orthographic keeps the lens, puts the pivot at the eye (an
+  orthographic viewport's eye is its pivot) and sets `view_distance = ortho_scale ·
+  lens / 72`. Checked in a hidden GUI Blender: after a redraw the viewport's view and
+  projection matrices equal the stored ones (to 1e-6), perspective and orthographic.
+  It is no undo step, like Blender's own view operators.
+- **View markers** (`viewmarks.py`): a Python gizmo group (`WHITTLE_GGT_views`, `3D`
+  and `PERSISTENT`, polled on an active sketch session and
+  `WindowManager.whittle_show_view_markers`) with one custom gizmo
+  (`WHITTLE_GT_view`) per stored view: a frustum (perspective) or box (orthographic)
+  of line segments in the view's camera space, placed at its eye (`marker_matrix`) and
+  drawn at a constant screen size (`use_draw_scale`). Its triangles are the pick shape,
+  and `target_set_operator("whittle.view_snap")` makes a click snap. `draw_prepare`
+  keeps the gizmos in step with the stored views (`viewmarks.sync`): it adds and
+  removes gizmos, rebuilds a shape only when its view changed, colours the current
+  view, and hides the marker of the view the viewport is at (`views.same_place`:
+  within 1° and 1 % of the view distance). The gizmo map handles events before the
+  Draw tool's keymap, so a click on a marker snaps instead of starting a stroke.
 - **Active viewport**: a timer has no context, so the watcher picks the 3D viewport
   region whose view matrix changed most recently across polls, or the largest one when
   none has changed. With one viewport this is exact; with several, a stroke drawn in a
@@ -1462,8 +1491,13 @@ never writes Blender data.
   `WHITTLE_OT_stroke_type.description`), then a panel headed by the stroke summary
   (`ui.stroke_summary`: "3 strokes · 2 views", "1 stroke sent · 1 view" for strokes a
   stopped or failed turn left, "1 view"; during a turn "3 sent · 1 new") with Clear;
-  opened, the view list. Its open state is `WindowManager.whittle_show_views`
+  opened, the view list, whose rows snap to their view (`whittle.view_snap`), then the
+  **Markers While Sketching** toggle. Its open state is `WindowManager.whittle_show_views`
   (`layout.panel_prop`), so it can be set from Python.
+- **Sketch keys** (`addon/keys.py`): add-on items in the 3D View keymap (the viewport's
+  keymap in every mode, Draw Mode included): Shift+Alt+D `whittle.sketch_toggle`,
+  Shift+Alt+N `whittle.next_stroke_type`, Shift+Alt+V `whittle.capture_view`,
+  Shift+Alt+Enter `whittle.submit`. See `decisions.md`, Sketch keys.
 - **Composer**: reference chips packed into rows (a chip is `whittle.ref_menu` with the
   name and preview icon; a pinned one has a pressed `whittle.ref_pin` beside it); the
   prompt field (`placeholder`) with 📎 (`whittle.ref_add`); **Send** (`whittle.submit`,

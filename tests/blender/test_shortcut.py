@@ -4,14 +4,13 @@ the sidebar it opens, the popup it draws, and the keymap item. Sending is
 enter.py's (test_enter.py); the whole round trip was checked in a GUI
 Blender with simulated keys (docs/decisions.md)."""
 
-import os
-import runpy
 import unittest
 from types import SimpleNamespace
 from unittest import mock
 
 import bpy
 
+from tests.blender.keymap_helpers import clashes, fake_keyconfig
 from tests.blender.ui_helpers import RecordingLayout
 from whittle.addon import shortcut
 
@@ -161,14 +160,7 @@ class PopupTest(unittest.TestCase):
 
 class KeymapTest(unittest.TestCase):
     def test_registers_in_the_window_keymap(self):
-        items = []
-        keymap = SimpleNamespace(keymap_items=SimpleNamespace(
-            new=lambda idname, key, value, **mods: items.append((idname, key, value, mods)) or items[-1],
-            remove=items.remove))
-        names = []
-        keyconfig = SimpleNamespace(keymaps=SimpleNamespace(
-            new=lambda name, space_type: names.append((name, space_type)) or keymap))
-        wm = SimpleNamespace(keyconfigs=SimpleNamespace(addon=keyconfig))
+        wm, names, items = fake_keyconfig()
         with mock.patch.object(shortcut, "bpy", SimpleNamespace(context=SimpleNamespace(window_manager=wm))):
             shortcut.register_keymap()
             self.assertEqual(names, [("Window", "EMPTY")])
@@ -189,25 +181,10 @@ class KeymapTest(unittest.TestCase):
         self.assertEqual((kmi.idname, kmi.type, kmi.shift, kmi.alt, kmi.ctrl), ("whittle.type_prompt", "C", 1, 1, 0))
 
     def test_unused_by_the_default_keymap(self):
-        # Background Blender has no key configurations, so the default
-        # keymap is generated from its source, as Blender itself does.
         # Modal maps (C toggles clamping while moving) only apply while
         # their operator runs, and it has the keyboard then.
-        path = os.path.join(bpy.utils.system_resource("SCRIPTS"), "presets", "keyconfig", "keymap_data",
-                            "blender_default.py")
-        data = runpy.run_path(path)
         key, mods = shortcut.KEY
-        clashes = []
-        for name, args, content in data["generate_keymaps"](data["Params"]()):
-            if args.get("modal"):
-                continue
-            for idname, event, _props in content["items"]:
-                if event is None or event.get("type") != key:
-                    continue
-                if event.get("any") or all(bool(event.get(m)) == bool(mods.get(m))
-                                           for m in ("shift", "alt", "ctrl", "oskey")):
-                    clashes.append(f"{name}: {idname}")
-        self.assertEqual(clashes, [])
+        self.assertEqual(clashes(key, mods), [])
 
 
 if __name__ == "__main__":

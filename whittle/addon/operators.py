@@ -114,6 +114,28 @@ def remove_view(obj, view_id: int) -> None:
     views.save_views(obj.data, [v for v in views.load_views(obj.data) if v.id in remaining])
 
 
+def snap_to_view(context, view_id: int) -> formats.View:
+    """Body of the Snap to View operator: moves the viewport the operator
+    ran in back to a stored view, which new strokes are then tagged with.
+    Strokes still waiting for a tag belong to the view before it; the pivot
+    goes to the depth of the view's own strokes when it has any."""
+    obj = sketch.find_sketch_object()
+    if obj is None:
+        raise RuntimeError("there is no sketch")
+    view = next((v for v in views.load_views(obj.data) if v.id == view_id), None)
+    if view is None:
+        raise RuntimeError(f"there is no view {view_id}")
+    viewport = views.viewport_from_context(context)
+    if viewport is None:
+        raise RuntimeError("Snap to View needs a 3D viewport")
+    current = views.current_view(obj.data)
+    if current is not None:
+        sketch.tag_strokes(obj, current.id)
+    views.snap_viewport(viewport, view, sketch.view_depth(obj, view))
+    views.set_current_view(obj.data, view.id)
+    return view
+
+
 def capture_view(context) -> formats.View:
     """Body of the Capture View operator: a new view from the viewport the
     operator ran in, with or without an active sketch session."""
@@ -422,6 +444,28 @@ class WHITTLE_OT_sketch(bpy.types.Operator):
         return _in_view3d(context) and sketch.current_session() is None
 
     def execute(self, context):
+        try:
+            sketch.start_session(context)
+        except RuntimeError as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class WHITTLE_OT_sketch_toggle(bpy.types.Operator):
+    bl_idname = "whittle.sketch_toggle"
+    bl_label = "Toggle Sketch Mode"
+    bl_description = "Start sketching on the Whittle Sketch object, or stop"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return sketch.current_session() is not None or _in_view3d(context)
+
+    def execute(self, context):
+        if sketch.current_session() is not None:
+            sketch.end_session(context)
+            return {"FINISHED"}
         try:
             sketch.start_session(context)
         except RuntimeError as exc:
@@ -816,6 +860,28 @@ class WHITTLE_OT_view_remove(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class WHITTLE_OT_view_snap(bpy.types.Operator):
+    bl_idname = "whittle.view_snap"
+    bl_label = "Snap to View"
+    bl_description = "Move the viewport back to this sketch view; new strokes are tagged with it"
+    # Moving the viewport is no undo step, as with Blender's own view operators.
+    bl_options = {"REGISTER"}
+
+    id: IntProperty(default=0, min=0)
+
+    @classmethod
+    def poll(cls, context):
+        return _in_view3d(context)
+
+    def execute(self, context):
+        try:
+            snap_to_view(context, self.id)
+        except RuntimeError as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
 class _HistoryOperator:
     node: StringProperty(name="Node", default="", options={"SKIP_SAVE"})
 
@@ -1136,13 +1202,13 @@ class WHITTLE_OT_chat_delete_many(bpy.types.Operator):
         return {"FINISHED"}
 
 
-CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_stop, WHITTLE_OT_stroke_type,
+CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_toggle, WHITTLE_OT_sketch_stop, WHITTLE_OT_stroke_type,
            WHITTLE_OT_next_stroke_type, WHITTLE_OT_capture_view, WHITTLE_OT_submit,
            WHITTLE_OT_clear_sketch, WHITTLE_OT_ref_add, WHITTLE_OT_ref_remove,
            WHITTLE_OT_run_bundle, WHITTLE_OT_agent_start, WHITTLE_OT_agent_stop,
            WHITTLE_OT_interrupt, WHITTLE_OT_amend, WHITTLE_OT_answer, WHITTLE_OT_open_image,
            WHITTLE_OT_open_transcript, WHITTLE_OT_target_from_selection, WHITTLE_OT_target_add,
-           WHITTLE_OT_target_remove, WHITTLE_OT_target_clear, WHITTLE_OT_view_remove,
+           WHITTLE_OT_target_remove, WHITTLE_OT_target_clear, WHITTLE_OT_view_remove, WHITTLE_OT_view_snap,
            WHITTLE_OT_history_restore, WHITTLE_OT_history_branch, WHITTLE_OT_history_compare,
            WHITTLE_OT_branch_switch, WHITTLE_OT_retry, WHITTLE_OT_compare_toggle, WHITTLE_OT_compare_end, WHITTLE_OT_ghost_toggle,
            WHITTLE_OT_chat_new, WHITTLE_OT_chat_switch, WHITTLE_OT_chat_rename, WHITTLE_OT_chat_delete,

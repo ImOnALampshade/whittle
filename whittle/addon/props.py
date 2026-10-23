@@ -72,6 +72,12 @@ def register_props():
     # Whether the sketch strip's view list is open: UI state, never saved.
     bpy.types.WindowManager.whittle_show_views = BoolProperty(name="Views", default=False,
                                                               options={"SKIP_SAVE"})
+    # Whether the sketch views show as markers in the viewport while
+    # sketching (viewmarks.py): UI state, never saved.
+    bpy.types.WindowManager.whittle_show_view_markers = BoolProperty(
+        name="Show View Markers", default=True, options={"SKIP_SAVE"},
+        description="While sketching, show a small camera in the viewport where each view was captured; "
+                    "click one to go back to that view")
     # Whether the chat menu lists every chat, not only the latest ones.
     bpy.types.WindowManager.whittle_show_all_chats = BoolProperty(
         name="Show All Chats", default=False, options={"SKIP_SAVE"},
@@ -83,4 +89,5 @@ def unregister_props():
     del bpy.types.WindowManager.whittle_fake_script
     del bpy.types.WindowManager.whittle_show_all_chats
     del bpy.types.WindowManager.whittle_show_views
+    del bpy.types.WindowManager.whittle_show_view_markers
     del bpy.types.Scene.whittle

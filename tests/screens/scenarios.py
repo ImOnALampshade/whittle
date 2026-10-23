@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 import bpy
+from mathutils import Vector
 
 from tests.blender.sketch_helpers import add_stroke
 from tests.fixtures.crate.scene import build_scene
@@ -175,9 +176,12 @@ class Stage:
 SCENARIOS = {}
 
 
-def scenario(fn=None, *, open_panels: bool = False):
+def scenario(fn=None, *, open_panels: bool = False, viewport: bool = False):
+    """Registers a scenario; with viewport, the harness shoots the 3D
+    viewport instead of the sidebar."""
     def add(fn):
         fn.open_panels = open_panels
+        fn.viewport = viewport
         SCENARIOS[fn.__name__] = fn
         return fn
     return add(fn) if fn is not None else add
@@ -233,6 +237,27 @@ def sketching(stage: Stage):
     stage.props.prompt = bundle.request.prompt
     stage.run(sketch.start_session)
     yield Until(lambda: sketch.current_session() is not None, "sketch mode")
+
+
+@scenario(viewport=True)
+def view_markers(stage: Stage):
+    stage.crate()
+    obj = sketch.ensure_sketch_layers(stage.scene)
+    bundle = formats.read_bundle(CRATE_BUNDLE)
+    for view_id in sorted(bundle.views):
+        views.add_view(obj.data, lambda _i, view=bundle.views[view_id]: view)
+    for stroke in bundle.strokes:
+        add_stroke(obj, stroke.type, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
+                   cyclic=stroke.cyclic, view=stroke.view)
+    stage.run(sketch.start_session)
+    yield Until(lambda: sketch.current_session() is not None, "sketch mode")
+    # Orbited out and away, so both views' markers are in sight.
+    rv3d = stage.override()["region"].data
+    rv3d.view_perspective = "PERSP"
+    rv3d.view_rotation = Vector((-2.0, -6.0, 4.0)).to_track_quat("Z", "Y")
+    rv3d.view_location = (0.0, 0.0, 0.3)
+    rv3d.view_distance = 8.0
+    yield 0.5
 
 
 @scenario

@@ -22,7 +22,7 @@ from bpy.props import IntProperty, StringProperty
 from .. import chats as chat_store
 from .. import formats, markdown, tree as trees
 from . import chats, compare, conversation, history, models, operators, paths, prefs, previews, setup, sketch, start
-from . import shortcut, targets, turn, views
+from . import shortcut, targets, turn, viewmarks, views
 from .process import AgentState
 from .stream import tool_detail
 
@@ -1155,10 +1155,10 @@ def draw_sketch(layout, ctx: Ctx) -> None:
     used = {}
     for s in sketch.iter_strokes(obj, include_hidden=True):
         used[s.view] = used.get(s.view, 0) + 1
-    latest = max(v.id for v in stored)
+    current_id = views.current_view(obj.data).id
     tag = "current"
     for view in stored:
-        current = view.id == latest
+        current = view.id == current_id
         text = f"View {view.id} · {_plural(used.get(view.id, 0), 'stroke')}"
         # The view new strokes go to is tagged when the row has room;
         # dimming the others would read as disabled. A panel's body is
@@ -1167,13 +1167,18 @@ def draw_sketch(layout, ctx: Ctx) -> None:
         current_tag = current and ctx.measure(f"{text}  {tag}") <= room
         end = ctx.px(1.2) + (int(ctx.measure(tag)) + ctx.px(0.4) if current_tag else 0)
         left, right = _split_end(body.row(), ctx, end)
-        left.label(text=text, icon="VIEW_CAMERA" if current else "CAMERA_DATA")
+        # The row itself snaps the viewport back to the view; packed to the
+        # left so it reads as the label it replaces.
+        left.alignment = "LEFT"
+        left.operator("whittle.view_snap", text=text, icon="VIEW_CAMERA" if current else "CAMERA_DATA",
+                      emboss=False).id = view.id
         if current_tag:
             note = right.row()
             note.alignment = "RIGHT"
             note.active = False
             note.label(text=tag)
         right.operator("whittle.view_remove", text="", icon="X", emboss=False).id = view.id
+    body.prop(bpy.context.window_manager, viewmarks.SHOW_PROP, text="Markers While Sketching")
 
 
 # -- composer ----------------------------------------------------------------------

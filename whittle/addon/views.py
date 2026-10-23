@@ -27,8 +27,19 @@ MOVE_THRESHOLD = 0.10
 ZOOM_THRESHOLD = 0.15
 VIEWS_PROP = "whittle_views"
 NEXT_VIEW_PROP = "whittle_next_view"
+# The view new strokes go to, once the viewport snapped back to an earlier
+# one; absent, it is the latest.
+CURRENT_VIEW_PROP = "whittle_current_view"
 # Gap left between an orthographic camera's eye and the nearest visible depth.
 ORTHO_EYE_MARGIN = 0.01
+# A viewport's lens is measured against 72 mm across its long side (the 36 mm
+# sensor, doubled for views not through a camera), and an orthographic one
+# shows 72 / lens times its view distance across that side.
+VIEWPORT_SENSOR = 72.0
+LENS_RANGE = (1.0, 250.0)
+# A viewport this close to a view is at it: its marker would sit on the eye.
+SAME_PLACE_DEG = 1.0
+SAME_PLACE_MOVE = 0.01
 
 
 def _matrix(value) -> Matrix:
@@ -154,6 +165,62 @@ def substantially_different(last: formats.View, current: formats.View, view_dist
     return abs(fov_b - fov_a) > ZOOM_THRESHOLD * max(abs(fov_a), 1e-9)
 
 
+def same_place(a: formats.View, b: formats.View, view_distance: float) -> bool:
+    """True when two views look from (nearly) the same eye in (nearly) the
+    same direction."""
+    if a.is_perspective != b.is_perspective:
+        return False
+    eye_a, fwd_a = eye_and_forward(a)
+    eye_b, fwd_b = eye_and_forward(b)
+    cos = max(-1.0, min(1.0, fwd_a.dot(fwd_b)))
+    return (math.degrees(math.acos(cos)) <= SAME_PLACE_DEG
+            and (eye_a - eye_b).length <= SAME_PLACE_MOVE * max(view_distance, 1e-6))
+
+
+@dataclass
+class Pose:
+    """What a viewport is set to so it shows a view again."""
+    perspective: str      # RegionView3D.view_perspective
+    rotation: object      # Quaternion
+    location: Vector      # the pivot it orbits around
+    distance: float
+    lens: float
+
+
+def snap_pose(view: formats.View, distance: float, lens: float) -> Pose:
+    """The viewport pose that shows the view: the same eye and direction. A
+    perspective view keeps the pivot `distance` in front of the eye and gets
+    the lens that gives its field of view across the long side; an
+    orthographic one keeps `lens` and gets the distance that gives its
+    scale (its eye is its pivot). Lens shift is not represented."""
+    world = Matrix(view.view_matrix).inverted()
+    eye, forward = eye_and_forward(view)
+    rotation = world.to_3x3().normalized().to_quaternion()
+    if view.is_perspective:
+        distance = max(float(distance), 1e-3)
+        lens = (VIEWPORT_SENSOR / 2.0) / math.tan(view.camera["angle"] / 2.0)
+        lens = min(max(lens, LENS_RANGE[0]), LENS_RANGE[1])
+        return Pose("PERSP", rotation, eye + forward * distance, distance, lens)
+    distance = view.camera["ortho_scale"] * lens / VIEWPORT_SENSOR
+    return Pose("ORTHO", rotation, eye, distance, float(lens))
+
+
+def snap_viewport(viewport: "Viewport", view: formats.View, distance: float | None = None) -> Pose:
+    """Moves the viewport to the view: out of camera view, to its eye,
+    direction and field of view. distance (the pivot in front of a
+    perspective eye) defaults to the viewport's own."""
+    rv3d = viewport.rv3d
+    space = viewport.area.spaces.active
+    pose = snap_pose(view, rv3d.view_distance if distance is None else distance, space.lens)
+    rv3d.view_perspective = pose.perspective
+    rv3d.view_rotation = pose.rotation
+    rv3d.view_distance = pose.distance
+    rv3d.view_location = pose.location
+    space.lens = pose.lens
+    viewport.area.tag_redraw()
+    return pose
+
+
 def to_pixel(view: formats.View, co, width: int, height: int) -> tuple[float, float] | None:
     """World point -> pixel (x right, y down) in a width x height image rendered
     from the view; None when the point is behind a perspective eye."""
@@ -190,6 +257,8 @@ def add_view(gp, make: Callable[[int], formats.View]) -> formats.View:
     views.append(view)
     save_views(gp, views)
     gp[NEXT_VIEW_PROP] = view_id + 1
+    # A new view is where new strokes go.
+    _unpin(gp)
     return view
 
 
@@ -209,6 +278,7 @@ def merge_views(gp, incoming) -> dict[int, int]:
             stored[view.id] = view
             save_views(gp, list(stored.values()))
             gp[NEXT_VIEW_PROP] = max(int(gp.get(NEXT_VIEW_PROP, 1)), view.id + 1)
+            _unpin(gp)
             mapping[view.id] = view.id
             continue
         added = add_view(gp, lambda new_id, v=view: formats.View.from_json({**v.to_json(), "id": new_id}))
@@ -221,18 +291,37 @@ def latest_view(gp) -> formats.View | None:
     return max(load_views(gp), key=lambda v: v.id, default=None)
 
 
+def current_view(gp) -> formats.View | None:
+    """The view new strokes are tagged with: the one the viewport last
+    snapped to, until a newer view is stored, else the latest."""
+    stored = load_views(gp)
+    pinned = gp.get(CURRENT_VIEW_PROP)
+    found = next((v for v in stored if v.id == pinned), None) if pinned is not None else None
+    return found or max(stored, key=lambda v: v.id, default=None)
+
+
+def set_current_view(gp, view_id: int) -> None:
+    gp[CURRENT_VIEW_PROP] = int(view_id)
+
+
+def _unpin(gp) -> None:
+    if CURRENT_VIEW_PROP in gp:
+        del gp[CURRENT_VIEW_PROP]
+
+
 def prune_views(gp, keep_ids: set[int]) -> None:
-    """Drops views no stroke uses any more; the latest is always kept, since it
-    is the one new strokes are tagged with."""
+    """Drops views no stroke uses any more; the current one is always kept,
+    since it is the one new strokes are tagged with."""
     views = load_views(gp)
     if not views:
         return
-    latest = max(v.id for v in views)
-    save_views(gp, [v for v in views if v.id in keep_ids or v.id == latest])
+    current = current_view(gp).id
+    save_views(gp, [v for v in views if v.id in keep_ids or v.id == current])
 
 
 def clear_views(gp) -> None:
     save_views(gp, [])
+    _unpin(gp)
 
 
 # -- viewport discovery (GUI only) --------------------------------------------

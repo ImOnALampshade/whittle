@@ -326,11 +326,19 @@ class DrawTest(AddonTestCase):
         add_stroke(obj, "add", [(0, 0, 0), (0.1, 0, 0)], view=1)
         layout = self.draw()
         self.assertIn("2 strokes · 1 view", layout.labels())
-        current = next(c for c in layout.of("label") if c["text"] == "View 1 · 2 strokes")
+        (current,) = layout.operators("whittle.view_snap")
+        self.assertEqual((current["text"], current["props"].id), ("View 1 · 2 strokes", 1),
+                         "the row snaps the viewport back to its view")
         self.assertEqual(current["icon"], "VIEW_CAMERA", "the current view is marked by its icon")
         self.assertTrue(layout.is_active(current), "no view is dimmed: dim reads as disabled")
         self.assertIn("current", layout.labels())
         self.assertEqual(layout.operators("whittle.view_remove")[0]["props"].id, 1)
+        self.assertIn("whittle_show_view_markers", layout.props(), "the markers can be turned off")
+        views.add_view(obj.data, lambda i: look_at_view(i, (2, 0, 0.3), (0, 0, 0.3)))
+        views.set_current_view(obj.data, 1)
+        rows = {c["props"].id: c["icon"] for c in self.draw().operators("whittle.view_snap")}
+        self.assertEqual(rows, {1: "VIEW_CAMERA", 2: "CAMERA_DATA"}, "a view snapped back to is current")
+        operators.remove_view(obj, 2)
         self.assertEqual(layout.operators("whittle.stroke_type"), [], "stroke types only while sketching")
         from unittest import mock
 

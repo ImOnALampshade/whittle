@@ -477,7 +477,28 @@ set from Python, and is never saved), with a `TRASH` button (`whittle.clear_sket
 its right. Opened, it lists `View 2 · 1 stroke` rows with an `X`
 (`whittle.view_remove`); the current view (where new strokes go) has `VIEW_CAMERA` and a
 dim `current` tag when the row has room, the others `CAMERA_DATA`. None is dimmed: dim
-reads as disabled.
+reads as disabled. Each row's text is an unembossed `whittle.view_snap` button, packed
+left so it reads as the label it is: clicking it moves the viewport back to that view,
+which becomes the current one. Under the rows, the checkbox **Markers While Sketching**
+(`WindowManager.whittle_show_view_markers`, on by default, never saved).
+
+**View markers**: while sketching, the viewport shows a small camera at each view's eye,
+pointing the way it looked (a frustum, or a box for an orthographic view), at a constant
+size on screen; the current view's is orange, the others light grey, and the one the
+viewport is at is hidden. Hovering one highlights it white; clicking it snaps the
+viewport back to that view, as its row does. The viewport's Gizmos overlay hides them
+too.
+
+**Keys** (add-on items in the 3D View keymap, so they work over the viewport in every
+mode, Draw Mode included; listed and rebindable in Preferences → Keymap under 3D View →
+3D View (Global), and meant for a tablet's express keys):
+
+| Key | Operator | Does |
+|---|---|---|
+| Shift+Alt+D | `whittle.sketch_toggle` | Toggle Sketch Mode: starts sketching, or stops |
+| Shift+Alt+N | `whittle.next_stroke_type` | the next stroke type (free → add → carve → crease → region → note) |
+| Shift+Alt+V | `whittle.capture_view` | Capture View |
+| Shift+Alt+Enter | `whittle.submit` | Send |
 
 ### 3.9 Composer
 
@@ -940,6 +961,7 @@ prompt, strokes and references are back in the composer, and:
  ▾ 3 strokes · 2 views                🗑
    📷 View 1 · 1 stroke               ✕
    🎥 View 2 · 2 strokes  ·current·   ✕
+   ☑ Markers While Sketching
  [Add a lid that ov… in the front.][📎]   the draft once, in its field
  [       ▶ Send       ][Opus 5.5 ▾][🕘]
 ```
@@ -1140,6 +1162,16 @@ Added for chats (§3.11; none of them is an undo step, and none changes the scen
 | `whittle.chat_delete` | Delete Chat | `chat`: confirms, then deletes it (the current one: switches first) |
 | `whittle.chat_delete_many` | Delete Chats | `which` (`OTHERS`, `WEEK`, `MONTH`, `QUARTER`): a dialog with the count and size, then deletes |
 
+Added for sketching (§3.8):
+
+| Id | Label | Does |
+|---|---|---|
+| `whittle.sketch_toggle` | Toggle Sketch Mode | Shift+Alt+D: `whittle.sketch` or `whittle.sketch_stop`, whichever applies; undo step |
+| `whittle.view_snap` | Snap to View | `id`: moves the viewport to the view and makes it current; no undo step, like Blender's view operators |
+
+`WindowManager.whittle_show_view_markers` (BoolProperty, `SKIP_SAVE`, default on) holds
+whether the view markers show while sketching.
+
 Added for typing without the mouse (§3.12):
 
 | Id | Label | Does |
@@ -1223,7 +1255,7 @@ Every feature of the old panels, and where it lives now.
 
 | Feature | Before | Now |
 |---|---|---|
-| Submit | Request → Submit | Composer → Send |
+| Submit | Request → Submit | Composer → Send; Shift+Alt+Enter over the viewport |
 | Amend with text | Request (during turn) → Amend | Composer during a turn: type, then Amend |
 | Amend with strokes | Request → Amend | Composer → Amend (shown once strokes are drawn, also while Claude asks) |
 | Amend with text while Claude asks | Request → Amend | After answering (the field is the answer's while Claude asks) |
@@ -1239,10 +1271,13 @@ Every feature of the old panels, and where it lives now.
 | Edit a reference's path | Request row path field | Remove and add again |
 | Sketch / Stop Sketching | Sketch panel | Sketch button |
 | Stroke types (6) | Sketch panel grid | Icon buttons while sketching (tooltips name them; the active one is named) |
-| Next stroke type | keymap only | keymap only |
-| Capture View | Sketch panel | Capture View beside Sketch while sketching |
+| Next stroke type | keymap only | Shift+Alt+N (keymap only) |
+| Toggle sketch mode | — (new) | Shift+Alt+D (keymap only; the Sketch button does the same) |
+| Capture View | Sketch panel | Capture View beside Sketch while sketching; Shift+Alt+V |
 | View list with stroke counts, current view | Sketch panel | Stroke count ▸ (whenever strokes or views are shown, sent ones included) |
 | Remove view | Sketch panel ✕ | Stroke count ▸ → ✕ |
+| Snap to a view | — (new) | Stroke count ▸ → the view's row, or its marker in the viewport while sketching |
+| View markers on/off | — (new) | Stroke count ▸ → Markers While Sketching |
 | Clear sketch | Sketch panel 🗑 | Stroke count 🗑 (also after a stopped or failed sketch turn, or with views only) |
 | Strokes ready / sent / pending | Sketch panel line | Stroke count |
 | Targets auto from selection | — (new) | Target line (Auto) |
@@ -1308,7 +1343,8 @@ width and, for `conversation` and `long_session`, the wide variant too.
 | `prompt_typed` | 4.2; no start row |
 | `shortcut_popup` | §3.12; the `Ask Claude` popup under the pointer, its one-line field in edit mode holding the half-typed prompt |
 | `prompt_only_done` | one finished prompt-only turn; no red; no start line |
-| `sketching` | 4.7; Sketch pressed with Capture View beside it, types on their own row, depressed correctly, the active one named; view list open, no view dimmed, the current one tagged; the draft once, in its field |
+| `sketching` | 4.7; Sketch pressed with Capture View beside it, types on their own row, depressed correctly, the active one named; view list open, no view dimmed, the current one tagged, rows left-aligned like labels, the markers checkbox under them; the draft once, in its field |
+| `view_markers` | a viewport shot, not the sidebar: one marker per view, each pointing at the crate, the current one orange; none on top of the eye |
 | `streaming` | 4.3; gear in the header; one busy sign: "Running 2 tools" in the group header, no Working…; Stop alone; Auto dim |
 | `asking` | 4.4; question not red and said once; Stop alone |
 | `conversation` | 4.5; older turn collapsed; two expanded; one ⋯ per message; text wraps to the width |

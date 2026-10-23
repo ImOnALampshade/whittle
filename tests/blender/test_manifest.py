@@ -106,8 +106,8 @@ class RegisterTest(unittest.TestCase):
                          "WHITTLE_UL_targets"):
                 self.assertNotIn(gone, registered)
             for op in ("amend", "open_image", "open_transcript", "target_from_selection",
-                       "target_add", "target_remove", "target_clear", "view_remove", "venv_install",
-                       "venv_cancel", "start_existing", "start_blank", "start_primitive", "start_asset",
+                       "target_add", "target_remove", "target_clear", "view_remove", "view_snap", "sketch_toggle",
+                       "venv_install", "venv_cancel", "start_existing", "start_blank", "start_primitive", "start_asset",
                        "ref_pin", "ref_place", "branch_switch", "retry", "turn_menu", "ref_menu"):
                 self.assertIn(f"WHITTLE_OT_{op}", registered)
             self.assertEqual(asset_entries().count(start.draw_asset_menu), 1)
