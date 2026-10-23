@@ -133,6 +133,16 @@ are in [modeling-practices.md](modeling-practices.md). Long technique detail liv
 skills. `prompt.build` fills `$self_check_rounds`, `$poly_budget`, `$render_size` and
 `$style_notes`.
 
+Those settings come from `prefs.session_settings(scene)`: the preferences' Defaults, with
+the scene's per-file overrides on top. `scene.whittle.poly_budget` and `style_notes` read
+and write custom properties (`props.FILE_SETTINGS`: `file_poly_budget`,
+`file_style_notes`) on the scene's property group, so they are saved with the file. An
+unset one reads the preference, a value of the wrong type counts as unset, and
+`whittle.file_setting_reset` deletes one. The scene is the context's (a sketch run or an
+amendment passes its own), and the controller's launch settings include the result, so a
+changed override restarts an idle agent before the next turn, as a changed preference
+does.
+
 ### Recipe skills
 
 Skill names (directory names under `agent/plugin/skills/`, `name:` in frontmatter):

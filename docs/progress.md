@@ -256,6 +256,14 @@ session can start from the scene, from nothing, from a primitive or from an asse
   Agent Environment (folder, status, Install / Reinstall / Cancel, the setup log),
   Defaults (triangle budget, style notes, self-check rounds, render size) and Development
   (agent Python). Every default comes from `DEFAULTS`.
+- **Per-file settings** (design §10 guardrails, ui.md §3.1): `scene.whittle.poly_budget`
+  and `style_notes` override the preferences for one file and are saved with it; the
+  agent popover edits them under For This File, each "(default)" while unset and with a
+  reset button (`whittle.file_setting_reset`). `prefs.session_settings(scene)` puts them
+  over the preferences, so the session, the request bundle and the restart check all use
+  the file's values. Tests: `tests/blender/test_file_settings.py` (the default read
+  through, an override and its reset, the minimum, a wrong-typed value, another scene,
+  the popover, the values in a saved file read by a fresh Blender, a restart on change).
 - **API key only** (architecture §2, Authentication): the agent starts only with a key
   (the preference, else `ANTHROPIC_API_KEY` in Blender's environment); without one the
   process goes to `needs_key` and the attention box asks for a key. The agent's
@@ -574,8 +582,6 @@ them at each save. Nothing is written beside the `.blend`.
 - **Not built yet**:
   - view gizmos and snap-to-view, default keymap entries for the sketch operators (they
     can be bound by hand, e.g. to tablet buttons);
-  - per-file overrides of the triangle budget and style notes (design §10 guardrails): the
-    preferences are the defaults for every file;
   - Windows and macOS: the manifest lists `linux-x64` only and the lock holds manylinux
     x86_64 wheels, so `venv.compatible()` refuses other platforms.
 - **The venv install** ran for real once from the GUI (and a real Haiku turn ran from
@@ -768,3 +774,9 @@ Extras on; the scripts named are under `tests/fixtures/fake/`).
     folder holds only the `.blend` (and its `.blend1`).
 17. **A crash keeps the chats**: save, send a turn, kill Blender (`kill -9`), start it
     and open the file: the unsaved turn is in the conversation.
+18. **Per-file settings** (`stream.json`): the agent popover's For This File shows the
+    preferences' triangle budget and style notes, each "(default)" with its reset button
+    greyed out. Change the budget: the "(default)" goes and the reset button wakes. Send:
+    the agent is started again and the turn's `request.json` carries the file's budget.
+    Save, reopen: the value is still there; another file still shows the default. Reset:
+    "(default)" is back.

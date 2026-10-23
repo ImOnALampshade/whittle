@@ -816,6 +816,22 @@ class WHITTLE_OT_view_remove(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class WHITTLE_OT_file_setting_reset(bpy.types.Operator):
+    bl_idname = "whittle.file_setting_reset"
+    bl_label = "Use Default"
+    bl_description = "Use the preferences' value in this file again"
+    bl_options = {"REGISTER", "UNDO"}
+
+    key: EnumProperty(items=[("poly_budget", "Triangle Budget", ""), ("style_notes", "Style Notes", "")],
+                      options={"SKIP_SAVE"})
+
+    def execute(self, context):
+        from . import props
+
+        props.reset_file_setting(context.scene, self.key)
+        return {"FINISHED"}
+
+
 class _HistoryOperator:
     node: StringProperty(name="Node", default="", options={"SKIP_SAVE"})
 
@@ -1143,7 +1159,7 @@ CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_stop, WHITTLE_OT_stroke_type,
            WHITTLE_OT_interrupt, WHITTLE_OT_amend, WHITTLE_OT_answer, WHITTLE_OT_open_image,
            WHITTLE_OT_open_transcript, WHITTLE_OT_target_from_selection, WHITTLE_OT_target_add,
            WHITTLE_OT_target_remove, WHITTLE_OT_target_clear, WHITTLE_OT_view_remove,
-           WHITTLE_OT_history_restore, WHITTLE_OT_history_branch, WHITTLE_OT_history_compare,
+           WHITTLE_OT_file_setting_reset, WHITTLE_OT_history_restore, WHITTLE_OT_history_branch, WHITTLE_OT_history_compare,
            WHITTLE_OT_branch_switch, WHITTLE_OT_retry, WHITTLE_OT_compare_toggle, WHITTLE_OT_compare_end, WHITTLE_OT_ghost_toggle,
            WHITTLE_OT_chat_new, WHITTLE_OT_chat_switch, WHITTLE_OT_chat_rename, WHITTLE_OT_chat_delete,
            WHITTLE_OT_chat_delete_many)

@@ -29,8 +29,8 @@ Whittle is young (0.1.0); expect rough edges.
   wheels for that platform and Python 3.14; Windows and macOS are not built yet.
 - **Sign-in**: an Anthropic API key only (API key and cost). Every turn calls Claude
   and costs tokens.
-- **Not built yet**: view gizmos and snap-to-view, default keys for the sketch operators,
-  and per-file overrides of the triangle budget and style notes.
+- **Not built yet**: view gizmos and snap-to-view, and default keys for the sketch
+  operators.
 - **Checked only headlessly so far**: some flows run in tests but not yet by hand in the
   GUI, such as a real Ctrl+Z during a turn; [docs/progress.md](docs/progress.md) lists
   them under Known gaps, with a manual checklist.
@@ -112,7 +112,10 @@ sends renders back to the model. Set spending limits in the Console.
 **Model for New Chats** is the model a new chat starts on, `claude-opus-5-5` by default;
 it offers the models your key can use and takes any other model id. The **Defaults** box
 sets the triangle budget, style notes, self-check rounds and render size every session
-starts with.
+starts with. A file can set its own triangle budget and style notes in the agent popover
+(the icon at the right of the panel's header) under **For This File**: an unset one shows
+the preference's value and says "(default)", and the reset button beside a set one goes
+back to it. They are saved with the .blend.
 
 ## Use
 

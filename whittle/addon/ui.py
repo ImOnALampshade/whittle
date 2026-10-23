@@ -22,7 +22,7 @@ from bpy.props import IntProperty, StringProperty
 from .. import chats as chat_store
 from .. import formats, markdown, tree as trees
 from . import chats, compare, conversation, history, models, operators, paths, prefs, previews, setup, sketch, start
-from . import shortcut, targets, turn, views
+from . import props, shortcut, targets, turn, views
 from .process import AgentState
 from .stream import tool_detail
 
@@ -469,7 +469,36 @@ def draw_indicator(layout, ctl) -> None:
     row.popover("WHITTLE_PT_agent", text="", icon=icon)
 
 
-def draw_agent(layout, ctl) -> None:
+FILE_SETTING_LABELS = (("poly_budget", "Triangle Budget"), ("style_notes", "Style Notes"))
+
+
+def draw_file_settings(layout, scene) -> None:
+    """This file's triangle budget and style notes (props.FILE_SETTINGS). An
+    unset one shows the preference's value and says "(default)"; a set one
+    has its reset button enabled. The next turn's session runs with them."""
+    if getattr(scene, "whittle", None) is None:
+        return
+    overrides = props.file_settings(scene)
+    layout.separator()
+    layout.label(text="For This File", icon="FILE_BLEND")
+    for key, label in FILE_SETTING_LABELS:
+        text = label if key in overrides else f"{label} (default)"
+        col = layout.column(align=True)
+        if key == "style_notes":
+            # A text field's own label would leave the notes little room.
+            row = col.row(align=True)
+            row.label(text=text, icon="BLANK1")
+            field = col.row(align=True)
+            field.prop(scene.whittle, key, text="")
+        else:
+            row = col.row(align=True)
+            row.prop(scene.whittle, key, text=text)
+        reset = row.row(align=True)
+        reset.enabled = key in overrides
+        reset.operator("whittle.file_setting_reset", text="", icon="LOOP_BACK").key = key
+
+
+def draw_agent(layout, ctl, scene=None) -> None:
     state = agent_state(ctl)
     layout.label(text=f"Agent: {state}", icon="SORTTIME" if state in BUSY_STATES else "NONE")
     reason = ctl.process.reason if ctl is not None and state in (AgentState.CRASHED, AgentState.FAILED) \
@@ -490,6 +519,8 @@ def draw_agent(layout, ctl) -> None:
             _dim_label(layout, "Saving the file stores its chats in it.", "BLANK1")
         else:
             layout.label(text=f"Chats: in {blend.name}", icon="FILE_BLEND")
+    draw_file_settings(layout, scene)
+    layout.separator()
     col = layout.column(align=True)
     if ctl is not None and ctl.process.alive:
         col.operator("whittle.agent_stop", text="Stop Agent", icon="PAUSE")
@@ -1568,10 +1599,10 @@ class WHITTLE_PT_agent(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "HEADER"
     bl_label = "Claude"
-    bl_ui_units_x = 14
+    bl_ui_units_x = 16
 
     def draw(self, context):
-        draw_agent(self.layout, turn.current())
+        draw_agent(self.layout, turn.current(), context.scene)
 
 
 class WHITTLE_PT_targets(bpy.types.Panel):

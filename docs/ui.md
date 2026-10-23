@@ -65,7 +65,8 @@ WHITTLE_PT_debug         "Development"  child of main, DEFAULT_CLOSED,
 Popovers (bl_space_type VIEW_3D, bl_region_type HEADER, so they never show up as
 sidebar panels of their own):
   WHITTLE_PT_agent       agent state (and why it stopped), model, session folder,
-                         Start/Stop Agent, Preferences
+                         this file's settings, Start/Stop Agent, Preferences;
+                         bl_ui_units_x = 16
   WHITTLE_PT_history     the whole tree; bl_ui_units_x = 24
   WHITTLE_PT_chats       New Chat, the chats in this file, rename and delete;
                          bl_ui_units_x = 18
@@ -116,9 +117,27 @@ repeated here: the attention box has them.
    ·the agent exited with code 3·    (dim, only when crashed or failed)
  Model: Opus 5.5 (claude-opus-5-5)   the current chat's (§3.13)
  Chats: in crate.blend              (FILE_BLEND)
+ ─────
+ For This File                      (FILE_BLEND)
+ [ Triangle Budget (default)  2000 ][⟲]   reset greyed while unset
+   Style Notes                      [⟲]   set: no "(default)", reset enabled
+ [ chunky bevels                      ]
+ ─────
  [ Stop Agent ]                     (or [ Start Agent ])
  [ Preferences… ]
 ```
+
+**For This File** (`ui.draw_file_settings`) edits the file's triangle budget and style
+notes (`scene.whittle.poly_budget`, `style_notes`), which the next session runs with
+instead of the preferences' Defaults. They sit here rather than in the chat menu because
+they change how the agent runs, like the model and the session lines above them, and
+apply to every chat in the file. An unset one shows the preference's value with
+"(default)" after its name, so the field always says what Claude gets; typing a value
+sets it, even the same value. The reset button (`LOOP_BACK`, `whittle.file_setting_reset`)
+sits at the end of each row and is greyed out while the setting is unset. The style
+notes take their own line under their label, since a text field beside its label leaves
+the notes little room. Self-check rounds and render size stay preferences: they are cost
+levers for the person, not properties of the model being made.
 
 The chats line names the file that stores the chats (§3.11); their working copy is a
 hidden cache in Whittle's user folder, never beside the file. For an unsaved file it
@@ -1167,6 +1186,16 @@ chat menu lists every chat.
 `scene.whittle.chat` (StringProperty, `HIDDEN`) names the chat that
 `scene.whittle.history_node` belongs to (§8).
 
+Added for per-file settings (§3.1):
+
+| Id | Label | Does |
+|---|---|---|
+| `whittle.file_setting_reset` | Use Default | `key` (`poly_budget`, `style_notes`): the file uses the preference again; undo step |
+
+`scene.whittle.poly_budget` (IntProperty, min 10) and `scene.whittle.style_notes`
+(StringProperty) read the file's override, else the preference; setting one stores the
+override in the file.
+
 Changed:
 
 - `whittle.submit` keeps its id (keymaps); the button text is `Send` / `Send as New
@@ -1294,6 +1323,7 @@ Every feature of the old panels, and where it lives now.
 | Undo / redo across turns, restores, sketching | Ctrl+Z | unchanged; the conversation follows |
 | New chat, earlier chats, rename, delete | — (new) | Header title ▾ → chat menu (§3.11) |
 | Type a prompt, amendment or answer without the mouse | — (new) | Shift+Alt+C (§3.12) |
+| Triangle budget and style notes for one file | — (new; the preferences only) | Agent popover → For This File (§3.1) |
 
 ## 10. Screenshot gate
 
@@ -1328,6 +1358,7 @@ width and, for `conversation` and `long_session`, the wide variant too.
 | `long_session` | 4.10; panel no taller than `conversation` + 8 rows |
 | `history_popover` | 13-turn tree, two branches: one indentation step per level, siblings at equal indentation, lines flat, each branch's first row marked ↳ (no disclosure triangles), branch points say "2 branches", titles whole including the current row, current row highlighted, one ⋯ per row |
 | `turn_menu` | the ⋯ menu opened on a turn, Edit & Resend first, then Go Back to This Turn |
+| `agent_popover` | §3.1; Agent and Model lines (no agent yet, so no Chats line); For This File with `Triangle Budget (default)` and its reset greyed, `Style Notes` without "(default)", its reset enabled and the notes whole on their own line; Start Agent and Preferences…; nothing red |
 | `developer` | Developer Extras on: Development panel shown; off (every other scenario): absent |
 | `chat_menu` | three chats, the second-newest current: New Chat first; Conversations; each entry's title whole, its dim `N turns · <age> · <size>` line; ✓ on the current entry (highlighted), 🗑 on the others; the footer total and three items; nothing red |
 | `chat_menu_many` | 25 chats of varied age and size: 20 entries then `Show 5 More`; long titles shortened with `…` at a word's end, the ✓/🗑 column aligned on every row; ages from `just now` to `over a year ago` |

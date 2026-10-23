@@ -22,6 +22,7 @@ DEFAULTS = {
     "style_notes": "",
     "store_chats": True,
 }
+MIN_POLY_BUDGET = 10
 LOG_LINES = 8
 # Where to make an API key; the attention box and the preferences link here.
 KEYS_URL = "https://platform.claude.com/settings/keys"
@@ -73,7 +74,7 @@ class WhittlePreferences(bpy.types.AddonPreferences):
                                    description="How many fix rounds the agent may spend after its renders")
     render_size: IntProperty(name="Render Size", default=DEFAULTS["render_size"], min=64, max=1024,
                              description="Pixel size of the agent's self-check renders")
-    poly_budget: IntProperty(name="Triangle Budget", default=DEFAULTS["poly_budget"], min=10,
+    poly_budget: IntProperty(name="Triangle Budget", default=DEFAULTS["poly_budget"], min=MIN_POLY_BUDGET,
                              description="Rough triangle budget for the whole target")
     style_notes: StringProperty(name="Style Notes", default=DEFAULTS["style_notes"],
                                 description="Extra style guidance for the agent, e.g. 'chunky bevels'")
@@ -168,10 +169,19 @@ def api_key() -> tuple[str, str | None]:
     return "", None
 
 
-def session_settings() -> dict:
+def session_settings(scene=None) -> dict:
+    """The settings a session starts with: the preferences, then the scene's
+    per-file overrides (props.file_settings). The scene defaults to the
+    context's, so the settings follow the open file."""
+    from . import props
+
     p = get()
-    return {"self_check_rounds": p.self_check_rounds, "poly_budget": p.poly_budget,
-            "style_notes": p.style_notes, "render_size": p.render_size}
+    settings = {"self_check_rounds": p.self_check_rounds, "poly_budget": p.poly_budget,
+                "style_notes": p.style_notes, "render_size": p.render_size}
+    if scene is None:
+        scene = getattr(bpy.context, "scene", None)
+    settings.update(props.file_settings(scene))
+    return settings
 
 
 CLASSES = (WhittlePreferences,)
