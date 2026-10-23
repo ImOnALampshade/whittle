@@ -1566,7 +1566,9 @@ first turn then finds the root and leaves it alone. Labels: "Start", "Blank",
   0.5, `hide_render`, `REFERENCE_PROP = "image"`, `whittle_ref_path` = the source path) in
   `Whittle References`: FRONT faces -Y and stands 1 m behind the cursor (+Y), RIGHT faces
   +X 1 m to the cursor's -X, TOP lies just under it; VIEW takes the viewport's
-  `view_rotation` and `view_location` and falls back to FRONT without a viewport.
+  `view_rotation` and `view_location` and falls back to FRONT without a viewport. The
+  chip's menu runs `whittle.ref_place` in the sidebar, whose `context.region_data` is
+  None, so the view is found with `views.viewport_from_context` (the area's main region).
 
 
 ---

@@ -10,7 +10,7 @@ from pathlib import Path
 import bpy
 from bpy.props import EnumProperty, IntProperty
 
-from . import targets
+from . import targets, views
 
 REF_PATH_PROP = "whittle_ref_path"
 ALIGNS = ("FRONT", "RIGHT", "TOP", "VIEW")
@@ -138,7 +138,10 @@ class WHITTLE_OT_ref_place(bpy.types.Operator):
         refs = context.scene.whittle.refs
         if self.index >= len(refs) or not refs[self.index].path:
             return {"CANCELLED"}
-        view = context.region_data if context.area is not None and context.area.type == "VIEW_3D" else None
+        # The chip's menu runs this in the sidebar, which has no view of its
+        # own: the view is the viewport's beside it.
+        viewport = views.viewport_from_context(context)
+        view = viewport.rv3d if viewport is not None else None
         try:
             obj = place_empty(context.scene, refs[self.index].path, align=self.align, view=view)
         except (OSError, RuntimeError, ValueError) as exc:
