@@ -127,6 +127,7 @@ class TurnController:
         self._restore_on_finish = False
         self._started = False
         self._scene = None
+        self._scene_name = ""
         # What the running agent process was started with (launch_settings()).
         self._launched: dict | None = None
         # Session uids of the objects that existed when the running turn began.
@@ -384,6 +385,7 @@ class TurnController:
         self._started = False
         self.last_finished = None
         self._scene = bpy.context.scene
+        self._scene_name = self._scene.name
         began = False
         try:
             self._transcript = TranscriptWriter(self.session.transcript_path(node))
@@ -938,7 +940,7 @@ class TurnController:
         if turn_bundle is not None and turn_bundle.views:
             view = turn_bundle.views[min(turn_bundle.views)]
         try:
-            self.history.finish(node, self._turn_objects(), result, scene=self._scene or bpy.context.scene,
+            self.history.finish(node, self._turn_objects(), result, scene=self._turn_scene() or bpy.context.scene,
                                 created=created, restored=restored,
                                 kept_partial=bool(result.get("interrupted")) and not restored, view=view)
         except Exception as exc:
@@ -980,10 +982,22 @@ class TurnController:
                          turn_id=node)
         return names
 
+    def _turn_scene(self):
+        """The scene the turn runs in, None before any turn. Ctrl+Z during
+        a turn reads the undo step back in and frees the Scene the turn
+        began with, so a stale one gives way to the scene of that name."""
+        if self._scene is None:
+            return None
+        try:
+            self._scene.name
+        except ReferenceError:
+            self._scene = bpy.data.scenes.get(self._scene_name) or bpy.context.scene
+        return self._scene
+
     def _adopt_created_objects(self) -> None:
         """Objects the agent made this turn become targets, so a follow-up can
         edit them."""
-        scene = self._scene
+        scene = self._turn_scene()
         if scene is None or not hasattr(scene, "whittle"):
             return
         try:
@@ -1014,7 +1028,7 @@ class TurnController:
     def _clear_sent_refs(self) -> None:
         """Like its strokes, a finished turn's references are done with,
         unless pinned to the session."""
-        scene = self._scene
+        scene = self._turn_scene()
         if not self._sent_refs or scene is None or not hasattr(scene, "whittle"):
             return
         try:
