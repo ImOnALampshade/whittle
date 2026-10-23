@@ -39,9 +39,12 @@ NO_KEY = "Add an Anthropic API key in Preferences to run Claude"
 # variable of these prefixes but the ones in KEPT (a gateway's address, and
 # the user's opt-out of the CLI's non-essential traffic), and
 # CLAUDE_CONFIG_DIR points at Whittle's own folder, where the CLI finds no
-# login, settings, hooks or MCP servers of the user's.
+# login, settings, hooks or MCP servers of the user's. The CLI's own usage
+# telemetry and error reports are off unless the user turns them on
+# (the "Send Claude Code usage data" preference).
 STRIPPED_PREFIXES = ("ANTHROPIC_", "CLAUDE")
-KEPT = {"ANTHROPIC_BASE_URL", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"}
+NONESSENTIAL = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+KEPT = {"ANTHROPIC_BASE_URL", NONESSENTIAL}
 
 
 class AgentState(StrEnum):
@@ -120,7 +123,8 @@ class AgentProcess:
         port = listener.getsockname()[1]
         token = secrets.token_hex(32)
 
-        env = agent_environment(os.environ, api_key=api_key, config_dir=paths.claude_config_dir())
+        env = agent_environment(os.environ, api_key=api_key, config_dir=paths.claude_config_dir(),
+                                usage_data=prefs.get().usage_data)
         env["PYTHONPATH"] = str(paths.package_parent())
         env["WHITTLE_TOKEN"] = self._agent_token or token
         argv = [str(python), "-s", "-P", "-m", paths.agent_module(), "--port", str(port)]
@@ -320,14 +324,18 @@ class AgentProcess:
             listener(state, reason)
 
 
-def agent_environment(base, *, api_key: str, config_dir: Path) -> dict:
+def agent_environment(base, *, api_key: str, config_dir: Path, usage_data: bool = False) -> dict:
     """The agent's environment: Blender's, without any Anthropic or Claude
     variable (see STRIPPED_PREFIXES), plus the API key and Whittle's private
-    CLI configuration folder. The fake agent gets the same, key or not."""
+    CLI configuration folder. Without usage_data the CLI sends nothing but
+    the turns (no telemetry or error reports); with it, Blender's own
+    setting, if any, stands. The fake agent gets the same, key or not."""
     env = {k: v for k, v in base.items() if k in KEPT or not k.upper().startswith(STRIPPED_PREFIXES)}
     if api_key:
         env["ANTHROPIC_API_KEY"] = api_key
     env["CLAUDE_CONFIG_DIR"] = str(config_dir)
+    if not usage_data:
+        env[NONESSENTIAL] = "1"
     return env
 
 

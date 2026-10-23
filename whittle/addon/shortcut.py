@@ -21,11 +21,16 @@ CATEGORY = "Whittle"
 TAB_RETRIES = 10
 TAB_RETRY = 0.05
 
-# Each composer field's popup title and placeholder; the sidebar's
-# composer shows the same placeholders.
-FIELDS = {"prompt": ("Ask Claude", "Ask Claude…"),
-          "amend_text": ("Amend the Running Turn", "Ask Claude…"),
-          "ask_answer": ("Answer Claude", "Answer Claude…")}
+# Each composer field's popup title. Every field has the same placeholder,
+# here and in the sidebar: the title (or the sidebar's question) says what
+# the text is for.
+FIELDS = {"prompt": "Ask Claude",
+          "amend_text": "Amend the Running Turn",
+          "ask_answer": "Answer Claude"}
+PLACEHOLDER = "Ask Claude…"
+# A dim line under the popup's field, cut to its width.
+HINT = "Enter sends · End keeps your draft · long prompts: use the sidebar box"
+POPUP_UNITS = 22
 
 # The field the open popup types into, picked when the shortcut is
 # pressed: a turn ending while typing would otherwise swap the field under
@@ -92,17 +97,37 @@ class WHITTLE_PT_type_prompt(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "HEADER"
     bl_label = "Ask Claude"
-    bl_ui_units_x = 20
+    bl_ui_units_x = POPUP_UNITS
 
     def draw(self, context):
         name = _field or field(turn.current())
-        title, placeholder = FIELDS[name]
         layout = self.layout
-        layout.label(text=title)
+        layout.label(text=FIELDS[name])
         # Only a one-line field takes the keyboard as a popup opens; the
         # multi-line box never does (docs/decisions.md).
         layout.activate_init = True
-        layout.prop(context.scene.whittle, name, text="", placeholder=placeholder)
+        layout.prop(context.scene.whittle, name, text="", placeholder=PLACEHOLDER)
+        row = layout.row()
+        row.active = False
+        row.label(text=hint(context))
+
+
+def hint(context) -> str:
+    """HINT, fitted to the popup's width: as many of its parts as fit whole,
+    so a font wider than Blender's own drops the last tips rather than
+    cutting one."""
+    from . import ui
+
+    scale = (context.preferences.system.ui_scale if context.preferences else 1.0) or 1.0
+    ctx = ui.Ctx(scene=None, hist=None, ctl=None, comparing=None, scale=scale)
+    # The popup's border and the label's own padding.
+    room = ctx.px(POPUP_UNITS) - ctx.px(1.5)
+    parts = HINT.split(" · ")
+    for n in range(len(parts), 0, -1):
+        text = " · ".join(parts[:n])
+        if ctx.measure(text) <= room:
+            return text
+    return ctx.fit(parts[0], room)
 
 
 class WHITTLE_OT_type_prompt(bpy.types.Operator):

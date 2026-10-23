@@ -360,16 +360,6 @@ class BlendTest(TempRoot):
         self.assertEqual((reopened.folder(crate) / "nodes" / "n0002" / "transcript.jsonl").read_text(),
                          "changed\n")
 
-    def test_built_on(self):
-        found, crate, barrel, index, payload = self.saved()
-        self.chat_with_turns(found, ("Made after the save.",))
-        (found.folder(crate) / "nodes" / "n0002" / "transcript.jsonl").write_text("changed\n")
-        self.assertTrue(self.chats().built_on(index, payload), "newer work on exactly the file's chats")
-        other = self.chats(self.tmp / "other.whittle")
-        self.assertFalse(other.built_on(index, payload), "a cache without the file's chats")
-        changed = dict(payload, **{crate: payload[barrel]})
-        self.assertFalse(self.chats().built_on(index, changed), "a chat the file has otherwise")
-
     def test_a_history_the_file_does_not_have_goes(self):
         found = self.chats()
         crate = self.chat_with_turns(found, ("Make a crate.",))
@@ -438,30 +428,70 @@ class ModelTest(TempRoot):
             chats.validate_index(obj)
 
 
-class MigrateTest(TempRoot):
-    def test_a_single_session_folder_becomes_the_first_chat(self):
-        self.root.mkdir()
-        write_session(self.root, ("Make a crate.", "Add a lid."), sessions=("s-1", "s-1"))
-        (self.root / "compare").mkdir()
-        cli = chats.cli_project_dir(self.root, self.config)
-        (cli / "s-1" / "subagents").mkdir(parents=True)
-        (cli / "s-1.jsonl").write_text('{"type": "user"}\n')
-        (cli / "s-1" / "subagents" / "agent-1.jsonl").write_text('{"type": "user"}\n')
-        (cli / "other.jsonl").write_text("{}\n")
+class OriginTest(TempRoot):
+    """A chat records the install that made it; another install's chat is
+    foreign until continued there."""
+
+    def mine(self, root=None, origin="i0000000000000001") -> Chats:
+        found = Chats(root or self.root, origin=origin)
+        found.load()
+        return found
+
+    def test_a_chat_records_its_origin(self):
+        found = self.mine()
+        chat = self.chat_with_turns(found)
+        self.assertEqual(found.entry(chat).origin, "i0000000000000001")
+        self.assertEqual(found.read_chat(chat)["origin"], "i0000000000000001")
+        self.assertFalse(found.foreign(chat), "this install's own")
+        found.index_path().unlink()
+        self.assertEqual(self.mine().entry(chat).origin, "i0000000000000001", "rebuilt from chat.json")
+
+    def test_another_installs_chat_asks_once(self):
+        found = self.mine()
+        chat = self.chat_with_turns(found)
+        payload = found.pack_all()
+        index = json.loads(chats.index_json(found.index))
+        theirs = self.mine(self.tmp / "elsewhere" / "scene.whittle", origin="i0000000000000002")
+        theirs.reconcile(index, payload)
+        self.assertTrue(theirs.foreign(chat))
+        theirs.adopt(chat)
+        self.assertFalse(theirs.foreign(chat))
+        self.assertEqual(theirs.read_chat(chat)["adopted"], ["i0000000000000002"])
+        self.assertEqual(theirs.entry(chat).origin, "i0000000000000001", "the origin stays")
+
+        # Saved there and opened here again: neither install asks.
+        payload = theirs.pack_all()
+        index = json.loads(chats.index_json(theirs.index))
+        back = self.mine(self.tmp / "back" / "scene.whittle")
+        back.reconcile(index, payload)
+        self.assertFalse(back.foreign(chat))
+        third = self.mine(self.tmp / "third" / "scene.whittle", origin="i0000000000000003")
+        third.reconcile(index, payload)
+        self.assertTrue(third.foreign(chat), "a third install asks too")
+        third.index_path().unlink()
+        self.assertTrue(self.mine(third.root, origin="i0000000000000003").foreign(chat),
+                        "rebuilt from chat.json")
+
+    def test_chats_from_before_origins_are_everyones(self):
         found = self.chats()
-        chat = found.migrate(self.config)
-        self.assertEqual(found.current, chat)
-        folder = found.folder(chat)
-        self.assertFalse((self.root / "session.json").exists())
-        self.assertFalse((self.root / "nodes").exists())
-        found_tree, _ = tree.read_session(folder / "session.json")
-        self.assertEqual(found_tree.current, "n0002")
-        self.assertTrue((folder / "nodes" / "n0002" / "target.blend").is_file())
-        self.assertEqual(sorted(p.relative_to(folder / "sdk").as_posix() for p in (folder / "sdk").rglob("*.jsonl")),
-                         ["s-1.jsonl", "s-1/subagents/agent-1.jsonl"],
-                         "the CLI transcripts of its sessions, in the store's layout")
-        entry = found.entry(chat)
-        self.assertEqual((entry.title, entry.turns), ("Make a crate", 2))
-        self.assertEqual(found.read_chat(chat)["created"], found_tree.created)
-        self.assertIsNone(found.migrate(self.config), "nothing left to migrate")
-        self.assertEqual(self.chats().index, found.index)
+        chat = self.chat_with_turns(found)
+        self.assertIsNone(found.entry(chat).origin)
+        obj = json.loads(chats.index_json(found.index))
+        for key in ("origin", "adopted"):
+            del obj["chats"][chat][key]
+        other = self.mine(self.tmp / "other" / "scene.whittle", origin="i0000000000000002")
+        other.reconcile(obj, found.pack_all())
+        self.assertIsNone(other.entry(chat).origin)
+        self.assertFalse(other.foreign(chat), "no prompt for files from before")
+        obj["chats"][chat]["adopted"] = [4]
+        with self.assertRaises(formats.FormatError):
+            chats.validate_index(obj)
+
+    def test_new_chats_are_never_foreign(self):
+        found = self.mine()
+        self.assertFalse(found.foreign(found.new()))
+        self.assertFalse(found.foreign(None))
+        plain = self.chats(self.tmp / "plain" / "scene.whittle")
+        self.assertFalse(plain.foreign(self.chat_with_turns(plain)), "Chats without an origin")
+
+

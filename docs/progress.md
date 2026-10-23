@@ -471,19 +471,24 @@ its own conversation, history tree and Claude session; the panel shows the curre
   packed size).
 - **SDK transcripts** go into each chat's `sdk/` through a `SessionStore`
   (`agent/store.py`), so a chat resumes after the file moved or on another machine.
-- **Migration**: a single-session `<name>.whittle/` becomes the first chat, with the
-  CLI transcripts of its sessions copied into its store. An earlier version's
-  `<name>.whittle/` beside a file moves into the file's cache once, when the file is
-  opened or saved (its newer work kept only if built on what the file stores), and it
-  and its `<name>.whittle.replaced-<time>/` folders are removed; only folders with
-  Whittle's own markers and the file's own name are touched.
+- **Chats from another machine**: each chat records the install that made it (a
+  random id in Whittle's user folder). Another install's chat opens read-only with a
+  `Continue this chat?` box: Send is disabled with a tooltip until Continue, which is
+  stored with the chat so it never asks again; New Chat stays available. Chats from
+  before the marker never ask.
+- **The same file in two Blenders** keeps a cache in each, as before, and while the
+  other's claim is live the sidebar has one dim line saying the chats won't merge.
+- **No migration**: the code for earlier development layouts (a single-session folder,
+  `<name>.whittle/` beside a file and its `.replaced-<time>/` copies, the user folder's
+  `caches/<sha1>/` and `dev-sessions/`) was removed.
 - Tests: `tests/agent/test_chats.py`, `test_caches.py`, `test_store.py`,
   `tests/blender/test_chats.py` with `chats_file.py` (a real save, the cache deleted,
   reopen, restore, delete and shrink), `test_cache.py` with `cache_file.py` (a file's
   life in fresh Blenders: save and reopen, a move, a copy, a cache in use, a crash, an
-  older file, cleanup by age, an earlier version's folders; nothing beside the `.blend`
-  but its `.blend1`), and `test_session_folder.py` (saving keeps the cache). Screens: `chat_menu`,
-  `chat_menu_many`, `new_chat`, `switched_chat`, `delete_confirm`, `delete_many`.
+  older file, cleanup by age; nothing beside the `.blend` but its `.blend1`), and
+  `test_session_folder.py` (saving keeps the cache). Screens: `chat_menu`,
+  `chat_menu_many`, `new_chat`, `switched_chat`, `continue_chat`, `open_elsewhere`,
+  `delete_confirm`, `delete_many`.
 
 ## How to run
 
@@ -550,7 +555,7 @@ them at each save. Nothing is written beside the `.blend`.
 
 - **The chats' cache**:
   - A chat's conversation resumes through its transcript store when its cwd changed
-    (a copy's fresh cache, a migrated folder); that a real CLI resumes and forks from a
+    (a copy's fresh cache); that a real CLI resumes and forks from a
     store-materialized session is checked only offline (the SDK's materialization, and
     the fake agent), not live yet.
   - Save Copy leaves the cache with the open file; the copy carries the chats and gets
@@ -660,8 +665,7 @@ them at each save. Nothing is written beside the `.blend`.
   been checked live. `ask` in background Blender answers at once as unattended.
 - **Resume after the `.blend` moved**: the CLI keys sessions by working directory (the
   chat's folder), so a moved chat resumes from its transcript store instead. A session
-  missing from both (a migrated chat whose CLI transcripts were already cleaned up)
-  falls back to a fresh session with a note. The fake agent covers that path; the real
+  missing from both falls back to a fresh session with a note. The fake agent covers that path; the real
   CLI's error shape for it has not been seen live.
 - **Saving during a comparison** saves the compared node as shown. Restoring the live
   scene inside `save_pre` is unsafe, so the comparison bar's tooltips only warn.
@@ -681,10 +685,6 @@ them at each save. Nothing is written beside the `.blend`.
   own skills. They cannot be invoked under `dontAsk`, but they take up context. (The
   user's own skills no longer load: the CLI runs with Whittle's private configuration
   folder.)
-- **Files from before chats**: their conversations were kept by the CLI in the user's
-  default Claude configuration folder, which Whittle no longer reads, so migrating one
-  copies no transcripts and its next turn starts a fresh session (with the context-lost
-  note).
 - **Sketching is only tested headlessly.** Background Blender cannot draw with the real
   tool or move a viewport, so the draw-tool path (Surface placement, the strokes and
   attributes the brush writes), the watcher timer in a live UI, undo across sketching,
@@ -768,3 +768,12 @@ Extras on; the scripts named are under `tests/fixtures/fake/`).
     folder holds only the `.blend` (and its `.blend1`).
 17. **A crash keeps the chats**: save, send a turn, kill Blender (`kill -9`), start it
     and open the file: the unsaved turn is in the conversation.
+18. **A chat from another machine**: open a `.blend` with chats saved by another
+    install (or point `WHITTLE_USER_DIR` at an empty folder and reopen one of your own):
+    the current chat shows `Continue this chat?`, Send is disabled and its tooltip says
+    why. Continue: the box goes, Send works, and reopening the file does not ask again.
+19. **The same file twice**: open a saved file in two Blenders: the second shows the dim
+    "open in another Blender" line, and so does the first at its next redraw; quit
+    the second and the first's line goes.
+20. **Shift+Alt+C**: the popup shows the dim hint under its field, whole, at your UI
+    scale; while Claude asks, the field's placeholder is `Ask Claude…` like the sidebar's.

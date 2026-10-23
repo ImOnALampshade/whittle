@@ -712,6 +712,28 @@ def switched_chat(stage: Stage):
 
 
 @scenario
+def continue_chat(stage: Stage):
+    """A chat made on another machine: it reads, and asks before sending."""
+    stage.crate()
+    yield from _chat(stage, "foreign", ["Add a lid and rope handles to the crate."], new=False)
+    store = chats.get()
+    store.entry(store.current).origin = "i00000000000000ff"
+    store.save()
+    stage.props.prompt = "Make the handles thicker."
+    yield 0.2
+
+
+@scenario
+def open_elsewhere(stage: Stage):
+    """The same file open in another Blender: one quiet line at the top."""
+    stage.crate()
+    yield from _chat(stage, "elsewhere", ["Add a lid and rope handles to the crate."], new=False)
+    # Another Blender's claim on a cache of the same file, without one.
+    chats.open_elsewhere = lambda **_kw: True
+    yield 0.2
+
+
+@scenario
 def delete_confirm(stage: Stage):
     crate, barrel, _lamp = yield from _three_chats(stage)
     stage.run(operators.switch_chat, crate)

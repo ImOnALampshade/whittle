@@ -52,6 +52,8 @@ def submit_sketch(context, fake_script: str = "") -> tuple[turn.TurnController, 
     """Body of the Send operator, callable from tests. The prompt leaves the
     prompt box once the run is under way (the conversation shows it); the
     controller puts it back if the run never starts."""
+    if chats.current_foreign():
+        raise RuntimeError(CHAT_FOREIGN)
     props = context.scene.whittle
     refs = [Path(bpy.path.abspath(r.path)) for r in props.refs if r.path]
     ctl = controller(fake_script or context.window_manager.whittle_fake_script)
@@ -280,6 +282,8 @@ CHAT_WAIT = "Wait for the turn to end, or stop it"
 CHAT_COMPARING = "End the comparison first"
 CHAT_NEW_ALREADY = "This chat is new already"
 CHAT_GONE = "This chat is no longer in the file"
+# Send's tooltip in a chat made by another install, until it is continued.
+CHAT_FOREIGN = "This chat was made on another machine: Continue it to send, or start a New Chat"
 
 
 def chat_blocker(ctl) -> str | None:
@@ -522,6 +526,9 @@ class WHITTLE_OT_submit(bpy.types.Operator):
         if compare.active() is not None:
             # The panel has no line for this: the disabled button's tooltip says it.
             cls.poll_message_set("End the comparison to send")
+            return False
+        if chats.current_foreign():
+            cls.poll_message_set(CHAT_FOREIGN)
             return False
         return not busy(turn.current())
 
@@ -1033,6 +1040,25 @@ class WHITTLE_OT_chat_switch(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class WHITTLE_OT_chat_continue(bpy.types.Operator):
+    bl_idname = "whittle.chat_continue"
+    bl_label = "Continue"
+    bl_description = ("Continue this chat here. Its whole conversation goes to Claude with your next "
+                      "turn, so continue only chats from files you trust")
+
+    @classmethod
+    def poll(cls, context):
+        return chats.current_foreign()
+
+    def execute(self, context):
+        try:
+            chats.adopt_current()
+        except (OSError, KeyError, formats.FormatError) as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
 class WHITTLE_OT_chat_rename(bpy.types.Operator):
     bl_idname = "whittle.chat_rename"
     bl_label = "Rename Chat"
@@ -1145,5 +1171,5 @@ CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_stop, WHITTLE_OT_stroke_type,
            WHITTLE_OT_target_remove, WHITTLE_OT_target_clear, WHITTLE_OT_view_remove,
            WHITTLE_OT_history_restore, WHITTLE_OT_history_branch, WHITTLE_OT_history_compare,
            WHITTLE_OT_branch_switch, WHITTLE_OT_retry, WHITTLE_OT_compare_toggle, WHITTLE_OT_compare_end, WHITTLE_OT_ghost_toggle,
-           WHITTLE_OT_chat_new, WHITTLE_OT_chat_switch, WHITTLE_OT_chat_rename, WHITTLE_OT_chat_delete,
+           WHITTLE_OT_chat_new, WHITTLE_OT_chat_switch, WHITTLE_OT_chat_continue, WHITTLE_OT_chat_rename, WHITTLE_OT_chat_delete,
            WHITTLE_OT_chat_delete_many)

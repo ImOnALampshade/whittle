@@ -218,7 +218,8 @@ class TurnController:
 
     def launch_settings(self) -> dict:
         """What an agent started now would run with: the process's Python,
-        fake script and API key, and the settings its sessions get. The key
+        fake script, API key and usage-data choice, and the settings its
+        sessions get. The key
         is kept only as a digest. The model is not among them: each submit
         names the chat's, and the agent switches its session to it."""
         key, _source = prefs.api_key()
@@ -226,6 +227,7 @@ class TurnController:
         return {"python": str(python) if python else None,
                 "fake_script": str(self.process.fake_script) if self.process.fake_script else None,
                 "api_key": hashlib.sha256(key.encode()).hexdigest() if key else None,
+                "usage_data": bool(prefs.get().usage_data),
                 "settings": {**prefs.session_settings(), **self.settings_overrides}}
 
     def chat_model(self) -> str:

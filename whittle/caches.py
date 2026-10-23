@@ -15,6 +15,11 @@ A cache root holds what chats.py describes, plus:
 The file id is stored in the .blend, so the cache follows the file through
 renames and moves. A copy opened while the original's cache is in use, or
 whose cache records another file that still exists, gets an id of its own.
+
+The user folder also holds install.json, {"format": "whittle.install",
+"version": 1, "id"}: a random id for this Whittle install, which each chat
+records as its origin (chats.py), so a chat that came in a file from
+elsewhere can be told apart.
 """
 
 import hashlib
@@ -28,17 +33,19 @@ import time
 from pathlib import Path
 
 from . import chats as store
-from . import formats, tree as trees
+from . import formats
 
 log = logging.getLogger("whittle")
 
 CACHE_FORMAT = "whittle.cache"
 RECORD_NAME = "cache.json"
 LOCK_NAME = "in-use.json"
+INSTALL_FORMAT = "whittle.install"
+INSTALL_NAME = "install.json"
 # A cache not used for this long is deleted (never the one in use).
 MAX_AGE = 30 * 86400
 _FILE_ID = re.compile(r"^f[0-9a-f]{16}$")
-_REPLACED_TIME = re.compile(r"\d{8}-\d{6}")
+_INSTALL_ID = re.compile(r"^i[0-9a-f]{16}$")
 
 
 def new_file_id() -> str:
@@ -48,6 +55,22 @@ def new_file_id() -> str:
 
 def is_file_id(text) -> bool:
     return isinstance(text, str) and bool(_FILE_ID.match(text))
+
+
+def install_id(user_dir) -> str:
+    """This install's id, made the first time it is asked for. It names no
+    machine or user: it only tells this install's chats from others'."""
+    path = Path(user_dir) / INSTALL_NAME
+    try:
+        found = formats.read_json(path)
+    except formats.FormatError:
+        found = {}
+    if found.get("format") == INSTALL_FORMAT and isinstance(found.get("id"), str) \
+            and _INSTALL_ID.match(found["id"]):
+        return found["id"]
+    made = "i" + secrets.token_hex(8)
+    formats.write_json_atomic(path, {"format": INSTALL_FORMAT, "version": 1, "id": made})
+    return made
 
 
 def state_stamp(index_json: str, packed: dict[str, bytes]) -> str:
@@ -146,6 +169,24 @@ def release(root) -> None:
         (root / LOCK_NAME).unlink(missing_ok=True)
 
 
+def open_elsewhere(cache_dir, blend, skip=None) -> bool:
+    """Whether another Blender has the same file open: a cache other than
+    skip (this Blender's) records it and is claimed by a live Blender. Each
+    of the two works on a cache of its own, so their chats do not merge."""
+    cache_dir = Path(cache_dir)
+    if blend is None or not cache_dir.is_dir():
+        return False
+    for folder in cache_dir.iterdir():
+        if folder.name == skip or not is_file_id(folder.name) or folder.is_symlink() \
+                or not (folder / LOCK_NAME).is_file():
+            continue
+        recorded = read_record(folder).get("path")
+        if isinstance(recorded, str) and recorded and same_file(recorded, blend) \
+                and in_use_elsewhere(folder):
+            return True
+    return False
+
+
 # -- which cache a file uses -----------------------------------------------------
 
 def same_file(a, b) -> bool:
@@ -228,122 +269,3 @@ def cleanup(cache_dir, keep=(), *, now: float | None = None, max_age: float = MA
     if gone:
         log.info("deleted %d chat caches not used for %d days", len(gone), max_age // 86400)
     return gone
-
-
-def cleanup_old_layout(user_dir, *, now: float | None = None, max_age: float = MAX_AGE) -> list[Path]:
-    """The caches of earlier versions in the user folder (dev-sessions/<time>
-    for unsaved files, caches/<sha1> for files beside an unwritable folder)
-    go by the same age, from their modification time."""
-    now = time.time() if now is None else now
-    gone = []
-    for name in ("dev-sessions", "caches"):
-        parent = Path(user_dir) / name
-        if not parent.is_dir() or parent.is_symlink():
-            continue
-        for folder in parent.iterdir():
-            try:
-                old = folder.is_dir() and not folder.is_symlink() and now - folder.stat().st_mtime >= max_age
-            except OSError:
-                continue
-            if old:
-                shutil.rmtree(folder, ignore_errors=True)
-                gone.append(folder)
-        try:
-            parent.rmdir()
-        except OSError:
-            pass
-    return gone
-
-
-# -- the old layout: <name>.whittle beside the .blend ------------------------------
-
-def _format_of(path: Path) -> str | None:
-    try:
-        return formats.read_json(path).get("format")
-    except formats.FormatError:
-        return None
-
-
-def is_cache_root(folder) -> bool:
-    """A cache root Whittle made: its chat index, or the single-session
-    layout's session.json, says so."""
-    folder = Path(folder)
-    if not folder.is_dir() or folder.is_symlink():
-        return False
-    return (_format_of(folder / store.INDEX_NAME) == store.INDEX_FORMAT
-            or _format_of(folder / "session.json") == trees.SESSION_FORMAT)
-
-
-def _only_chats(folder: Path) -> bool:
-    """A folder of chats moved aside: chats/<chat id>/ and nothing else."""
-    try:
-        entries = list(folder.iterdir())
-        chats = folder / "chats"
-        return ([e.name for e in entries] == ["chats"] and chats.is_dir() and not chats.is_symlink()
-                and all(store.is_chat_id(c.name) and c.is_dir() for c in chats.iterdir()))
-    except OSError:
-        return False
-
-
-def sidecar(blend) -> Path | None:
-    """The <name>.whittle folder an earlier version kept beside the .blend,
-    if Whittle's own."""
-    blend = Path(blend)
-    found = blend.with_name(f"{blend.stem}.whittle")
-    return found if is_cache_root(found) else None
-
-
-def replaced(blend) -> list[Path]:
-    """The <name>.whittle.replaced-<time> folders an earlier version moved a
-    cache's differing copies to, if Whittle's own."""
-    blend = Path(blend)
-    prefix = f"{blend.stem}.whittle.replaced-"
-    out = []
-    try:
-        entries = list(blend.parent.iterdir())
-    except OSError:
-        return []
-    for path in entries:
-        name = path.name
-        if not name.startswith(prefix) or not _REPLACED_TIME.fullmatch(name[len(prefix):]):
-            continue
-        if path.is_dir() and not path.is_symlink() and (is_cache_root(path) or _only_chats(path)):
-            out.append(path)
-    return sorted(out)
-
-
-def has_chats(root) -> bool:
-    root = Path(root)
-    chats = root / "chats"
-    return (root / store.INDEX_NAME).is_file() or (chats.is_dir() and any(chats.iterdir()))
-
-
-def migrate_sidecar(old, root, config=None) -> bool:
-    """Moves an earlier version's cache root into root, once, when root
-    has no chats yet: a single-session layout first becomes a chat in place
-    (its CLI transcripts are found by its old path), then the index, the
-    chats and their packed copies move. Returns whether they moved."""
-    old, root = Path(old), Path(root)
-    if has_chats(root):
-        return False
-    found = store.Chats(old)
-    found.load()
-    found.migrate(config)
-    root.mkdir(parents=True, exist_ok=True)
-    for name in (store.INDEX_NAME, "chats", "packed"):
-        src = old / name
-        if not src.exists() or src.is_symlink():
-            continue
-        dest = root / name
-        if dest.is_dir():
-            shutil.rmtree(dest)
-        elif dest.exists():
-            dest.unlink()
-        shutil.move(src, dest)
-    log.info("moved the chats in %s to %s", old, root)
-    return True
-
-
-def remove(folders) -> None:
-    for folder in folders:
-        shutil.rmtree(folder, ignore_errors=True)

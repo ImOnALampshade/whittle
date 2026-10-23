@@ -47,7 +47,7 @@ class WhittleSceneProps(bpy.types.PropertyGroup):
     # undo rolls it back with the target; session.json follows it.
     history_node: StringProperty(name="History Node", default="", options={"HIDDEN"})
     # The chat history_node belongs to: an undo step from another chat
-    # leaves the current chat's node alone. Empty in files from before chats.
+    # leaves the current chat's node alone. Empty until a chat is named here.
     chat: StringProperty(name="Chat", default="", options={"HIDDEN"})
     target_auto: BoolProperty(
         name="Auto", default=True, update=_auto_changed,

@@ -34,6 +34,8 @@ SCENARIOS = {
     "chat_menu_many": "The chat menu over 25 chats of every age and size: 20 listed, then Show 5 More.",
     "new_chat": "After New Chat: an empty chat in the header, the start row, the scene as it was.",
     "switched_chat": "Switched back to an earlier chat: its conversation, the scene as the other chat left it.",
+    "continue_chat": "A chat made on another machine: read-only, a box asks to Continue it, Send disabled.",
+    "open_elsewhere": "The same file open in another Blender: a quiet line says its chats won't merge.",
     "delete_confirm": "The confirmation of deleting a chat from its trash icon.",
     "delete_many": "The Delete Chats dialog on Older Than a Month.",
     "model_menu": "The model menu from the button beside Send: the newest of each family, Sonnet 5.5 checked.",

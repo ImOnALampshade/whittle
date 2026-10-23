@@ -313,6 +313,11 @@ class Entry:
     # The model the chat runs on; None follows the add-on's default until
     # the chat's first turn, which keeps the model it was sent with.
     model: str | None = None
+    # The install that made the chat (caches.install_id), and those it was
+    # continued on after asking. None: made before chats recorded it, and
+    # taken as every install's own.
+    origin: str | None = None
+    adopted: list[str] = field(default_factory=list)
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -321,7 +326,7 @@ class Entry:
 _ENTRY_SPEC = {"title": str, "created": str, "updated": str, "turns": int, "size": int,
                "digest": (str, None)}
 # Keys an index from an earlier version may lack.
-_ENTRY_OPTIONAL = {"model": (str, None)}
+_ENTRY_OPTIONAL = {"model": (str, None), "origin": (str, None), "adopted": list}
 
 
 @dataclass
@@ -346,6 +351,8 @@ def validate_index(obj, where: str = INDEX_NAME) -> None:
             raise formats.FormatError(f"{where}: chats.{chat} must be an object")
         formats._check(entry, f"{where}: chats.{chat}", _ENTRY_SPEC)
         formats._check(entry, f"{where}: chats.{chat}", {k: t for k, t in _ENTRY_OPTIONAL.items() if k in entry})
+        if not all(isinstance(i, str) for i in entry.get("adopted", [])):
+            raise formats.FormatError(f"{where}: chats.{chat}.adopted must hold strings")
     if obj["current"] is not None and obj["current"] not in obj["chats"]:
         raise formats.FormatError(f"{where}: current {obj['current']!r} is not listed")
 
@@ -368,10 +375,13 @@ def write_index(path, index: Index) -> None:
 # -- one cache root ----------------------------------------------------------------
 
 class Chats:
-    """The chats of one cache root. Every change is written at once."""
+    """The chats of one cache root. Every change is written at once. origin
+    is this install's id: the chats it makes record it, and a chat made by
+    another install is foreign() until adopted here."""
 
-    def __init__(self, root):
+    def __init__(self, root, origin: str | None = None):
         self.root = Path(root)
+        self.origin = origin
         self.index = Index()
         # The chat switched to since its last turn: its next turn tells the
         # agent the scene may have changed meanwhile. Runtime only.
@@ -457,7 +467,8 @@ class Chats:
 
     def _write_chat(self, chat: str, **values) -> None:
         data = {"format": CHAT_FORMAT, "version": 1, "id": chat, "title": NEW_TITLE,
-                "title_custom": False, "created": now_iso(), "model": None}
+                "title_custom": False, "created": now_iso(), "model": None, "origin": None,
+                "adopted": []}
         data.update({k: v for k, v in self.read_chat(chat).items() if k in data})
         data.update(values)
         formats.write_json_atomic(self.folder(chat) / CHAT_NAME, data)
@@ -490,7 +501,11 @@ class Chats:
         found = self._tree(chat)
         created = info.get("created") or (found.created if found else "") or now_iso()
         model = info.get("model") if isinstance(info.get("model"), str) else None
-        entry = Entry(title=info.get("title") or NEW_TITLE, created=created, updated=created, model=model)
+        origin = info.get("origin") if isinstance(info.get("origin"), str) else None
+        adopted = [i for i in info.get("adopted") or [] if isinstance(i, str)] \
+            if isinstance(info.get("adopted"), list) else []
+        entry = Entry(title=info.get("title") or NEW_TITLE, created=created, updated=created, model=model,
+                      origin=origin, adopted=adopted)
         if found is not None:
             turns = self._turns(found)
             entry.turns = len(turns)
@@ -509,8 +524,8 @@ class Chats:
         chat = new_chat_id(set(self.index.chats) | self._folders())
         stamp = now_iso()
         self.folder(chat).mkdir(parents=True, exist_ok=True)
-        self._write_chat(chat, created=stamp, model=model)
-        self.index.chats[chat] = Entry(created=stamp, updated=stamp, model=model)
+        self._write_chat(chat, created=stamp, model=model, origin=self.origin)
+        self.index.chats[chat] = Entry(created=stamp, updated=stamp, model=model, origin=self.origin)
         self._become_current(chat)
         self.save()
         return chat
@@ -574,7 +589,9 @@ class Chats:
             folder.mkdir(parents=True, exist_ok=True)
             entry = self.index.chats.get(chat)
             self._write_chat(chat, title=entry.title if entry else NEW_TITLE,
-                             model=entry.model if entry else None)
+                             model=entry.model if entry else None,
+                             origin=entry.origin if entry else self.origin,
+                             adopted=list(entry.adopted) if entry else [])
 
     def rename(self, chat: str, title: str) -> str:
         """A title by hand; an empty one puts back the automatic title."""
@@ -599,6 +616,25 @@ class Chats:
         model = (model or "").strip() or None
         self._write_chat(chat, model=model)
         self.index.chats[chat].model = model
+        self.save()
+
+    def foreign(self, chat: str | None) -> bool:
+        """Whether the chat was made by another install (someone else's
+        file, or this user's other machine) and not continued here yet. A
+        chat that records no origin, or Chats without one, is never foreign."""
+        entry = self.index.chats.get(chat) if chat else None
+        return (entry is not None and self.origin is not None and entry.origin is not None
+                and entry.origin != self.origin and self.origin not in entry.adopted)
+
+    def adopt(self, chat: str) -> None:
+        """This install continues the chat: it is not asked about again,
+        here or in any copy of the file saved from now on."""
+        entry = self.index.chats[chat]
+        if self.origin is None or not self.foreign(chat):
+            return
+        entry.adopted = [*entry.adopted, self.origin]
+        self.ensure_unpacked(chat)
+        self._write_chat(chat, adopted=list(entry.adopted))
         self.save()
 
     def began(self, chat: str, prompt: str, target: str | None = None, model: str | None = None) -> None:
@@ -706,20 +742,6 @@ class Chats:
         self.save()
         return out
 
-    def built_on(self, index: dict, packed: dict[str, bytes]) -> bool:
-        """Whether the cache was last in step with exactly what a .blend
-        stores, judged from the cache alone (for a cache from before
-        cache.json recorded it): it has every chat the file has, each packed
-        chat as the file's zip."""
-        stored = index_from_json(index, "the .blend's chat index")
-        for chat in stored.chats:
-            if chat not in self.index.chats:
-                return False
-            data = packed.get(chat)
-            if data is not None and (self._meta(chat) or {}).get("digest") != hashlib.sha256(data).hexdigest():
-                return False
-        return True
-
     def reconcile(self, index: dict, packed: dict[str, bytes], *, keep_newer: bool = False) -> dict[str, list[str]]:
         """After the .blend was opened: the cache is made to match what the
         file stores, and the file wins. A chat folder that differs, or that
@@ -746,7 +768,8 @@ class Chats:
                     report["discarded"].append(chat)
                 if not folder.is_dir():
                     folder.mkdir(parents=True, exist_ok=True)
-                    self._write_chat(chat, title=entry.title, created=entry.created, model=entry.model)
+                    self._write_chat(chat, title=entry.title, created=entry.created, model=entry.model,
+                                     origin=entry.origin, adopted=list(entry.adopted))
                 report["in_step"].append(chat)
                 continue
             digest = hashlib.sha256(data).hexdigest()
@@ -782,60 +805,6 @@ class Chats:
                      ", ".join(report["discarded"]))
         return report
 
-    # -- the single-session layout --------------------------------------------------
-
-    def migrate(self, config=None) -> str | None:
-        """A cache root from before chats (session.json, nodes/ and compare/
-        at its top) becomes one chat, the current one, with the CLI's
-        transcripts of its sessions copied into the chat's store, so its
-        conversation still resumes from the chat's own cwd. Returns the chat,
-        or None when there was nothing to migrate."""
-        legacy = self.root / "session.json"
-        if not legacy.is_file():
-            return None
-        chat = new_chat_id(set(self.index.chats) | self._folders())
-        folder = self.folder(chat)
-        folder.mkdir(parents=True)
-        for name in ("session.json", "nodes", "compare"):
-            if (self.root / name).exists():
-                shutil.move(self.root / name, folder / name)
-        found = self._tree(chat)
-        sessions = set()
-        if found is not None:
-            for node in found.nodes.values():
-                sessions.update(s for s in (node.agent_session_id, node.continued_session) if s)
-        source = cli_project_dir(self.root, config) if config is not None else None
-        for session in sorted(sessions) if source is not None else ():
-            try:
-                _copy_transcript(source, folder / "sdk", session)
-            except OSError as exc:
-                log.warning("could not copy the transcript of session %s: %s", session, exc)
-        created = found.created if found is not None and found.created else now_iso()
-        self._write_chat(chat, created=created)
-        entry = self._describe(chat)
-        self._write_chat(chat, title=entry.title)
-        self.index.chats[chat] = entry
-        self.index.current = chat
-        self.save()
-        log.info("the history in %s is now chat %s", self.root, chat)
-        return chat
-
-
-def _copy_transcript(source: Path, store: Path, session: str) -> None:
-    """The CLI's <session>.jsonl and its subagent transcripts, in the store's
-    layout (<session>.jsonl, <session>/<subpath>.jsonl)."""
-    if "/" in session or session.startswith("."):
-        return
-    main = source / f"{session}.jsonl"
-    if main.is_file():
-        store.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(main, store / main.name)
-    sub = source / session
-    if sub.is_dir():
-        for path in sub.rglob("*.jsonl"):
-            dest = store / session / path.relative_to(sub)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, dest)
 
 
 def delete_label(count: int, size: int) -> str:

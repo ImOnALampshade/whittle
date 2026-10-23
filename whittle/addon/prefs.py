@@ -21,6 +21,7 @@ DEFAULTS = {
     "poly_budget": 2000,
     "style_notes": "",
     "store_chats": True,
+    "usage_data": False,
 }
 LOG_LINES = 8
 # Where to make an API key; the attention box and the preferences link here.
@@ -83,6 +84,13 @@ class WhittlePreferences(bpy.types.AddonPreferences):
                     "prompts, Claude's replies and code, reference images and renders. Off: chats stay "
                     "in this computer's cache only, and files saved from now on carry none")
 
+    usage_data: BoolProperty(
+        name="Send Claude Code usage data", default=DEFAULTS["usage_data"],
+        description="Let the bundled Claude Code CLI send Anthropic its own usage telemetry and error "
+                    "reports. Off: it sends only the turns themselves "
+                    "(CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC). An idle agent restarts with the change "
+                    "at the next turn")
+
     def draw(self, context):
         from . import setup
 
@@ -100,6 +108,7 @@ class WhittlePreferences(bpy.types.AddonPreferences):
             row.label(text="Usage is billed to the key's Anthropic Console account.", icon="INFO")
         row.operator("wm.url_open", text="Get an API Key", icon="URL").url = KEYS_URL
         box.prop(self, "model", text="Model for New Chats")
+        box.prop(self, "usage_data")
         col = box.column()
         col.active = False
         col.label(text="Powered by Claude. Whittle is not made by or affiliated with Anthropic.",

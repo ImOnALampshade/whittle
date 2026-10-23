@@ -88,25 +88,6 @@ class SaveTest(CacheCase):
         self.assertEqual(record["base"], base, "nor what it stores")
         self.assertEqual(chats.root(), root)
 
-    def test_a_save_removes_an_earlier_versions_folders_beside_its_name(self):
-        ctl = self.controller()
-        self.turn(ctl, "Scale it.")
-        side = self.user_dir / "b.whittle"
-        side.mkdir()
-        (side / "chats.json").write_text(json.dumps({"format": "whittle.chats", "version": 1,
-                                                     "current": None, "chats": {}}))
-        aside = self.user_dir / "b.whittle.replaced-20260101-120000"
-        (aside / "chats" / "c12345678").mkdir(parents=True)
-        others = [self.user_dir / "b.whittle.notes", self.user_dir / "b.whittle.replaced-later",
-                  self.user_dir / "c.whittle"]
-        for folder in others:
-            folder.mkdir()
-        (self.user_dir / "c.whittle" / "chats.json").write_text((side / "chats.json").read_text())
-        self.save(self.user_dir / "b.blend")
-        self.assertFalse(side.exists())
-        self.assertFalse(aside.exists())
-        self.assertTrue(all(folder.is_dir() for folder in others), "never anything else")
-
 
 class SaveAndReopenTest(CacheCase):
     def test_reopened_file_finds_its_history(self):

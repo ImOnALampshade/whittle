@@ -2,8 +2,8 @@
 """A file's chats' cache over its life, each step in a fresh Blender
 (tests/blender/cache_file.py): a new file saved and reopened, moved, copied
 while its cache is another's, a crash with work newer than the last save,
-a cache older than the file, cleanup by age, and an earlier version's
-folders beside a file. Nothing is ever written beside a .blend."""
+a cache older than the file, and cleanup by age. Nothing is ever written
+beside a .blend."""
 
 import json
 import os
@@ -138,35 +138,3 @@ class CacheFileTest(AgentTestCase):
         self.assertEqual(r["nodes"], ["n0000", "n0001", "n0002"], "the cache's later turns are gone")
         self.assertEqual(r["beside"], ["moved.blend"])
         self.assertEqual([stale.exists(), recent.is_dir(), held.is_dir()], [False, True, True])
-
-        # An earlier version's file: its chats beside it in old.whittle,
-        # with work newer than its save, and a folder moved aside.
-        old = self.files / "d" / "old.blend"
-        old.parent.mkdir()
-        r = self.step("strip", moved, old)
-        self.assertTrue(r["stored"], "the file holds its chats")
-        side = old.with_name("old.whittle")
-        side.mkdir()
-        for name in ("chats.json", "chats", "packed"):
-            if (root / name).is_dir():
-                shutil.copytree(root / name, side / name)
-            else:
-                shutil.copy2(root / name, side / name)
-        (current,) = [p for p in (side / "chats").iterdir()
-                      if p.name == json.loads((side / "chats.json").read_text())["current"]]
-        (current / "notes.txt").write_text("newer than the save\n")
-        aside = old.with_name("old.whittle.replaced-20260101-120000")
-        (aside / "chats" / "c0000beef").mkdir(parents=True)
-        keep = ["notes.txt", "old.whittle.notes", "old.whittle.replaced-later", "other.whittle"]
-        (old.parent / "notes.txt").write_text("mine\n")
-        for name in keep[1:]:
-            (old.parent / name).mkdir()
-        shutil.copytree(side, old.parent / "other.whittle", dirs_exist_ok=True)
-        r = self.open(old, "save")
-        opened = r["opened"]
-        self.assertNotIn(opened["id"], (file_id, None))
-        self.assertEqual(opened["nodes"], ["n0000", "n0001", "n0002"])
-        self.assertEqual((Path(opened["folder"]) / "notes.txt").read_text(), "newer than the save\n",
-                         "the newer work moved into the cache")
-        self.assertEqual(r["saved"]["beside"], sorted(["old.blend", "old.blend1", *keep]),
-                         "Whittle's own folders for old.blend went, nothing else")

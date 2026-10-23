@@ -74,6 +74,9 @@ CHATS_SHOWN = 20
 # the title button's own padding and chevron, and the agent icon.
 HEADER_RESERVE = 3.6
 SWITCHED_NOTE = "The scene is as you left it; Claude will look at it before editing."
+ELSEWHERE_NOTE = "This file is open in another Blender; chats here won't merge with it."
+FOREIGN_TITLE = "Continue this chat?"
+FOREIGN_NOTE = "It was made on another machine."
 ASSET_HINT = "Or right-click an asset in the Asset Browser"
 WRAP_CACHE = 1024
 
@@ -1223,6 +1226,8 @@ def can_send(ctx: Ctx) -> bool:
     props = ctx.props
     if ctx.comparing is not None or ctx.busy or agent_state(ctx.ctl) == AgentState.NEEDS_SETUP:
         return False
+    if foreign(ctx):
+        return False
     return bool(props.prompt.strip() or len(props.refs)
                 or sketch.pending_count(sketch.find_sketch_object()))
 
@@ -1237,7 +1242,7 @@ def draw_composer(layout, ctx: Ctx) -> None:
     name = shortcut.field(ctl)
     asking = name == "ask_answer"
     row = layout.row(align=True)
-    row.textbox(props, name, initial_visible_lines=COMPOSER_LINES, placeholder=shortcut.FIELDS[name][1])
+    row.textbox(props, name, initial_visible_lines=COMPOSER_LINES, placeholder=shortcut.PLACEHOLDER)
     row.operator("whittle.ref_add", text="", icon="FILE_IMAGE")
 
     # The model button (not while a turn runs: the model changes between
@@ -1279,6 +1284,7 @@ def draw_composer(layout, ctx: Ctx) -> None:
 def draw_main(layout, ctx: Ctx) -> None:
     conv = conversation.build(ctx.hist, ctx.ctl)
     ctx.attention = draw_attention(layout, ctx, conv)
+    draw_elsewhere(layout, ctx)
     draw_target_line(layout, ctx)
     draw_comparison(layout, ctx)
     if can_offer_start(ctx, conv):
@@ -1287,6 +1293,7 @@ def draw_main(layout, ctx: Ctx) -> None:
     draw_conversation(layout, conv, ctx)
     draw_switched(layout, ctx)
     layout.separator()
+    draw_foreign(layout, ctx)
     draw_sketch(layout, ctx)
     draw_composer(layout, ctx)
 
@@ -1317,6 +1324,37 @@ def draw_switched(layout, ctx: Ctx) -> None:
     col = layout.column(align=True)
     col.active = False
     _wrapped(col, SWITCHED_NOTE, ctx, ctx.width, icon="INFO")
+
+
+def draw_elsewhere(layout, ctx: Ctx) -> None:
+    """While another Blender has the same file open: one dim line, since
+    each keeps its own copy of the chats and they will not merge."""
+    if not chats.open_elsewhere():
+        return
+    col = layout.column(align=True)
+    col.active = False
+    _wrapped(col, ELSEWHERE_NOTE, ctx, ctx.width, icon="INFO")
+
+
+def foreign(ctx: Ctx) -> bool:
+    """Whether the current chat came from another install and was not
+    continued here: it reads, but sends nothing until continued."""
+    found = ctx.chats
+    return found is not None and found.foreign(found.current)
+
+
+def draw_foreign(layout, ctx: Ctx) -> None:
+    """A small box over the composer of a chat made on another machine:
+    Continue adopts it. Until then Send is disabled; New Chat stays in the
+    chat menu."""
+    if not foreign(ctx):
+        return
+    box = layout.box()
+    box.label(text=FOREIGN_TITLE, icon="QUESTION")
+    col = box.column()
+    col.active = False
+    _wrapped(col, FOREIGN_NOTE, ctx, ctx.width - BOX_PAD, icon="BLANK1")
+    box.operator("whittle.chat_continue", text="Continue", icon="CHECKMARK")
 
 
 def chat_line(entry, now: float) -> str:

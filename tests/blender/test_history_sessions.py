@@ -8,13 +8,14 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from unittest import mock
 
 import bpy
 
 from tests.blender.helpers import REPO, pump
 from tests.blender.history_helpers import HistoryTurnCase
 from whittle import tree
-from whittle.addon import history, turn
+from whittle.addon import chats, history, paths, turn
 from whittle.addon.process import AgentState
 
 
@@ -141,7 +142,11 @@ class SceneFollowingTest(HistoryTurnCase):
 
     def test_reopened_file_wins_over_session_json(self):
         blend = self.user_dir / "scene.blend"
-        self.session_dir = self.user_dir / "scene.whittle"
+        unsaved = mock.patch.object(paths, "blend_path", return_value=None)
+        unsaved.start()
+        self.addCleanup(unsaved.stop)
+        chats.reset()
+        self.session_dir = chats.current_folder(create=True)
         ctl = self.controller()
         n1 = self.turn(ctl, "Scale it.")
         n2 = self.turn(ctl, "Add a lid.")
@@ -176,10 +181,10 @@ class SceneFollowingTest(HistoryTurnCase):
         self.assertEqual(result["parent"], n2, "the next submit starts from what the file shows")
         self.assertEqual(result["plan"], [s1, False, None, []],
                          "n2 ends its session, so it resumes as it is rather than forking at n1")
-        # Opening it made the single-session folder beside the file its
-        # first chat, in its cache.
+        # Opened with another user folder: its chat came out of the file
+        # into a cache there.
         chat = Path(result["folder"])
         self.assertEqual(chat.parents[2], self.user_dir / "user" / "cache")
-        self.assertFalse(self.session_dir.exists(), "nothing is left beside the file")
+        self.assertEqual(chat.name, self.session_dir.name)
         found, _ = tree.read_session(chat / "session.json")
         self.assertEqual(found.current, n2)
