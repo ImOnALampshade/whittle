@@ -6,6 +6,7 @@
 #
 # WHITTLE_LIVE=1 also runs the live tests, which call the Claude API; Blender
 # then needs --online-mode or it refuses to start the real agent.
+# WHITTLE_GUI=1 also runs the GUI checks afterwards (./gui_checks.sh).
 set -eu
 cd "$(dirname "$0")"
 
@@ -31,4 +32,9 @@ fi
 if [ "$agent" -eq 5 ] && [ "$blender" -eq 5 ]; then
     echo "run_tests.sh: no test matched" >&2
     exit 5
+fi
+# WHITTLE_GUI=1 also runs every GUI check (./gui_checks.sh): real GUI
+# Blenders in a hidden nested session, about four minutes.
+if [ "${WHITTLE_GUI:-}" = "1" ]; then
+    ./gui_checks.sh
 fi

@@ -357,6 +357,40 @@ shot in a GUI Blender without a person at the keyboard.
 - Tests: `test_screens.py` (scenario list vs catalog, stitching, trimming) and the fake
   runner's delayed call.
 
+**GUI checks.** What background tests cannot reach is driven in a real GUI Blender, with
+simulated input and the fake agent, by script (opt-in: `./gui_checks.sh [check ...]`, or
+`WHITTLE_GUI=1 ./run_tests.sh`; about four minutes, a minute of it Blender's autosave
+timer).
+
+- `tests/gui/run.py` (stdlib) runs each check of `tests/gui/catalog.py`, one GUI Blender
+  per phase, one at a time, with `--factory-startup --enable-event-simulate` in the
+  screenshot harness's hidden nested session (`WHITTLE_GUI_VISIBLE=1` shows it). Blender's
+  user folders are `build/gui-checks/blender-user/`; each check has its own work folder
+  with `TMPDIR` (so autosaves and `quit.blend` land there) and `WHITTLE_USER_DIR`. A phase
+  passes when it wrote `phase-<n>.ok` and its Blender exited 0 or was killed by design; an
+  agent process outliving its Blender fails it. Results: `build/gui-checks/report.json`.
+- `tests/gui/harness.py` runs inside Blender: refuses a config folder other than the
+  run's, registers the add-on, and steps the phase on a persistent timer, so a phase
+  carries on across the files it opens. A phase that returns `KILL` ends with a
+  `kill -9` of its own Blender (no exit handlers, no `quit.blend`).
+- `tests/gui/checks.py`: `GuiStage` (the screenshot stage plus simulated keys, clicks,
+  drags and typing, `button()` running an operator as a sidebar button does, in the
+  sidebar region with an undo step, File-menu saves and opens, and the fake agent's log)
+  and 22 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
+  `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `undo_compare`,
+  `modal_wait`, `save_as`, `recover_autosave`, `recover_last_session`,
+  `crash_keeps_chats`, `dirty_flag`, `shortcut`, `auto_targets`, `branch_undo`,
+  `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`. Each says what it
+  confirms in the catalog.
+- Bugs they found and fixed: a real Ctrl+Z during a turn left the controller with a freed
+  Scene, so the turn never finished; Ctrl+Z while sketching did the same to the sketch
+  session, so Stop Sketching left the user's stroke placement on Surface; Place Facing the
+  View from the reference chip's menu always placed the image Front (the sidebar has no
+  `region_data`); entering sketch mode with an active-only target (after a click on empty
+  space) emptied the target list; strokes drawn on a surface seen at a slant were sent as
+  off it (the on-surface test now measures across the surface).
+- Tests: `test_gui_checks.py` (every catalog check has its phases).
+
 **Chat-style sidebar** (`docs/ui.md` is the spec; every state in its §10 was shot and
 looked at). The Whittle tab reads like a chat app: what Claude is working on, the
 conversation of the current branch, a Sketch button and a prompt box, with history in
@@ -493,6 +527,9 @@ WHITTLE_LIVE=1 ./run_tests.sh   # also the live tests (call the API, ~$0.01)
 ./run_tests.sh -k test_compare  # only tests whose name matches, on either side
 # one Blender test alone:
 timeout 300 blender -b --factory-startup --python-exit-code 1 --python tests/blender/run.py -- -k test_compare
+./gui_checks.sh                 # the GUI checks (real GUI Blenders, hidden), ~4 minutes
+./gui_checks.sh undo_turn       # one of them; its logs are in build/gui-checks/undo_turn/
+WHITTLE_GUI=1 ./run_tests.sh    # the offline suite, then the GUI checks
 ```
 
 With `-k`, a side where nothing matches exits 5 (unittest's "no tests ran", which
@@ -559,15 +596,19 @@ them at each save. Nothing is written beside the `.blend`.
     File → Revert keeps it too (the cache was built on what the file stores); only a
     file that differs from that wins. An unsaved file that crashed starts a fresh
     cache when reopened (a new file never takes a stored id); its old cache ages out.
-  - Opening Blender's own autosave or `quit.blend` (told apart by name) uses the id it
-    stores without the path check, so it finds the original's cache and leaves its
-    record alone; no test opens a real recovery file, and File → Recover is unchecked
-    in the GUI.
+  - File → Recover → Last Session and → Auto Save give the recovered file the
+    original's path (Blender restores it), so it is handled as the original: its cache
+    is used as it is and keeps the turns made since the last save (the GUI checks
+    `recover_last_session` and `recover_autosave`). Opening an autosave or `quit.blend`
+    with File → Open keeps its own name, which is told apart: it uses the id it stores
+    without the path check, so it finds the original's cache and leaves its record
+    alone. That path is tested under `-b` only.
   - "In use" is a claim file with the Blender's process id: a claim from another
     machine (a shared home folder) always counts, so a file open there gets a fresh
     cache here.
-  - A real Save As in a GUI session is not checked by hand yet; the tests cover the
-    handlers and real saves, moves and reopens under `-b`.
+  - Save As in a GUI session (the GUI check `save_as`, through the real file browser
+    during a turn): the turn runs on, the cache keeps its id and records the new path,
+    and the file left behind gets a cache of its own when opened.
 - **Branch** brings back the node's request strokes and references, not the strokes
   or text of its amendments.
 
@@ -584,9 +625,12 @@ them at each save. Nothing is written beside the `.blend`.
   incomplete (`broken`), and the next setup rebuilds it with `--clear`. A cancel during the
   `--clear` of a reinstall can, in a narrow window, leave the folder without its marker,
   which then reads as `foreign` until it is removed by hand.
-- **Chats**: whether taking the chats out of the data in `save_post` / `load_post` marks
-  the file modified (the title bar's `*`) is unchecked; a test cannot read it. Blender's
-  autosave and crash-recovery files carry no chats (no `save_pre`), only the file's id;
+- **Chats**: taking the chats out of the data in `save_post` / `load_post` does not mark
+  the file modified (the GUI check `dirty_flag`: after Save As, Ctrl+S, opening,
+  switching to a chat that was only packed, and New Chat, `bpy.data.is_dirty`, the title
+  bar's `*`, is off). Blender clears the flag when it handles the save's notifier, a
+  moment after the save returns, with or without Whittle, so it is read after that.
+  Blender's autosave and crash-recovery files carry no chats (no `save_pre`), only the file's id;
   the file's cache in the user folder still has them. A chat's size is measured by packing it at the end of
   each turn, which takes a few milliseconds per megabyte.
 - **Checked by hand in the GUI** (first manual pass): sketching with views and overlays,
@@ -594,12 +638,31 @@ them at each save. Nothing is written beside the `.blend`.
   ask, Restore with Ctrl+Z / Ctrl+Shift+Z, Compare / Toggle /
   End, the ghost, Branch, a real agent environment install, and one real Haiku turn
   (a prompt-only request, handled well).
-- **GUI-only, still unverified** (see the checklist below): restart and resume, Blank +
-  Sketch (strokes on surfaces, and off them on the view plane at the 3D cursor's depth),
-  Primitive, the Asset Browser entry (`context.asset` exists only there), references
-  placed from a real view, a real Ctrl+Z during a turn (back to the turn's start, the
-  agent told) and during a comparison, and scene calls waiting out a real transform. How the panel looks in each state is now covered by
-  the screenshot harness.
+- **Checked in the GUI by script** (`./gui_checks.sh`, GUI checks above): restart and
+  resume, Blank and Primitive starts with strokes from the real draw tool (on surfaces,
+  and off them on the view plane through the 3D cursor), the Asset Browser's Start Whittle
+  From Asset (a real click and right-click), references placed from an orbited view and
+  added through the real file browser, a real Ctrl+Z during a turn (back to the turn's
+  start, the agent told), during a comparison and while sketching, scene calls waiting out
+  a real transform, Save As, File → Recover (last session and autosave), a crash of
+  Blender and of the agent, the title bar's `*`, Shift+Alt+C, Auto targets following
+  clicks, branch switching and Ctrl+Z, chats and the file carrying them. How the panel
+  looks in each state is covered by the screenshot harness. What still needs a person is
+  the checklist below.
+  - Ctrl+Z during a turn goes to the undo step before the turn's own (`Whittle: before
+    <node>`): the user's last action, which is the turn's start unless something changed
+    the scene since without an undo step (a script, say). The checks start each turn
+    after a real click, as a person would.
+  - The draw tool places points short of a surface seen at a slant, along the line of
+    sight (exact head-on; about 1 cm above a cube's top seen at 11° from 2.5 m, growing
+    with distance and obliquity); the on-surface flag allows for it.
+  - The checks run the sidebar's operators as its buttons would (in the sidebar's region,
+    with an undo step), not by clicking the buttons: Blender has no Python API for where
+    a button is drawn. Popup menus remember their last item, so keyboard navigation in
+    them is not used either, except the Asset Browser's context menu, whose last entry is
+    Whittle's.
+  - The add-on is registered from the repository, not installed as an extension, so its
+    preferences (and the settings restart they cause) are left to the tests and a person.
 - **Screenshot harness**: the images are reviewed by eye, not diffed. Sketch strokes in the
   `sketching` scenario come from the data API (the crate fixture's strokes), not the draw
   tool. Shots are at UI scale 1 and the factory theme, with region overlap and tooltips off
@@ -610,9 +673,9 @@ them at each save. Nothing is written beside the `.blend`.
   panels are scrolled and stitched.
 - **Chat-style sidebar**:
   - Auto targets are tested headlessly (the sync rules, a depsgraph update after a
-    selection change, the selection Whittle sets after a restore). The message-bus path
-    (clicking another object in a real viewport) and its feel in a long session are for
-    the manual checklist.
+    selection change, the selection Whittle sets after a restore), and in the GUI by
+    script (`auto_targets`, `compare_targets`: clicks in a real viewport, the message-bus
+    path). Its feel over a long session is for a person.
   - Text is measured with font 0 at the UI style's widget size times the UI scale,
     checked in the screenshots at 280 and 448 px and UI scale 1. A custom interface
     font or another scale may measure slightly off; Blender then shows its own `...`.
@@ -685,17 +748,19 @@ them at each save. Nothing is written beside the `.blend`.
   default Claude configuration folder, which Whittle no longer reads, so migrating one
   copies no transcripts and its next turn starts a fresh session (with the context-lost
   note).
-- **Sketching is only tested headlessly.** Background Blender cannot draw with the real
-  tool or move a viewport, so the draw-tool path (Surface placement, the strokes and
-  attributes the brush writes), the watcher timer in a live UI, undo across sketching,
-  and the panels' drawing are unverified until tried by hand. Tests use data-API strokes
-  and fake viewports built from real camera matrices.
+- **Sketching** is tested headlessly with data-API strokes and fake viewports built from
+  real camera matrices, and in the GUI by script (`blank_sketch`, `primitive_sketch`,
+  `sketch_undo`): strokes dragged with the real draw tool in an orbited viewport stick to
+  surfaces, off them land on the view plane through the 3D cursor, are tagged with their
+  view by the live watcher, are sent as on the surface they were drawn on, and Ctrl+Z
+  while sketching takes one back and keeps Draw Mode. Simulated input has no pressure, so
+  what a tablet pen writes (radius and opacity from pressure) is for a person.
 - **Which viewport**: the watcher tags strokes using the viewport whose view changed
   most recently (or the largest). With several 3D viewports, a stroke drawn in a still
   one right after orbiting another can get the other's view. Capture View is exact.
-- **Tagging timing** is verified headlessly (a data-API stroke plus a depsgraph update);
-  that the draw tool's stroke fires the handler before the user can orbit is expected
-  but unconfirmed in the GUI. Viewport discovery is tested with fake screens.
+- **Tagging timing**: a stroke from the real draw tool is tagged before the user can
+  orbit (`sketch_undo` orbits 50 ms after the release; the stroke keeps the view it was
+  drawn in). Viewport discovery with several viewports is tested with fake screens.
 - **Sketch key at the lowest frame**: the dope sheet shows the sketch layers' key far
   to the left of the scene range.
 - **Camera lens shift** is not represented in views captured through a scene camera.
@@ -704,67 +769,48 @@ them at each save. Nothing is written beside the `.blend`.
 
 ## Manual GUI checklist
 
-Things only a person at a real Blender can confirm; the first manual pass covered the
-rest (see Known gaps), and `./screens.sh` shows how the panel looks in each state. The
-steps use the redesigned sidebar's names (`docs/ui.md`; its §9 maps them to the old
-panels). Each step can use the real agent or **Development → Fake Script** (Developer
-Extras on; the scripts named are under `tests/fixtures/fake/`).
+What only a person at a real Blender can confirm. Everything else the first manual pass
+and the earlier checklist covered now runs in `./gui_checks.sh` (GUI checks above; each
+check's description in `tests/gui/catalog.py` says what it confirms), in the tests, or in
+`./screens.sh` (how the panel looks in each state, a failed turn shown once with Retry
+among them). The steps use the sidebar's names (`docs/ui.md`). Each step can use the real
+agent or **Development → Fake Script** (Developer Extras on; the scripts named are under
+`tests/fixtures/fake/`), unless it says otherwise.
 
-1. **Restart**: save, quit, reopen and send. The conversation and the 🕘 history popover
-   show the saved session, and the agent resumes it (no context-lost note in the turn).
-2. **Start row → Blank** in a scene with the default cube selected: nothing is added to the
-   scene, the cube is deselected and untouched, and the target line says Claude makes new
-   objects. The first Send makes new objects, which become the targets.
-3. **Start row → Primitive** → Cylinder: it stands at the 3D cursor and is the only
-   target, and it is selected, so Auto keeps it.
-4. **Asset Browser**: right-click an object asset from a library → Start Whittle From Asset:
-   it is appended at the cursor, is the target, and Blender File view shows no library.
-5. **References**: add two with 📎, pin one (click its chip → Pin to Every Request; the
-   chip gets a pressed pin), send a turn that succeeds: only the pinned one stays. Its
-   chip → Place Facing the View: a half-transparent image faces the viewport;
-   Front / Right / Top place it behind the model from that side.
-6. **Settings change** (`stream.json`, then `ask.json`): run a turn, change Development →
-   Fake Script, send again: the new script plays. Change Defaults → Triangle Budget in
-   the preferences and send: the agent is started again ("Starting Claude…" in the turn)
-   and the turn runs. Then pick another model with the button beside Send and send: the
-   turn runs on it without a restart (the model preference only sets new chats' model).
-7. **Amend right after Send** (`amend.json`): type into the amend field and press Amend
-   (it appears once text is typed) straight after Send, before the turn starts: the turn notes that the amendment waits
-   for the turn, then that it was delivered.
-8. **Failed turn** (`fail_untouched.json`): the first turn fails without editing; it shows
-   once in the conversation with Retry, the prompt box stays empty, and the history
-   popover has no new node, keeps the start highlighted and offers the start row. The second fails after an edit and appears as a
-   failed node.
-9. **Compare targets**: at a node whose targets are Crate and Crate_Lid, ⋯ → Compare With
-   Current on an earlier turn without the lid, Swap, Done: both are targets again (and
-   selected, with Auto on).
-10. **Auto targets**: click another object in Object Mode: the target line follows it.
-    Click empty space: the active object stays the target. Start sketching: the target
-    does not change. Turn Auto off, select something else: the list stays.
-11. **Branching in the conversation**: ⋯ → Edit & Resend on a turn, change the prompt,
-    Send as Branch: the turn's bubble shows ◂ 2/2 beside its ⋯; ◂ brings back the
-    first branch's scene, and Ctrl+Z goes back again.
-12. **The real buttons**: the history button beside Send opens its popover (its tooltip
-    says History) and ⋯ on a turn opens its menu where the pointer is (the screenshots open them from Python); clicking a row
-    title in the popover goes back to it; the header gear opens the agent popover; the
-    ⋯ beside Add <object> opens the target options; a turn's "Used N tools" and a tool
-    call inside it open and stay open across redraws. A stopped sketch turn: its strokes
-    stay, and the stroke count's 🗑 clears them.
-13. **API key**: with no key in the preferences and no `ANTHROPIC_API_KEY` in Blender's
-    environment, type a prompt and Send: nothing starts, the prompt stays in the box and
-    the box at the top asks for an API key, with Preferences and Get a Key (which opens
-    the Console). Paste a key in the preferences: the box goes, and Send runs the turn.
-    With a wrong key, Send: the turn fails and the box says the API key was refused.
-14. **Crash**: kill the agent process during a turn: one box says Claude stopped
-    unexpectedly; Restart and Retry starts it again and resends the turn.
-15. **Chats**: click the title in the header: the chat menu opens under it. New Chat, a
-    turn, then the first chat's title: its conversation is back and the scene is
-    unchanged; Send resumes that conversation (no context-lost note). Save: the title bar
-    shows no `*` afterwards. Delete the other chat from its 🗑 and confirm, save again:
-    the file is smaller.
-16. **The file carries its chats**: save, quit, delete the file's cache
-    (`<user dir>/cache/<file id>/`, the newest folder there), reopen: every chat is in
-    the menu with its turns, thumbnails and transcripts, and Send resumes. The file's
-    folder holds only the `.blend` (and its `.blend1`).
-17. **A crash keeps the chats**: save, send a turn, kill Blender (`kill -9`), start it
-    and open the file: the unsaved turn is in the conversation.
+1. **A tablet pen**: sketch with a real pen on the crate (`tests/fixtures/crate/scene.py`):
+   pressure shows in the strokes' width, the eraser end erases, and strokes stick to the
+   surface as they do with the mouse. The checks drive the draw tool with simulated mouse
+   events, which carry no pressure.
+2. **The real buttons**: the checks run the sidebar's operators as its buttons would, but
+   cannot find where Blender draws a button. Click them: the history button beside Send
+   opens its popover (its tooltip says History) and ⋯ on a turn opens its menu where the
+   pointer is; clicking a row title in the popover goes back to it; the title in the
+   header opens the chat menu under it; the header gear opens the agent popover; the ⋯
+   beside Add <object> opens the target options; a reference chip opens its menu, and
+   Pin to Every Request gives the chip a pressed pin; a turn's "Used N tools" and a tool
+   call inside it open and stay open across redraws. A stopped sketch turn: its strokes
+   stay, and the stroke count's 🗑 clears them.
+3. **Amend right after Send** (`amend.json`): type into the amend field and press Amend
+   (it appears once text is typed) straight after Send, before the turn starts: the turn
+   notes that the amendment waits for the turn, then that it was delivered. (The queued
+   amendment is tested headlessly, and Shift+Alt+C's amendment during a turn in the GUI.)
+4. **Preferences** (with Whittle installed as an extension: the checks register it from
+   the repository, so it has no preferences there): change Defaults → Triangle Budget and
+   send: the agent is started again ("Starting Claude…" in the turn) and the turn runs.
+   Change Development → Fake Script between turns (`stream.json`, then `ask.json`): the
+   new script plays. Pick another model with the button beside Send and send: the turn
+   runs on it without a restart.
+5. **API key** (the real API): with no key in the preferences and no `ANTHROPIC_API_KEY`
+   in Blender's environment, type a prompt and Send: nothing starts, the prompt stays in
+   the box and the box at the top asks for an API key, with Preferences and Get a Key
+   (which opens the Console). Paste a key in the preferences: the box goes, and Send runs
+   the turn. With a wrong key, Send: the turn fails and the box says the API key was
+   refused.
+6. **A real turn on a sketch** (the real agent): draw add and carve strokes on the crate
+   from two views, send: Claude's edit follows the strokes, and its renders show them.
+7. **Several viewports**: with two 3D viewports, orbit one and draw in the other: the
+   stroke takes the view it was drawn in (the watcher picks the viewport whose view
+   changed last; Capture View is exact).
+8. **Your own setup**: another desktop (the checks run in a nested KWin session), a UI
+   scale other than 1 or a custom interface font: the sidebar's text fits, and the
+   checks' flows above still feel right by hand.

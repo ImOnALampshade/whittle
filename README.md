@@ -31,9 +31,11 @@ Whittle is young (0.1.0); expect rough edges.
   and costs tokens.
 - **Not built yet**: view gizmos and snap-to-view, default keys for the sketch operators,
   and per-file overrides of the triangle budget and style notes.
-- **Checked only headlessly so far**: some flows run in tests but not yet by hand in the
-  GUI, such as a real Ctrl+Z during a turn; [docs/progress.md](docs/progress.md) lists
-  them under Known gaps, with a manual checklist.
+- **Checked in a real GUI Blender by script**: flows background tests cannot reach, such
+  as a real Ctrl+Z during a turn, strokes drawn with the real draw tool and File → Recover,
+  run in `./gui_checks.sh` (GUI checks, below). What still needs a person, such as
+  tablet pressure and clicking the sidebar's own buttons, is the manual checklist in
+  [docs/progress.md](docs/progress.md).
 
 ## Install
 
@@ -173,8 +175,8 @@ file at the next save, so old chats do not keep it large. Files from before chat
 with their history as the first chat, and the `<name>.whittle` folders earlier versions
 kept beside a file move into the hidden cache the first time it is opened.
 
-[docs/progress.md](docs/progress.md) has a manual checklist that walks through each of these
-in a real Blender.
+`./gui_checks.sh` walks through most of these in a real Blender (GUI checks, below), and
+[docs/progress.md](docs/progress.md) has a manual checklist for the rest.
 
 ## Privacy and safety
 
@@ -217,8 +219,8 @@ also kept locally, in the chat cache and in the `.blend` when you save it, so a 
 
 ## Development
 
-You need Blender 5.2 as `blender` on your `PATH`: `run_tests.sh`, `build.sh` and
-`screens.sh` run it from there.
+You need Blender 5.2 as `blender` on your `PATH`: `run_tests.sh`, `build.sh`,
+`screens.sh` and `gui_checks.sh` run it from there.
 
 - Make the dev venv `.venv/` at the repo root once, from Blender 5.2's own Python 3.14 (in
   Blender's folder, `5.2/python/bin/python3.14`, or a system Python 3.14 when your
@@ -264,6 +266,8 @@ Environment variables Whittle reads:
 | `WHITTLE_INLINE_SKILLS` | `1` puts the recipe skills into the system prompt instead of loading them as a plugin. |
 | `WHITTLE_LIVE` | `1` makes `run_tests.sh` run the live tests too (Tests). |
 | `WHITTLE_SCREENS_VISIBLE` | `1` makes `screens.sh` show its windows on your desktop (Sidebar screenshots). |
+| `WHITTLE_GUI` | `1` makes `run_tests.sh` run the GUI checks too (GUI checks). |
+| `WHITTLE_GUI_VISIBLE` | `1` makes `gui_checks.sh` show its windows on your desktop (GUI checks). |
 
 
 ### Sidebar screenshots
@@ -290,6 +294,30 @@ your desktop; without `kwin_wayland` the script stops and says so (use
 the windows on your desktop instead (without taking focus; they ignore real input while
 they run).
 
+### GUI checks
+
+```sh
+./gui_checks.sh                         # every check, about four minutes
+./gui_checks.sh undo_turn blank_sketch  # only these
+WHITTLE_GUI=1 ./run_tests.sh            # the whole suite, then every check
+```
+
+Some things only a GUI Blender does: a real Ctrl+Z (undo needs a window), the draw tool
+placing strokes on surfaces, a transform's modal operator, the Asset Browser's context
+menu, file browsers, Blender's autosave and File → Recover, the title bar's `*`.
+`gui_checks.sh` runs each check in `tests/gui/catalog.py` in a real GUI Blender started
+with `--enable-event-simulate`, in the same hidden nested session as `screens.sh`: the
+check builds a scene, drives the add-on with the fake agent, sends the input under test
+(a key, a drag of the draw tool, a right-click) as simulated events through Blender's own
+event handling, and asserts what came of it. A check that needs a restart, a crash or
+Blender's own recovery files runs one Blender per phase (a crash is a `kill -9` of
+Blender itself), sharing a work folder. Blender's user folders, its temporary folder and
+Whittle's user folder are the run's own, under `build/gui-checks/`, so nothing touches
+your preferences, recent files or autosaves. The script exits non-zero if any check
+failed; each phase's Blender log is in `build/gui-checks/<check>/phase-<n>.log`, and
+`build/gui-checks/report.json` lists the results. `WHITTLE_GUI_VISIBLE=1` shows the
+windows on your desktop instead (they ignore real input while they run).
+
 ## Tests
 
 ```sh
@@ -306,6 +334,7 @@ tested through its command construction, a fake process and a dry run.
 
 With `-k`, each side runs only the tests whose name matches; a side where nothing matches
 is skipped, and the script fails (exit code 5) only when no test matched on either side.
+`WHITTLE_GUI=1` runs the GUI checks after both sides (GUI checks).
 
 The live tests call the real API with `ANTHROPIC_API_KEY` (a few US cents per run, billed
 to that key): they use `claude-haiku-5-5` with a tiny prompt, and `run_tests.sh` adds
