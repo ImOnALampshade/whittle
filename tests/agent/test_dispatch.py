@@ -80,6 +80,9 @@ class DispatchTest(unittest.IsolatedAsyncioTestCase):
         await self.assertCode("bad_request", "start_session", {"session_dir": "/s", "settings": {"max_turns": "4"}})
         await self.assertCode("bad_request", "start_session",
                               {"session_dir": "/s", "settings": {"max_budget_usd": "cheap"}})
+        for key in ("style_notes", "palette", "bevel_style"):
+            await self.assertCode("bad_request", "start_session", {"session_dir": "/s", "settings": {key: 3}})
+        await self.assertCode("bad_request", "start_session", {"session_dir": "/s", "settings": {"render_size": "big"}})
 
     async def test_submit(self):
         self.assertEqual(await self.dispatch("submit", {"turn_id": "n0001", "bundle_dir": "/b"}),

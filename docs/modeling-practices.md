@@ -155,7 +155,7 @@ Numbers and pictures catch different things: the horn failure passed the visual 
 | separate parts | fuse what is rigid and belongs together; moving parts, parts the user wants apart, and small repeated details may stay separate; say what was left separate |
 | booleans | no rule: explain the trade-off, let the agent choose and say what it did |
 | topology | quads where it matters; triangles on flat areas, caps, tips; n-gons on flat faces |
-| style | general purpose; follow the prompt and style notes |
+| style | general purpose; follow the prompt and the file's style (palette, bevel style, notes) |
 | shading | judged by shape and style; say what was chosen |
 | triangle budget | a loose guide; report the count |
 | voxel remesh | a tool with known costs; fine for organic blobs |

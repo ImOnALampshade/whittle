@@ -619,10 +619,14 @@ def turn_menu(stage: Stage):
 
 @scenario
 def agent_popover(stage: Stage):
-    """The agent popover from the header gear, with this file's style notes
-    set and its triangle budget left at the preference."""
+    """The agent popover from the header gear, with this file's self-check
+    rounds, palette, bevel style and style notes set and its triangle budget
+    and render size left at the preferences."""
     stage.crate()
-    stage.props.style_notes = "Chunky bevels, worn painted wood."
+    stage.props.self_check_rounds = 2
+    stage.props.palette = "weathered oak, dark iron"
+    stage.props.bevel_style = "chunky"
+    stage.props.style_notes = "Worn painted wood, scuffed corners."
     yield 0.5
     return Popup("panel", "WHITTLE_PT_agent")
 

@@ -32,11 +32,17 @@ class WhittleTarget(bpy.types.PropertyGroup):
 # setting -> the custom property on scene.whittle that holds it, saved with the
 # file. An unset field reads the preference, so it always shows what the next
 # session gets; editing it sets the override, and reset_file_setting clears it.
-FILE_SETTINGS = {"poly_budget": "file_poly_budget", "style_notes": "file_style_notes"}
+# Every session setting can be overridden, in the preferences' order.
+FILE_SETTINGS = {key: f"file_{key}" for key in prefs.SESSION_SETTINGS}
 
 
 def _clean(key: str, value):
-    return max(value, prefs.MIN_POLY_BUDGET) if key == "poly_budget" else value
+    """An integer setting kept inside its preference's bounds."""
+    if key not in prefs.LIMITS:
+        return value
+    low, high = prefs.LIMITS[key]
+    value = max(value, low)
+    return value if high is None else min(value, high)
 
 
 def file_settings(scene) -> dict:
@@ -71,6 +77,10 @@ def _file_setting(key: str) -> dict:
     return {"get": getter, "set": setter}
 
 
+def _file_description(key: str) -> str:
+    return f"{prefs.DESCRIPTIONS[key]}. For this file; unset, it is the preferences' {prefs.LABELS[key]}"
+
+
 class WhittleSceneProps(bpy.types.PropertyGroup):
     prompt: StringProperty(name="Prompt", default="", update=enter.updater("prompt"),
                            description="What to make of the sketch. Enter sends, Shift+Enter adds a "
@@ -96,14 +106,26 @@ class WhittleSceneProps(bpy.types.PropertyGroup):
         name="Auto", default=True, update=_auto_changed,
         description="Follow the selection: Claude works on the selected objects (or the active one). "
                     "Turn off to pick the objects by hand")
+    # This file's overrides (FILE_SETTINGS); their tooltips are the
+    # preferences' plus where an unset one comes from.
     poly_budget: IntProperty(
         name="Triangle Budget", min=prefs.MIN_POLY_BUDGET, **_file_setting("poly_budget"),
-        description="Rough triangle budget for the whole target, for this file. Unset, it is the "
-                    "preferences' Triangle Budget")
+        description=_file_description("poly_budget"))
+    self_check_rounds: IntProperty(
+        name="Self-check Rounds", min=prefs.LIMITS["self_check_rounds"][0],
+        max=prefs.LIMITS["self_check_rounds"][1], **_file_setting("self_check_rounds"),
+        description=_file_description("self_check_rounds"))
+    render_size: IntProperty(
+        name="Render Size", min=prefs.LIMITS["render_size"][0], max=prefs.LIMITS["render_size"][1],
+        **_file_setting("render_size"), description=_file_description("render_size"))
+    palette: StringProperty(
+        name="Palette", **_file_setting("palette"), description=_file_description("palette"))
+    bevel_style: StringProperty(
+        name="Bevel Style", search=prefs.bevel_search, search_options={"SUGGESTION"},
+        **_file_setting("bevel_style"), description=_file_description("bevel_style"))
     style_notes: StringProperty(
         name="Style Notes", **_file_setting("style_notes"),
-        description="Extra style guidance for the agent, for this file, e.g. 'chunky bevels'. "
-                    "Unset, it is the preferences' Style Notes")
+        description=_file_description("style_notes"))
 
 
 CLASSES = (WhittleRef, WhittleTarget, WhittleSceneProps)

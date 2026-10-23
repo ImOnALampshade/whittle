@@ -13,7 +13,8 @@ from tests.fixtures.crate.scene import build_scene
 from whittle import formats
 from whittle.addon import bundle, render, sketch, views
 
-SETTINGS = {"self_check_rounds": 2, "poly_budget": 800, "style_notes": "chunky", "render_size": 512}
+SETTINGS = {"self_check_rounds": 2, "poly_budget": 800, "style_notes": "chunky", "palette": "oak, iron",
+            "bevel_style": "subtle", "render_size": 512}
 A_POINTS = [(-0.15 + 0.3 * i / 7, -0.25, 0.25 + 0.02 * math.sin(i)) for i in range(8)]
 A_RADIUS = [0.012 + 0.001 * i for i in range(8)]
 B_POINTS = [(0.2 * math.cos(2 * math.pi * i / 12), 0.2 * math.sin(2 * math.pi * i / 12), 0.7)
@@ -91,7 +92,8 @@ class BundleTest(unittest.TestCase):
         self.assertEqual(req.refs, ["refs/my_ref.png"])
         self.assertEqual((dest / "refs" / "my_ref.png").read_bytes(), self.ref.read_bytes())
         self.assertEqual(req.units, {"system": "METRIC", "scale_length": 0.01})
-        self.assertEqual(req.settings, {"self_check_rounds": 2, "poly_budget": 800, "style_notes": "chunky"})
+        self.assertEqual(req.settings, {"self_check_rounds": 2, "poly_budget": 800, "style_notes": "chunky",
+                                        "palette": "oak, iron", "bevel_style": "subtle"})
         self.assertEqual(written.request, req)
 
         self.write("second")

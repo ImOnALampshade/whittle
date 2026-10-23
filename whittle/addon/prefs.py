@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import bpy
 from bpy.props import BoolProperty, IntProperty, StringProperty
 
+from .. import style
 from ..models import DEFAULT_MODEL
 
 PACKAGE = __package__.rpartition(".")[0]
@@ -20,10 +21,31 @@ DEFAULTS = {
     "render_size": 512,
     "poly_budget": 2000,
     "style_notes": "",
+    "palette": "",
+    "bevel_style": "",
     "store_chats": True,
     "usage_data": False,
 }
 MIN_POLY_BUDGET = 10
+# The integer settings' bounds (min, max; None: unbounded), shared with the
+# per-file overrides on the scene (props.py).
+LIMITS = {"poly_budget": (MIN_POLY_BUDGET, None), "self_check_rounds": (0, 10), "render_size": (64, 1024)}
+# The settings a session starts with (session_settings), in the order the
+# Defaults box and the popover's For This File show them.
+SESSION_SETTINGS = ("poly_budget", "self_check_rounds", "render_size", "palette", "bevel_style", "style_notes")
+# Their names and tooltips, shared with the per-file fields.
+LABELS = {"poly_budget": "Triangle Budget", "self_check_rounds": "Self-check Rounds", "render_size": "Render Size",
+          "palette": "Palette", "bevel_style": "Bevel Style", "style_notes": "Style Notes"}
+DESCRIPTIONS = {
+    "self_check_rounds": "How many fix rounds the agent may spend after its renders",
+    "render_size": "Pixel size of the agent's self-check renders",
+    "poly_budget": "Rough triangle budget for the whole target",
+    "palette": "The colours the agent builds materials from, as a short list, e.g. "
+               "'weathered oak, dark iron'. Empty: the agent picks",
+    "bevel_style": "How the agent bevels edges: none, subtle or chunky, or describe your own, "
+                   "e.g. 'rounded corners only'. Empty: the agent decides per shape",
+    "style_notes": "Extra style guidance for the agent, e.g. 'worn painted wood'",
+}
 LOG_LINES = 8
 # Where to make an API key; the attention box and the preferences link here.
 KEYS_URL = "https://platform.claude.com/settings/keys"
@@ -40,6 +62,13 @@ def _model_search(_self, _context, edit_text):
     ids = [m.id for m in found.latest()] + [m.id for older in found.older().values() for m in older]
     text = (edit_text or "").strip().lower()
     return [m for m in ids if text in m]
+
+
+def bevel_search(_self, _context, edit_text):
+    """The Bevel Style field suggests the named styles; any other text can
+    still be typed and reaches the agent as written."""
+    text = (edit_text or "").strip().lower()
+    return [name for name in style.BEVEL_STYLES if text in name]
 
 
 def _key_changed(_self, _context):
@@ -71,14 +100,18 @@ class WhittlePreferences(bpy.types.AddonPreferences):
         name="Agent Python", subtype="FILE_PATH", default=DEFAULTS["agent_python"],
         description="Development override for the Python that runs the agent")
     self_check_rounds: IntProperty(name="Self-check Rounds", default=DEFAULTS["self_check_rounds"],
-                                   min=0, max=10,
-                                   description="How many fix rounds the agent may spend after its renders")
-    render_size: IntProperty(name="Render Size", default=DEFAULTS["render_size"], min=64, max=1024,
-                             description="Pixel size of the agent's self-check renders")
+                                   min=LIMITS["self_check_rounds"][0], max=LIMITS["self_check_rounds"][1],
+                                   description=DESCRIPTIONS["self_check_rounds"])
+    render_size: IntProperty(name="Render Size", default=DEFAULTS["render_size"],
+                             min=LIMITS["render_size"][0], max=LIMITS["render_size"][1],
+                             description=DESCRIPTIONS["render_size"])
     poly_budget: IntProperty(name="Triangle Budget", default=DEFAULTS["poly_budget"], min=MIN_POLY_BUDGET,
-                             description="Rough triangle budget for the whole target")
+                             description=DESCRIPTIONS["poly_budget"])
+    palette: StringProperty(name="Palette", default=DEFAULTS["palette"], description=DESCRIPTIONS["palette"])
+    bevel_style: StringProperty(name="Bevel Style", default=DEFAULTS["bevel_style"], search=bevel_search,
+                                search_options={"SUGGESTION"}, description=DESCRIPTIONS["bevel_style"])
     style_notes: StringProperty(name="Style Notes", default=DEFAULTS["style_notes"],
-                                description="Extra style guidance for the agent, e.g. 'chunky bevels'")
+                                description=DESCRIPTIONS["style_notes"])
     store_chats: BoolProperty(
         name="Save Chats in the .blend", default=DEFAULTS["store_chats"],
         description="Store every chat inside the .blend when it is saved, so it travels with the file: "
@@ -125,6 +158,8 @@ class WhittlePreferences(bpy.types.AddonPreferences):
         row.prop(self, "poly_budget")
         row.prop(self, "self_check_rounds")
         row.prop(self, "render_size")
+        box.prop(self, "palette")
+        box.prop(self, "bevel_style")
         box.prop(self, "style_notes")
 
         box = layout.box()
@@ -185,8 +220,7 @@ def session_settings(scene=None) -> dict:
     from . import props
 
     p = get()
-    settings = {"self_check_rounds": p.self_check_rounds, "poly_budget": p.poly_budget,
-                "style_notes": p.style_notes, "render_size": p.render_size}
+    settings = {key: getattr(p, key) for key in SESSION_SETTINGS}
     if scene is None:
         scene = getattr(bpy.context, "scene", None)
     settings.update(props.file_settings(scene))

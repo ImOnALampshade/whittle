@@ -28,7 +28,7 @@ UID_PROP = "whittle_uid"
 # along the ray it may be this many times the tolerance.
 SURFACE_TOLERANCE = (0.001, 0.01)
 SURFACE_GRAZING = 10.0
-SETTINGS_KEYS = ("self_check_rounds", "poly_budget", "style_notes")
+SETTINGS_KEYS = ("self_check_rounds", "poly_budget", "style_notes", "palette", "bevel_style")
 
 
 class BundleError(Exception):
