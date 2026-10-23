@@ -5,6 +5,9 @@ problem or idea before a large change saves everyone time.
 
 ## Before you start
 
+- Skim [AGENTS.md](AGENTS.md), the working guide to the repo: layout, commands, hard
+  rules and where to start common changes. Coding agents read it too (`CLAUDE.md`
+  imports it for Claude Code); keep it in step with the code.
 - Read [README.md](README.md) (Development and Tests) and
   [docs/architecture.md](docs/architecture.md), the blueprint the code follows. The sidebar's
   spec is [docs/ui.md](docs/ui.md); agent-facing text (the system prompt, the skills, tool
