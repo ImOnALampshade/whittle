@@ -83,6 +83,17 @@ class EnvironmentTest(AgentTestCase):
         env = process.agent_environment(base, api_key="", config_dir=Path("/w/claude"))
         self.assertNotIn("ANTHROPIC_API_KEY", env, "the fake agent gets no key it was not given")
 
+    def test_the_clis_own_traffic_is_off_unless_asked_for(self):
+        env = process.agent_environment({"PATH": "/usr/bin"}, api_key=KEY, config_dir=Path("/w/claude"))
+        self.assertEqual(env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"], "1", "off by default")
+        env = process.agent_environment({"PATH": "/usr/bin"}, api_key=KEY, config_dir=Path("/w/claude"),
+                                        usage_data=True)
+        self.assertNotIn("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", env, "the preference turns it back on")
+        env = process.agent_environment({"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}, api_key=KEY,
+                                        config_dir=Path("/w/claude"), usage_data=True)
+        self.assertEqual(env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"], "1",
+                         "an opt-out in Blender's own environment still stands")
+
     def test_the_agent_runs_with_the_key_and_a_private_config(self):
         seen = {}
 
@@ -101,6 +112,8 @@ class EnvironmentTest(AgentTestCase):
         self.assertEqual(seen["ANTHROPIC_API_KEY"], KEY)
         self.assertEqual(Path(seen["CLAUDE_CONFIG_DIR"]), self.user_dir / "claude")
         self.assertEqual(Path(seen["CLAUDE_CONFIG_DIR"]), paths.claude_config_dir())
+        self.assertEqual(seen["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"], "1",
+                         "the preference is off by default")
         for name in SIGN_INS:
             if name != "CLAUDE_CONFIG_DIR":
                 self.assertNotIn(name, seen)

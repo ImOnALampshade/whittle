@@ -537,7 +537,8 @@ reads as disabled.
 - References can still be added: they go with the next request.
 
 **While Claude asks**: the question is in the conversation (§4.4); the field is
-`ask_answer` with placeholder `Answer Claude…`. `Answer` (`whittle.answer`) shows once
+`ask_answer`, with the same placeholder, `Ask Claude…`: there is one placeholder in
+every state, and the question right above says what the text answers. `Answer` (`whittle.answer`) shows once
 an answer is typed; `Amend` shows when strokes were drawn since Send (a typed
 amendment waits for the answer, since the field is the answer's); Stop stays.
 
@@ -714,22 +715,57 @@ nothing. The current chat is never included.
 **Rename This Chat…** (`whittle.chat_rename`) is a props dialog (`Rename Chat`, confirm
 `Rename`) with the title field, filled with the current title.
 
+**A chat made on another machine** (someone else's file, or the user's own from
+another computer; architecture §14) shows read-only until continued: its conversation
+and history as usual, and above the sketch row a small box (`ui.draw_foreign`):
+
+```
+ ┌──────────────────────────────────┐
+ │ ? Continue this chat?            │
+ │   ·It was made on another machine.·│
+ │ [         ✓ Continue           ] │
+ └──────────────────────────────────┘
+ [✎ Sketch]
+ [Make the handles thicker.      ][📎]
+ [ ·▶ Send· ]           [Opus 5.5 ▾][🕘]   disabled
+```
+
+Send is disabled, its tooltip `This chat was made on another machine: Continue it to
+send, or start a New Chat`; Enter and Shift+Alt+C leave the text in the box. The draft,
+sketch and references can still be prepared. **Continue** (`whittle.chat_continue`,
+`CHECKMARK`; tooltip: its whole conversation goes to Claude with the next turn, so only
+for files you trust) marks the chat as continued here, for good: the box goes and Send
+works. New Chat in the chat menu stays available. Chats from files saved before
+Whittle recorded where a chat was made never ask.
+
+**The same file open in another Blender** (each keeps its own copy of the chats): while
+the other Blender has it open, one dim line with `INFO` at the top of the panel, under
+the attention box (`ui.draw_elsewhere`):
+
+```
+ ·ⓘ This file is open in another Blender;·
+ ·  chats here won't merge with it.·
+```
+
 ### 3.12 Typing without the mouse (Shift+Alt+C)
 
 Shift+Alt+C, from any editor and in any mode (sketching and Edit Mode included), goes
 straight to typing a prompt:
 
 ```
- ┌ Ask Claude ───────────────────────────┐   under the pointer
- │ [Add a lid|                         ] │   already in edit mode
- └───────────────────────────────────────┘
+ ┌ Ask Claude ───────────────────────────────────┐   under the pointer
+ │ [Add a lid|                                 ] │   already in edit mode
+ │ ·Enter sends · End keeps your draft · long…·  │   dim hint
+ └───────────────────────────────────────────────┘
 ```
 
 1. The 3D viewport's sidebar opens on the Whittle tab (the viewport under the
    pointer, else the window's largest), so the conversation is in view.
-2. `WHITTLE_PT_type_prompt` pops up under the pointer: a title and the composer's own
-   field, as a one-line field with `activate_init`, the way F2 renames. Typing starts at
-   once.
+2. `WHITTLE_PT_type_prompt` pops up under the pointer (22 units wide): a title, the
+   composer's own field, as a one-line field with `activate_init`, the way F2 renames
+   (placeholder `Ask Claude…`, as in the sidebar), and a dim hint, `Enter sends · End
+   keeps your draft · long prompts: use the sidebar box`, fitted to the width by
+   dropping its last parts whole (`shortcut.hint`). Typing starts at once.
 3. **Enter sends** exactly as Enter in the sidebar's box does: the field confirms and
    the popup closes on the press, and `whittle.enter_send` sends on the release (§3.9).
    Blank text and a send that is not possible (a comparison) leave the text in the
@@ -868,7 +904,7 @@ A target and a prompt: the start row steps aside.
  └──────────────────────────────────┘
 
  [✎ Sketch]
- [Answer Claude…                 ][📎]
+ [Ask Claude…                    ][📎]   the question above says what it answers
  [          ✕ Stop ▾          ]  [🕘]     Answer appears once typed
 ```
 
@@ -1136,6 +1172,7 @@ Added for chats (§3.11; none of them is an undo step, and none changes the scen
 |---|---|---|
 | `whittle.chat_new` | New Chat | starts an empty chat and makes it current |
 | `whittle.chat_switch` | Switch Chat | `chat`: makes that chat current; description names it (`Barrel with metal bands · 4 turns`) |
+| `whittle.chat_continue` | Continue | continues the current chat made on another machine: records this install in its `adopted`, so it is never asked about again; poll: the current chat is foreign |
 | `whittle.chat_rename` | Rename Chat | `title` (empty: the automatic title), in a props dialog on the current chat |
 | `whittle.chat_delete` | Delete Chat | `chat`: confirms, then deletes it (the current one: switches first) |
 | `whittle.chat_delete_many` | Delete Chats | `which` (`OTHERS`, `WEEK`, `MONTH`, `QUARTER`): a dialog with the count and size, then deletes |
@@ -1294,6 +1331,8 @@ Every feature of the old panels, and where it lives now.
 | Undo / redo across turns, restores, sketching | Ctrl+Z | unchanged; the conversation follows |
 | New chat, earlier chats, rename, delete | — (new) | Header title ▾ → chat menu (§3.11) |
 | Type a prompt, amendment or answer without the mouse | — (new) | Shift+Alt+C (§3.12) |
+| Continue a chat made on another machine | — (new) | The box above the sketch row → Continue (§3.11) |
+| Same file open in another Blender | — (new) | A dim line at the top of the panel (§3.11) |
 
 ## 10. Screenshot gate
 
@@ -1306,11 +1345,11 @@ width and, for `conversation` and `long_session`, the wide variant too.
 | `empty` | 4.1; "Nothing selected: Claude adds new objects"; one start row under "Start from", buttons not cut; no stroke row, no stroke types; nothing red |
 | `start` | default cube scene, start row shown under "Start from" |
 | `prompt_typed` | 4.2; no start row |
-| `shortcut_popup` | §3.12; the `Ask Claude` popup under the pointer, its one-line field in edit mode holding the half-typed prompt |
+| `shortcut_popup` | §3.12; the `Ask Claude` popup under the pointer, its one-line field in edit mode holding the half-typed prompt, the dim hint whole below it |
 | `prompt_only_done` | one finished prompt-only turn; no red; no start line |
 | `sketching` | 4.7; Sketch pressed with Capture View beside it, types on their own row, depressed correctly, the active one named; view list open, no view dimmed, the current one tagged; the draft once, in its field |
 | `streaming` | 4.3; gear in the header; one busy sign: "Running 2 tools" in the group header, no Working…; Stop alone; Auto dim |
-| `asking` | 4.4; question not red and said once; Stop alone |
+| `asking` | 4.4; question not red and said once; Stop alone; placeholder `Ask Claude…` |
 | `conversation` | 4.5; older turn collapsed; two expanded; one ⋯ per message; text wraps to the width |
 | `markdown` | a Markdown reply: no `**`, `#` or `- ` markers; bold heading with a line under it; bold and italic words; bullets and numbers in a margin; the whole reply shown |
 | `markdown_stress` | a stress test shown whole (the 8-line cap lifted): headings told apart by their rules and dimming (H1 over a double line, H2 a line, H3 and H4 bold, H5 and H6 dim); struck text with a line through it; inline code monospace; escapes without backslashes; task boxes; nested quotes indented and dim with their list, a bar per quote level; indented and fenced code in boxes, each with a copy button on its first row, `python` dim beside it; a boxed table with a bold header, aligned columns and a wrapped cell; maths as symbols, the block centred; a closed "Click to expand" section; HTML styled, entities decoded; emoji without boxes; link text underlined; a link button at the end of a line with one link, and a menu button on the line with two; the bare Wikipedia address keeping its `(bar)`; superscript footnote references and the dim notes at the end; no raw markers |
@@ -1333,6 +1372,8 @@ width and, for `conversation` and `long_session`, the wide variant too.
 | `chat_menu_many` | 25 chats of varied age and size: 20 entries then `Show 5 More`; long titles shortened with `…` at a word's end, the ✓/🗑 column aligned on every row; ages from `just now` to `over a year ago` |
 | `new_chat` | 4.12 after New Chat: header `New chat ▾` beside the agent icon, empty conversation, start row; nothing else |
 | `switched_chat` | 4.12 after switching to an older chat: its title in the header, its conversation, the dim "scene is as you left it" line once at the end, the scene unchanged |
+| `continue_chat` | §3.11: a chat from another machine, its conversation shown; the `Continue this chat?` box above the sketch row with its dim line and Continue; Send disabled; the draft kept; nothing red |
+| `open_elsewhere` | §3.11: one dim line at the top, `This file is open in another Blender; chats here won't merge with it.`, wrapped, not red |
 | `delete_confirm` | the confirmation of 🗑 on a chat: its title, turns and size, "leaves this file the next time you save" |
 | `delete_many` | the Delete Chats dialog on `Older Than a Month`, with the count and size line |
 | `model_menu` | the model menu over a chat on Sonnet 5.5: Opus 5.5, Sonnet 5.5 (✓), Haiku 5.5, Fable 5.1, then Older Models ▸ and Other Model…, `Use Sonnet 5.5 for New Chats`, the dim source line `Listed by the Models API 1 hour ago`; names whole, icons in one column |

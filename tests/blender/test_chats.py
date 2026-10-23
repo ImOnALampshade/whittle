@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Chats: New Chat, switching (the scene stays, the next turn resumes that
-chat's session), deleting one or many, the chat menu, migrating a
-single-session folder, and keeping every chat in the .blend."""
+chat's session), deleting one or many, the chat menu, a chat made on
+another machine, the same file open twice, and keeping every chat in the
+.blend."""
 
 import json
 import os
@@ -16,6 +17,7 @@ from tests.blender.helpers import FAKE_SCRIPTS, REPO, agent_python
 from tests.blender.history_helpers import STROKE, HistoryTurnCase
 from tests.blender.sketch_helpers import add_stroke
 from tests.blender.ui_helpers import RecordingLayout
+from whittle import caches
 from whittle import chats as chat_store
 from whittle import tree
 from whittle.addon import chats, conversation, history, operators, paths, turn, ui
@@ -339,38 +341,83 @@ class RenameTest(ChatCase):
         self.assertEqual(operators.rename_chat(bpy.context, ""), "Make the crate bigger")
 
 
-class MigrationTest(ChatCase):
-    def test_a_single_session_folder_becomes_the_first_chat(self):
-        blend = self.user_dir / "scene.blend"
-        root = self.user_dir / "scene.whittle"
-        self.session_dir = root
-        ctl = self.controller()
-        n1 = self.turn(ctl, "Make it bigger.")
-        n2 = self.turn(ctl, "Add a lid.")
-        session = ctl.history.node(n2).agent_session_id
-        ctl.close()
-        turn.set_current(None)
-        cli = chat_store.cli_project_dir(root, chats.config_dir())
-        cli.mkdir(parents=True)
-        (cli / f"{session}.jsonl").write_text('{"type": "user"}\n')
+class ForeignChatTest(ChatCase):
+    """A chat made by another install reads, but sends nothing until
+    Continue; this install's chats never ask."""
 
+    def draw(self) -> RecordingLayout:
+        layout = RecordingLayout()
+        ui.draw_main(layout, ui.Ctx(scene=self.scene, hist=history.active(), ctl=turn.current(),
+                                    comparing=None, width=240, chats=self.store))
+        return layout
+
+    def test_continue_this_chat(self):
+        _ctl, n1 = self.send("Make the crate bigger.")
+        found, chat = self.store, self.store.current
+        self.assertEqual(found.origin, chats.install_id())
+        self.assertEqual(found.entry(chat).origin, chats.install_id(), "made here")
+        self.assertNotIn(ui.FOREIGN_TITLE, self.draw().labels())
+
+        # As if the file came from another machine.
+        found.entry(chat).origin = "i00000000000000ff"
+        found.save()
+        self.assertTrue(chats.current_foreign())
+        self.props.prompt = "Add a lid."
+        layout = self.draw()
+        self.assertIn(ui.FOREIGN_TITLE, layout.labels())
+        self.assertIn(ui.FOREIGN_NOTE, layout.text())
+        (cont,) = layout.operators("whittle.chat_continue")
+        self.assertEqual(cont["text"], "Continue")
+        (send,) = layout.operators("whittle.submit")
+        self.assertFalse(layout.is_enabled(send), "read-only until continued")
+        self.assertFalse(bpy.ops.whittle.submit.poll(), "its tooltip says why")
+        with self.assertRaises(RuntimeError):
+            operators.submit_sketch(bpy.context, self.fake)
+        self.assertEqual(self.props.prompt, "Add a lid.", "the draft stays")
+        self.assertTrue(bpy.ops.whittle.chat_new.poll(), "New Chat stays available")
+
+        self.assertEqual(bpy.ops.whittle.chat_continue(), {"FINISHED"})
+        self.assertFalse(chats.current_foreign())
+        self.assertEqual(found.entry(chat).adopted, [chats.install_id()])
+        self.assertEqual(found.read_chat(chat)["adopted"], [chats.install_id()], "stored with the chat")
+        self.assertNotIn(ui.FOREIGN_TITLE, self.draw().labels())
+        self.assertFalse(bpy.ops.whittle.chat_continue.poll(), "never asked again")
+        _ctl, n2 = self.send("Add a lid.")
+        self.assertEqual(history.active().tree.node(n2).parent, n1)
+
+    def test_chats_from_before_origins_never_ask(self):
+        self.send("Make the crate bigger.")
+        found = self.store
+        found.entry(found.current).origin = None
+        found.save()
+        self.assertFalse(chats.current_foreign())
+        self.assertTrue(bpy.ops.whittle.submit.poll())
+
+
+class ElsewhereTest(ChatCase):
+    def test_a_line_while_another_blender_has_the_file(self):
+        self.send("Make the crate bigger.")
+        blend = self.user_dir / "scene.blend"
+        blend.write_bytes(b"BLENDER")
+        other = self.user_dir / "cache" / caches.new_file_id()
+        caches.update_record(other, path=str(blend))
+        (other / caches.LOCK_NAME).write_text(json.dumps({"pid": os.getppid(), "host": caches._host()}))
+        layout = RecordingLayout()
+        ctx = ui.Ctx(scene=self.scene, hist=history.active(), ctl=None, comparing=None, width=240,
+                     chats=self.store)
+        ui.draw_main(layout, ctx)
+        self.assertNotIn(ui.ELSEWHERE_NOTE, layout.text(), "an unsaved file")
         with mock.patch.object(paths, "blend_path", return_value=blend):
-            chats.after_load()
-            store = chats.get()
-            (chat,) = store.listed()
-            self.assertEqual(store.current, chat)
-            self.assertEqual(store.entry(chat).title, "Make it bigger")
-            self.assertEqual(store.entry(chat).turns, 2)
-            self.assertFalse(root.exists(), "the folder beside the file is gone")
-            self.assertEqual(chats.root().parent, self.user_dir / "cache")
-            hist = history.active()
-            self.assertEqual(hist.session.root, chats.root() / "chats" / chat)
-            self.assertEqual((set(hist.tree.nodes), hist.current), ({"n0000", n1, n2}, n2))
-            self.assertTrue(hist.session.thumb_path(n2).is_file(), "nothing lost")
-            self.assertTrue((chats.root() / "chats" / chat / "sdk" / f"{session}.jsonl").is_file(),
-                            "its SDK transcript went into the chat's store")
-            self.props.chat = ""
-            self.assertEqual(history.sync_from_scene(self.scene), n2, "a file from before chats")
+            self.assertFalse(chats.open_elsewhere(), "checked at most every few seconds")
+            self.assertTrue(chats.open_elsewhere(now=time.monotonic() + chats.ELSEWHERE_EVERY))
+            layout = RecordingLayout()
+            ui.draw_main(layout, ctx)
+            self.assertIn(ui.ELSEWHERE_NOTE, layout.text())
+            (line,) = [c for c in layout.of("label") if ui.ELSEWHERE_NOTE.startswith(c["text"]) and c["text"]][:1]
+            self.assertFalse(layout.is_active(line), "a quiet line")
+            (other / caches.LOCK_NAME).unlink()
+            self.assertFalse(chats.open_elsewhere(now=time.monotonic() + 2 * chats.ELSEWHERE_EVERY),
+                             "only while the other claim is live")
 
 
 class SaveTest(ChatCase):

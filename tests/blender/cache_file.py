@@ -10,9 +10,6 @@ tests/blender/test_cache.py:
                            opens BLEND; with turn sends one, with save
                            saves it, with crash then exits as a crash
                            would (no handlers, the cache still claimed)
-    strip SRC DEST         without the add-on: SRC saved as DEST with its
-                           chats but without its id, as an earlier version
-                           wrote files
 
 Prints one RESULT line of JSON: the file id, the cache root, its record,
 the current chat's nodes and what the file's folder holds."""
@@ -106,16 +103,8 @@ def open_file(blend: str, fake: str, *flags) -> dict:
     return out
 
 
-def strip(src: str, dest: str) -> dict:
-    bpy.ops.wm.open_mainfile(filepath=src)
-    text = bpy.data.texts[chats.HOLDER]
-    del text[chats.ID_PROP]
-    bpy.ops.wm.save_as_mainfile(filepath=dest)
-    return {"stored": sorted(text[chats.PAYLOAD_PROP].keys())}
-
-
 try:
-    result = {"new": new, "open": open_file, "strip": strip}[STEP](*ARGS)
+    result = {"new": new, "open": open_file}[STEP](*ARGS)
     result["errors"] = errors
     print("RESULT " + json.dumps(result), flush=True)
 finally:

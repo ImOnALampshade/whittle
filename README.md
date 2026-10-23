@@ -173,9 +173,16 @@ user folder (`cache/<file id>/`), named by an id the file stores, so it follows 
 when it is renamed or moved; a copy of the file gets a cache of its own. Opening the file
 fills the cache from it and the file wins, except after a crash: chat work newer than
 the last save is kept. Caches not used for 30 days are deleted. A deleted chat leaves the
-file at the next save, so old chats do not keep it large. Files from before chats open
-with their history as the first chat, and the `<name>.whittle` folders earlier versions
-kept beside a file move into the hidden cache the first time it is opened.
+file at the next save, so old chats do not keep it large. The same file open in two
+Blenders gets a cache in each, and a quiet line in the sidebar says their chats will not
+merge.
+
+A chat that was made on another machine (someone else's file, or your own from another
+computer) opens read-only, with a box asking **Continue this chat?**: Send stays disabled
+until you press **Continue**, and **New Chat** is there instead. You are asked once per
+chat; chats from files saved before Whittle recorded this never ask. The mark is a random
+id Whittle keeps for its install in its user folder (`install.json`); it names no person
+or machine.
 
 [docs/progress.md](docs/progress.md) has a manual checklist that walks through each of these
 in a real Blender.
@@ -183,10 +190,11 @@ in a real Blender.
 ## Privacy and safety
 
 Whittle talks to Anthropic's API only, with your key, while the agent runs: a model
-listing when it starts, then the turns. The bundled Claude Code CLI may also send
-Anthropic its own usage telemetry and error reports; set
-`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` (or `DISABLE_TELEMETRY=1`) in Blender's
-environment to turn that off. What a turn sends:
+listing when it starts, then the turns. The bundled Claude Code CLI can also send
+Anthropic its own usage telemetry and error reports; Whittle turns that off by running it
+with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. **Preferences → Add-ons → Whittle →
+Send Claude Code usage data** (off by default) turns it back on, unless Blender's own
+environment sets that variable. What a turn sends:
 
 - your prompts, amendments and answers to Claude's questions, and the reference images
   you attach or pin;
@@ -213,8 +221,9 @@ also kept locally, in the chat cache and in the `.blend` when you save it, so a 
   and collection names), your reference images and, when you continue a chat, that chat's
   whole conversation. A `.blend` from someone else can carry chats too, and continuing
   one replays its conversation to Claude as if it were its own. Text planted in any of
-  these could try to steer Claude. Start a **New Chat** on a file from elsewhere rather
-  than continuing its chats, and do not run Whittle on files you do not trust.
+  these could try to steer Claude. That is why a chat made on another machine asks
+  before it sends anything (see Use): start a **New Chat** on a file from elsewhere
+  rather than continuing its chats, and do not run Whittle on files you do not trust.
 - Blender's **Auto Run Python Scripts** setting does not cover Whittle: it only stops
   scripts stored in a file. Nothing Whittle stores in a file runs code by itself.
 - Links in Claude's replies open only `http`, `https` and `mailto` addresses.

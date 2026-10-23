@@ -11,7 +11,6 @@ ID properties, save_post and load_post take them off again. So undo never
 copies them, and Ctrl+Z can never roll a chat back. The Text also keeps the
 file's id, which names its cache in Whittle's user folder."""
 
-import hashlib
 import json
 import logging
 import time
@@ -39,6 +38,10 @@ _root: Path | None = None
 _chats: store.Chats | None = None
 # The stamp of what the save under way stores, for its save_post.
 _saving: str | None = None
+# Whether another Blender has the open file open: (when it was last
+# checked, the answer). The sidebar asks at every redraw.
+_elsewhere: tuple[float, bool] | None = None
+ELSEWHERE_EVERY = 2.0
 
 
 def config_dir() -> Path:
@@ -99,9 +102,49 @@ def get(*, create: bool = False) -> store.Chats | None:
     if found is None:
         return None
     if _chats is None or _chats.root != found:
-        _chats = store.Chats(found)
+        _chats = store.Chats(found, origin=install_id())
         _chats.load()
     return _chats
+
+
+def install_id() -> str | None:
+    """This install's id, which the chats it makes record as their origin."""
+    try:
+        return caches.install_id(paths.user_dir())
+    except OSError as exc:
+        log.warning("cannot keep this install's id: %s", exc)
+        return None
+
+
+def current_foreign() -> bool:
+    """Whether the current chat was made by another install and not
+    continued here yet: the sidebar asks before it sends anything in it."""
+    found = _chats
+    return found is not None and found.foreign(found.current)
+
+
+def adopt_current() -> None:
+    """Continue the current chat here: it is not asked about again."""
+    found = get()
+    if found is not None and found.current is not None:
+        found.adopt(found.current)
+
+
+def open_elsewhere(*, now: float | None = None) -> bool:
+    """Whether another Blender has this file open (each then keeps a cache
+    of its own, so their chats do not merge), checked at most every
+    ELSEWHERE_EVERY seconds."""
+    global _elsewhere
+    now = time.monotonic() if now is None else now
+    if _elsewhere is not None and now - _elsewhere[0] < ELSEWHERE_EVERY:
+        return _elsewhere[1]
+    blend = paths.blend_path()
+    try:
+        found = blend is not None and caches.open_elsewhere(paths.cache_dir(), blend, skip=_file_id)
+    except OSError:
+        found = False
+    _elsewhere = (now, found)
+    return found
 
 
 def current_folder(*, create: bool = False) -> Path | None:
@@ -133,12 +176,13 @@ def release() -> None:
 
 def reset() -> None:
     """Forgets the file's chats and lets go of its cache; the next use finds them again."""
-    global _file_id, _root, _chats, _saving
+    global _file_id, _root, _chats, _saving, _elsewhere
     release()
     _file_id = None
     _root = None
     _chats = None
     _saving = None
+    _elsewhere = None
 
 
 def chat_of(folder) -> tuple[store.Chats, str] | None:
@@ -233,8 +277,8 @@ def before_save(scene=None) -> None:
     it shows."""
     global _saving
     if _root is None and bpy.data.filepath:
-        # A file opened before Whittle was enabled or updated: its cache,
-        # or an earlier version's folder beside it, is found first.
+        # A file opened before Whittle was enabled or updated: its cache
+        # is found first.
         after_load()
     chats = get()
     # A file that never had a chat gets no holder; one that had chats keeps
@@ -267,8 +311,7 @@ def before_save(scene=None) -> None:
 def after_save(filepath: str | None = None) -> None:
     """The saved file has the chats; the open one lets go of them again. A
     save of the open file (not a copy) records where it is and what it now
-    stores, and an earlier version's folders beside its name go: the file
-    just written is what they would have been the cache of."""
+    stores."""
     global _saving
     text = _holder()
     if text is not None:
@@ -279,7 +322,6 @@ def after_save(filepath: str | None = None) -> None:
     blend = paths.blend_path()
     if filepath is None or blend is None or not caches.same_file(filepath, blend):
         return
-    _remove_old_layout(blend)
     if _root is None:
         return
     values = {"path": str(blend), "used": time.time()}
@@ -313,49 +355,13 @@ def load_failed() -> None:
             log.error("cannot take the chats' cache %s back: %s", _root, exc)
 
 
-def _remove_old_layout(blend: Path) -> list[Path]:
-    """An earlier version's <name>.whittle and <name>.whittle.replaced-<time>
-    beside the file go; nothing else beside it is touched."""
-    found = caches.replaced(blend)
-    side = caches.sidecar(blend)
-    if side is not None:
-        found.insert(0, side)
-    caches.remove(found)
-    return found
-
-
-def _migrate(blend: Path, root: Path) -> bool:
-    """An earlier version's cache beside the file (or, for a folder it could
-    not write, in the user folder) moves into the file's cache once, when
-    that has no chats yet; then those folders go. Returns whether chats
-    moved."""
-    moved = False
-    for old in (caches.sidecar(blend), _old_user_cache(blend)):
-        if old is None:
-            continue
-        if not moved:
-            try:
-                moved = caches.migrate_sidecar(old, root, config_dir())
-            except (OSError, formats.FormatError) as exc:
-                log.error("could not move the chats in %s: %s", old, exc)
-                continue
-        caches.remove([old])
-    caches.remove(caches.replaced(blend))
-    return moved
-
-
-def _old_user_cache(blend: Path) -> Path | None:
-    found = paths.user_dir() / "caches" / hashlib.sha1(str(blend).encode()).hexdigest()
-    return found if caches.is_cache_root(found) else None
-
-
 def after_load() -> None:
     """The opened file's chats: taken out of its data into its cache. The
     file's id names the cache (a copy whose cache is another file's gets a
     fresh one). Where the cache differs from the file the file wins, unless
     the cache was in step with exactly what the file stores and went on
     from there without a save (a crash): then its newer work stays. A file
-    without chats uses the cache as it is, after any migration."""
+    without chats uses the cache as it is."""
     global _file_id
     reset()
     text = _holder()
@@ -365,11 +371,8 @@ def after_load() -> None:
     # A new file's data may come from a startup file that once had chats:
     # only a saved file's id names its cache.
     stored = text.get(ID_PROP) if text is not None and blend is not None else None
-    old_layout = blend is not None and not recovery and (
-        caches.sidecar(blend) is not None or bool(caches.replaced(blend))
-        or _old_user_cache(blend) is not None)
     found, fresh = caches.find(paths.cache_dir(), stored, None if recovery else blend)
-    if found is None and payload is None and not old_layout:
+    if found is None and payload is None:
         cleanup()
         return
     _file_id = found or caches.new_file_id()
@@ -378,15 +381,12 @@ def after_load() -> None:
                  "it gets its own")
     root_dir = paths.cache_dir() / _file_id
     _use(root_dir, record_path=not recovery)
-    moved = _migrate(blend, root_dir) if old_layout else False
     chats = get()
     if chats is not None and payload is not None:
         raw, index, packed = payload
         stamp = caches.state_stamp(raw, packed)
         try:
-            # An earlier version's cache recorded no stamp: judged by its chats.
-            keep = (chats.built_on(index, packed) if moved
-                    else caches.read_record(root_dir).get("base") == stamp)
+            keep = caches.read_record(root_dir).get("base") == stamp
             report = chats.reconcile(index, packed, keep_newer=keep)
             if report["kept"]:
                 log.debug("the chats' cache was built on what the file stores: kept as it is")
@@ -400,6 +400,5 @@ def cleanup() -> None:
     """Caches not used for 30 days go, never the open file's."""
     try:
         caches.cleanup(paths.cache_dir(), keep=(_root,), config=config_dir())
-        caches.cleanup_old_layout(paths.user_dir())
     except OSError as exc:
         log.warning("could not clean up the chats' caches: %s", exc)

@@ -9,7 +9,6 @@ import time
 import unittest
 from pathlib import Path
 
-from tests.agent.test_chats import write_session
 from whittle import caches, chats
 
 DAY = 86400
@@ -165,79 +164,36 @@ class CleanupTest(CacheDirCase):
         os.utime(root, (time.time() - 40 * DAY,) * 2)
         self.assertEqual(caches.cleanup(self.cache), [root.name])
 
-    def test_an_earlier_versions_folders_in_the_user_dir(self):
-        user = self.cache.parent
-        old = user / "dev-sessions" / "20250101-120000"
-        new = user / "dev-sessions" / "20261020-120000"
-        for folder in (old, new):
-            folder.mkdir(parents=True)
-        os.utime(old, (time.time() - 40 * DAY,) * 2)
-        self.assertEqual(caches.cleanup_old_layout(user), [old])
-        self.assertTrue(new.is_dir())
-        os.utime(new, (time.time() - 40 * DAY,) * 2)
-        caches.cleanup_old_layout(user)
-        self.assertFalse((user / "dev-sessions").exists(), "the empty folder goes")
 
 
-class OldLayoutTest(CacheDirCase):
-    def sidecar(self, blend, name=None) -> chats.Chats:
-        found = chats.Chats(self.files / (name or f"{blend.stem}.whittle"))
-        found.load()
-        chat = found.new()
-        write_session(found.folder(chat), ("Make a crate.",))
-        found.refresh(chat, ended=True)
-        found.pack_all()
-        return found
+class InstallTest(CacheDirCase):
+    def test_one_id_per_user_folder(self):
+        user = self.tmp / "user"
+        made = caches.install_id(user)
+        self.assertRegex(made, r"^i[0-9a-f]{16}$")
+        self.assertEqual(caches.install_id(user), made, "kept")
+        self.assertNotEqual(caches.install_id(self.tmp / "other"), made, "another install, another id")
+        (user / caches.INSTALL_NAME).write_text("not json")
+        self.assertNotEqual(caches.install_id(user), made, "an unreadable one is made again")
 
-    def test_only_whittles_own_folders_for_that_file(self):
+
+class OpenElsewhereTest(CacheDirCase):
+    def test_another_blender_with_the_same_file(self):
         blend = self.blend()
-        self.assertIsNone(caches.sidecar(blend))
-        self.sidecar(blend)
-        self.assertEqual(caches.sidecar(blend), self.files / "scene.whittle")
-        aside = self.files / "scene.whittle.replaced-20260101-120000"
-        (aside / "chats" / "c12345678").mkdir(parents=True)
-        whole = self.files / "scene.whittle.replaced-20260102-120000"
-        shutil.copytree(self.files / "scene.whittle", whole)
-        for name in ("scene.whittle.replaced-later", "scene.whittle.notes", "scene2.whittle.replaced-20260101-120000"):
-            (self.files / name / "chats" / "c12345678").mkdir(parents=True)
-        mixed = self.files / "scene.whittle.replaced-20260103-120000"
-        (mixed / "chats" / "c12345678").mkdir(parents=True)
-        (mixed / "mine.txt").write_text("not Whittle's\n")
-        self.assertEqual(caches.replaced(blend), [aside, whole])
-        plain = self.files / "plain.whittle"
-        plain.mkdir()
-        (plain / "chats.json").write_text("{}")
-        self.assertIsNone(caches.sidecar(self.blend("plain.blend")), "a folder Whittle did not make")
-
-    def test_a_sidecar_moves_into_the_cache_once(self):
-        blend = self.blend()
-        old = self.sidecar(blend)
-        chat = old.current
-        root = self.cache / caches.new_file_id()
-        self.assertTrue(caches.migrate_sidecar(self.files / "scene.whittle", root, self.config))
-        moved = chats.Chats(root)
-        moved.load()
-        self.assertEqual(moved.listed(), [chat])
-        self.assertTrue((moved.folder(chat) / "session.json").is_file())
-        self.assertTrue(moved.packed_paths(chat)[0].is_file())
-        self.assertFalse(caches.migrate_sidecar(self.files / "scene.whittle", root, self.config),
-                         "never over chats the cache has")
-
-    def test_a_single_session_sidecar_becomes_a_chat(self):
-        side = self.files / "scene.whittle"
-        side.mkdir()
-        write_session(side, ("Make a crate.",), sessions=("s-1",))
-        cli = chats.cli_project_dir(side, self.config)
-        cli.mkdir(parents=True)
-        (cli / "s-1.jsonl").write_text('{"type": "user"}\n')
-        root = self.cache / caches.new_file_id()
-        self.assertTrue(caches.migrate_sidecar(side, root, self.config))
-        moved = chats.Chats(root)
-        moved.load()
-        (chat,) = moved.listed()
-        self.assertTrue((moved.folder(chat) / "sdk" / "s-1.jsonl").is_file(), "its CLI transcript came along")
-        caches.remove([side])
-        self.assertFalse(side.exists())
+        mine, theirs = (self.cache / caches.new_file_id() for _ in range(2))
+        for root in (mine, theirs):
+            caches.update_record(root, path=str(blend))
+        caches.take(mine)
+        self.assertFalse(caches.open_elsewhere(self.cache, blend, skip=mine.name), "nobody else has it")
+        self.lock(theirs, self.dead_pid())
+        self.assertFalse(caches.open_elsewhere(self.cache, blend, skip=mine.name), "a crashed Blender's claim")
+        self.lock(theirs, os.getppid())
+        self.assertTrue(caches.open_elsewhere(self.cache, blend, skip=mine.name))
+        self.assertFalse(caches.open_elsewhere(self.cache, self.blend("other.blend"), skip=mine.name),
+                         "another file")
+        self.assertFalse(caches.open_elsewhere(self.cache, None), "an unsaved file")
+        self.lock(mine, os.getppid())
+        self.assertTrue(caches.open_elsewhere(self.cache, blend, skip=theirs.name), "seen from the other side")
 
 
 if __name__ == "__main__":

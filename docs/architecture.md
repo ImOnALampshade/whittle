@@ -45,7 +45,7 @@ whittle/                          repo root
 │   │   ├── bundle.py             gathers strokes/views/refs from bpy → formats.write_request
 │   │   ├── snapshot.py           libraries.write / load for history nodes and checkpoints
 │   │   ├── history.py            History: node snapshots, thumbnails, restore, branch
-│   │   ├── chats.py              chats: the file's cache, save/load into the .blend, migration (§14)
+│   │   ├── chats.py              chats: the file's cache, save/load into the .blend, origins (§14)
 │   │   ├── models.py             the model per chat: the list, the model menu and its operators (§15)
 │   │   ├── compare.py            A/B compare against a node, the parent ghost
 │   │   ├── turn.py               TurnController: submit/amend/interrupt/finish state machine
@@ -213,7 +213,11 @@ or Max plan ([Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/over
 - **The agent's environment** (`agent_environment`): Blender's, minus every variable
   whose name starts with `ANTHROPIC_` or `CLAUDE` except `ANTHROPIC_BASE_URL` and
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` (the user's telemetry opt-out), plus
-  `ANTHROPIC_API_KEY` (the resolved key) and `CLAUDE_CONFIG_DIR`. That drops
+  `ANTHROPIC_API_KEY` (the resolved key) and `CLAUDE_CONFIG_DIR`, and
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` unless the **Send Claude Code usage
+  data** preference (`usage_data`, off) is on: the CLI then sends no telemetry or error
+  reports of its own. The preference is part of `launch_settings()`, so an idle agent
+  restarts with a change at the next turn. That drops
   `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, the Bedrock, Vertex and Foundry
   switches, key and token file descriptors, `CLAUDECODE` and the rest, so the bundled
   CLI has no way to sign in but the key.
@@ -1466,9 +1470,9 @@ never writes Blender data.
   (`layout.panel_prop`), so it can be set from Python.
 - **Composer**: reference chips packed into rows (a chip is `whittle.ref_menu` with the
   name and preview icon; a pinned one has a pressed `whittle.ref_pin` beside it); the
-  prompt field (`placeholder`) with 📎 (`whittle.ref_add`); **Send** (`whittle.submit`,
-  "Send as Branch" off the end of a branch, disabled with a tooltip while
-  comparing) and the history popover (`WHITTLE_PT_history`, `RECOVER_LAST`). During a turn the field is `amend_text` and the buttons are
+  prompt field (placeholder `shortcut.PLACEHOLDER`, `Ask Claude…`, in every state) with
+  📎 (`whittle.ref_add`); **Send** (`whittle.submit`, "Send as Branch" off the end of a
+  branch, disabled with a tooltip while comparing or in a chat from another machine) and the history popover (`WHITTLE_PT_history`, `RECOVER_LAST`). During a turn the field is `amend_text` and the buttons are
   **Amend** and **Stop ▾** (`WHITTLE_MT_stop`: keep or undo); while Claude asks, the
   field is `ask_answer` and the button **Answer**. Send takes the prompt out of the box
   once the run is under way (`TurnController.hold_prompt`); a run that never starts,
@@ -1478,7 +1482,8 @@ never writes Blender data.
   (`Region.active_panel_category`, retried on a timer until a hidden sidebar has
   listed its tabs) and `wm.call_panel` of `WHITTLE_PT_type_prompt` under the pointer: a
   one-line copy of the composer's field with `activate_init`, picked when the key is
-  pressed. Enter confirms and closes the popup on its press; `addon/enter.py` sends on
+  pressed, over a dim hint (`shortcut.HINT`, as many of its parts as fit the popup's
+  width, `shortcut.hint`). Enter confirms and closes the popup on its press; `addon/enter.py` sends on
   the release. See `ui.md` §3.12.
 - **History popover** (`WHITTLE_PT_history`, a `HEADER` panel opened only as a
   popover, 24 units wide): Hide Ghost while a ghost shows, the comparison box, one row
@@ -1596,17 +1601,19 @@ aside, below). Nothing is ever written beside a `.blend`.
   root: the index, `current`, `listed()`, `new()`, `ensure_current()`, `switch()`,
   `rename()`, `began()` and `refresh()` (the turn hooks' work), `to_delete(which)`,
   `delete()`, `folder(chat)`, `ensure_unpacked()`, `pack_all()` (for `save_pre`),
-  `built_on()` and `reconcile()` (for `load_post`) and `migrate()`.
+  `reconcile()` (for `load_post`), and `foreign(chat)` / `adopt(chat)` (Chats from
+  another machine, below). `Chats(root, origin)` takes this install's id.
 - `whittle/caches.py`, stdlib only: the caches themselves. `new_file_id()`,
   `state_stamp(index_json, packed)`, the record (`read_record`, `update_record`), the
   claim (`take`, `release`, `in_use_elsewhere`), `find(cache_dir, file_id, blend)`
-  (which cache an opened file uses, with copy-on-conflict), `cleanup()` by age, and the
-  earlier version's folders (`sidecar(blend)`, `replaced(blend)`, `migrate_sidecar()`,
-  `cleanup_old_layout()`).
+  (which cache an opened file uses, with copy-on-conflict), `cleanup()` by age,
+  `open_elsewhere(cache_dir, blend, skip)` (the same file open in another Blender) and
+  `install_id(user_dir)`.
 - `addon/chats.py`: which cache the open file uses (`file_id()`, `root()`, `get()`: its
   `Chats`, read once per file; `current_folder()`), the `save_pre` /
-  `save_post` / `load_post` work (`before_save`, `after_save`, `after_load`, with the
-  migration), `release()` and `cleanup()`, and the turn hooks `switch_note` /
+  `save_post` / `load_post` work (`before_save`, `after_save`, `after_load`),
+  `release()` and `cleanup()`, `install_id()`, `current_foreign()`, `adopt_current()`
+  and `open_elsewhere()`, and the turn hooks `switch_note` /
   `turn_began` / `turn_ended`, which `TurnController` calls with its session folder (a folder that is
   not one of the file's chats, as in most tests, is left alone).
 - `addon/paths.py`: `blend_path()` (None for an unsaved file), `cache_dir()` and
@@ -1614,12 +1621,13 @@ aside, below). Nothing is ever written beside a `.blend`.
 - `agent/store.py`: `FolderSessionStore(folder)`, the SDK `SessionStore` adapter
   (below), stdlib only (the SDK finds its methods by name). `agent/runner.py` passes
   it; nothing else imports the SDK.
-- Operators in `addon/operators.py` (`chat_new`, `chat_switch`, `chat_rename`,
-  `chat_delete`, `chat_delete_many`, with plain-function bodies `new_chat`,
+- Operators in `addon/operators.py` (`chat_new`, `chat_switch`, `chat_continue`,
+  `chat_rename`, `chat_delete`, `chat_delete_many`, with plain-function bodies `new_chat`,
   `switch_chat`, `rename_chat`, `delete_chat`, `delete_chats`, and `chat_blocker`,
   `can_switch_chat`, `can_new_chat`, `can_delete_chat`); the menu is `WHITTLE_PT_chats`
-  in `addon/ui.py`, drawn by `draw_chats(layout, ctx)`, and the header's title by
-  `draw_chat_title`.
+  in `addon/ui.py`, drawn by `draw_chats(layout, ctx)`, the header's title by
+  `draw_chat_title`, the Continue box by `draw_foreign` and the line for a file open
+  elsewhere by `draw_elsewhere`.
 
 ### The cache folder
 
@@ -1633,13 +1641,18 @@ aside, below). Nothing is ever written beside a `.blend`.
   chats.json                               the index
   chats/<chat id>/                         one chat; also the agent's cwd for it
     chat.json                              {"format": "whittle.chat", "version": 1, "id", "title",
-                                            "title_custom": bool, "created", "model": str | null}
+                                            "title_custom": bool, "created", "model": str | null,
+                                            "origin": str | null, "adopted": [str]}
     session.json, nodes/, compare/          the session folder of §8, unchanged
     sdk/<session id>.jsonl                 the chat's SDK transcripts (FolderSessionStore)
     sdk/<session id>/<subpath>.jsonl       subagent transcripts, if any
   packed/<chat id>.zip                     the chat as last written into the .blend
   packed/<chat id>.json                    {"digest": sha256 of the zip, "fingerprint", "size"}
 ```
+
+Beside the caches, `<user dir>/install.json` (`{"format": "whittle.install", "version":
+1, "id"}`, `caches.install_id`) holds this install's id, `i` + 16 hex digits, made on
+first use.
 
 Chat ids are `c` + 8 hex digits (`chats.new_chat_id()`), never reused in a file. File
 ids are `f` + 16 hex digits (`caches.new_file_id()`).
@@ -1655,7 +1668,7 @@ so an undo that drops the Text changes nothing. Which cache an opened file uses
 |---|---|
 | stores an id whose cache records it, records nothing, or records a path that no longer exists (the file was moved or renamed) | that one; its `path` is updated |
 | stores an id whose cache is claimed by a live Blender (`in-use.json`: a live process on this machine, or any on another), or records a different file that still exists (a copy) | the most recently used cache that records this file's path and is not in use, else a fresh id (**copy-on-conflict**), filled from the file. The copy keeps that cache on every open until it is saved with its new id, so a crash before that save keeps its work |
-| stores no id (an earlier version's, or a file saved before its first chat) | the most recently used unclaimed cache that records its path, else none until a chat is made |
+| stores no id (a file saved before its first chat) | the most recently used unclaimed cache that records its path, else none until a chat is made |
 | unsaved (a new file) | none until its first chat, then a fresh id; any id its data has (from a startup file) is ignored. Saving keeps the cache: nothing moves |
 | Blender's own recovery file (`quit.blend`, `*_autosave.blend`) | the id it stores, without the path check; its `path` stays the original's |
 
@@ -1676,7 +1689,9 @@ so two turns ending in one second still sort: the end of its last turn, else
 `created`), `turns` (int: non-folded nodes other than the root), `size` (int: bytes it
 adds to the `.blend`: `packed_size` of the folder when a turn ends, the zip's size once
 saved), `digest` (str \| null: the sha256 of the zip the `.blend` last got), `model`
-(str \| null: the chat's model, §15; optional, so an index from before it reads). The menu
+(str \| null: the chat's model, §15), `origin` (str \| null: the install that made it) and
+`adopted` (list of str: the installs that continued it after asking); these three are
+optional, so an index from before them reads. The menu
 draws from the index alone. The end of every turn (finished or folded) refreshes the
 entry (`turn_ended`), and a save sets size and digest. A missing or unreadable index is
 rebuilt from the chat folders (`chat.json` and `session.json`).
@@ -1721,13 +1736,12 @@ being saved and just after it is loaded**:
   the stamp (`chats.save_failed`); `load_post_fail` (another file failed to open, after
   `load_pre` let go of the cache) takes the open file's cache back (`chats.load_failed`). A save of the
   open file (the path Blender passes is `bpy.data.filepath`; a Save Copy's is not)
-  records the file's path, the time and the stamp as `base` in `cache.json`, and removes
-  an earlier version's folders for the file's name (Migration). The cache never moves,
+  records the file's path, the time and the stamp as `base` in `cache.json`. The cache
+  never moves,
   so a turn running through a Save As carries on.
-- `load_post`: finds the file's cache (above), reads both properties, migrates an
-  earlier version's folder, reconciles the cache (below), deletes the properties, then
-  `history.sync_from_scene`. Without them (a file from before chats, one never saved
-  with chats, or a recovery file) the cache is used as it is.
+- `load_post`: finds the file's cache (above), reads both properties, reconciles the
+  cache (below), deletes the properties, then `history.sync_from_scene`. Without them
+  (a file never saved with chats, or a recovery file) the cache is used as it is.
 
 So between saves the payload is not in Blender's data at all: undo steps never copy
 it, and undo can never roll it back. Measured (Blender 5.2.2, `docs/decisions.md`):
@@ -1747,9 +1761,7 @@ the id; the file's cache still has them.
 **Crash recovery**: when the cache's `base` equals the stamp of what the opened file
 stores, the cache was in step with exactly this file and anything else in it is work
 since that save (a crash, or closing without saving): `reconcile(keep_newer=True)` keeps
-it all as it is. A cache migrated from an earlier version has no `base`; it counts as
-built on the file when it has every chat the file has, each packed as the file's zip
-(`Chats.built_on`). The `base` is then the file's stamp either way.
+it all as it is. The `base` is then the file's stamp either way.
 
 **Reconciling on load** (`Chats.reconcile`), otherwise, per chat, with `P` the
 `.blend`'s entry and `C` the cache's:
@@ -1780,8 +1792,7 @@ register when the add-on is enabled with a saved file open, `caches.cleanup` del
 modification time) is 30 days old or more, with the CLI's transcripts of its chats'
 folders, but never the open file's cache or one claimed by a live Blender on this
 machine. `used` is set when the cache is found, at every save and at the end of every
-turn. An earlier version's `<user dir>/dev-sessions/<time>/` and `caches/<sha1>/`
-folders go by the same age (`cleanup_old_layout`).
+turn.
 
 ### SDK session per chat
 
@@ -1846,8 +1857,8 @@ store-materialized resume, and a resume after the chat folder moved.
   the title from its prompt (or `Sketch of <first target>`) unless `title_custom`; a
   title, once set, never changes by itself.
 - **Undo**: `history.sync_from_scene` applies `history_node` only when
-  `scene.whittle.chat` is the current chat (an empty one counts as the current chat,
-  for files from before chats); undo never switches chats.
+  `scene.whittle.chat` is the current chat (an empty one, from before a chat was
+  named in the scene, counts as the current chat); undo never switches chats.
 
 ### Deletion
 
@@ -1868,33 +1879,35 @@ snapshots the two chats share) and checks the file is smaller by at least the de
 chat's packed size less 1 %, and that reopening it lists one chat. Blender's `.blend1`
 backup (Save Versions) keeps the previous save, chats included, until the save after.
 
-### Migration
+### Chats from another machine
 
-**From `<name>.whittle` beside the file** (an earlier version's cache): when the file is
-opened (or saved, if it was opened before Whittle was enabled or updated), its
-`<name>.whittle/` is moved into the file's cache once, if that has no chats yet
-(`caches.migrate_sidecar`: a single-session layout first becomes a chat in place, so its
-CLI transcripts are found by the old path; then `chats.json`, `chats/` and `packed/`
-move), and rule 3 applies (`Chats.built_on` above). Then it and its
-`<name>.whittle.replaced-<time>/` folders are deleted. Only folders that clearly belong
-to that `.blend` are touched: the same stem, and Whittle's own markers (a `chats.json`
-of format `whittle.chats` or a `session.json` of format `whittle.session`; a replaced
-folder with a timestamp name holding one of those, or only `chats/<chat id>/`). The
-earlier version's fallback for an unwritable folder, `<user dir>/caches/<sha1 of the
-path>/`, is migrated the same way. A save of the open file also deletes such folders
-beside its (new) name: the file just written is what they would be the cache of.
+A chat records the install that made it: `Chats.new` writes this install's id
+(`caches.install_id`) as `origin` in `chat.json` and the index, and both travel in the
+`.blend`. A chat is **foreign** (`Chats.foreign`) when it has an `origin`, that is not
+this install's, and this install is not in its `adopted`. A chat without an `origin`
+(made before it was recorded) is every install's, so existing files never ask.
 
-**From the single-session layout**: run once per cache root before anything reads a
-history (`chats.get`, `Chats.migrate`), and idempotent:
-a root with a `session.json` of its own (the single-session layout of §8) becomes one
-chat. Its `session.json`, `nodes/` and `compare/` move into `chats/<id>/` (renames on
-one filesystem), `chat.json` gets the title from the root's first turn (`chats.title_for`)
-and `created` from `session.json`, and `chats.json` lists it as current. The CLI's
-transcripts for the old cwd (`cli_project_dir(<root>)/<session id>.jsonl`, for every
-session id in the tree) are copied into the chat's `sdk/`, so its conversation still
-resumes from the new cwd. The old project folder is left to the CLI's own cleanup.
-Development sessions migrate the same way. The file's first save then packs the chat
-into the `.blend`.
+The current chat being foreign makes the sidebar read-only (`ui.md` §3.11): Send's poll
+fails with the reason as its tooltip (`operators.CHAT_FOREIGN`), `operators.submit_sketch`
+refuses (so Enter, Shift+Alt+C and Retry do too), and a box offers **Continue**
+(`whittle.chat_continue` → `chats.adopt_current` → `Chats.adopt`), which appends this
+install's id to `adopted` in `chat.json` and the index. Nothing else changes: the
+conversation, its SDK session and its history are as they were. New Chat stays
+available. The check is about intent, not security: an install id is not a secret, and
+anyone can edit a `.blend`. It makes the safe choice (a New Chat on a file from
+elsewhere, README Security) the default.
+
+### The same file in two Blenders
+
+The second Blender to open a file finds its cache claimed by a live process and gets a
+cache of its own (copy-on-conflict, above); both record the same path. The two never
+merge: whichever saves last is what the file stores. While another Blender's claim is
+live, the sidebar draws one dim line (`ui.ELSEWHERE_NOTE`): `addon/chats.open_elsewhere()`
+asks `caches.open_elsewhere(cache_dir, blend, skip=<this file's id>)`, true when another
+cache records the same file and is claimed by a live Blender (any process on another
+host counts, since it cannot be checked). It reads every cache's claim, so the answer
+is kept for `ELSEWHERE_EVERY` (2 s) rather than read at every redraw. Both Blenders see
+the line, since each cache records the path.
 
 ### Tests
 
@@ -1906,11 +1919,12 @@ into the `.blend`.
   switch, rename, delete (the CLI folder of that chat only), bulk choices;
   `pack_all` repacking only what changed; `reconcile` for a missing cache, a cache in
   step, a cache that changed (deleted, the `.blend` wins), newer work kept, and an
-  empty current chat; `built_on`; the migration with its CLI transcripts.
+  empty current chat; origins: recorded by new chats, kept through a pack and
+  `reconcile`, foreign until adopted, never for a chat without one.
   `test_caches.py`: ids and stamps, the record, `find` (a moved file, a copy, a cache
   in use by a live, a dead or a foreign process, a file without an id), `cleanup` by
-  age (never the open one or a live claim, the CLI's transcripts too), the earlier
-  version's folders (only Whittle's own for that file) and their migration; `FolderSessionStore`
+  age (never the open one or a live claim, the CLI's transcripts too), `install_id`,
+  `open_elsewhere` (a live, a dead and the other side's claim); `FolderSessionStore`
   append/load/subkeys and path safety, and the SDK materializing a resume from it;
   the fake agent's store lines.
 - Blender side (`tests/blender/test_chats.py`): New Chat (a fresh session, its own
@@ -1919,22 +1933,21 @@ into the `.blend`.
   resumes that chat's session through its store, an old node of it restores); undo
   after a switch leaves the chat; delete another chat, the current one (→ the most
   recent, then an empty chat), and in bulk; the menu's rows, footer and Show N More;
-  rename; the migration of a folder beside the file through `after_load`; the payload
-  on the holder only between `before_save` and `after_save`. `chats_file.py`, in a
+  rename; a chat from another install (read-only, Send refused with its tooltip, New
+  Chat available, Continue adopts it for good) and one without an origin (never asks);
+  the line while another Blender has the file; the payload on the holder only between `before_save` and `after_save`. `chats_file.py`, in a
   fresh Blender: a real save, the cache deleted, the file opened without the add-on
   (both chats in its data) and with it (rebuilt: chats, titles, nodes, thumbnails, and
   an old node restored), then the delete shrink test above; the folder holds only the
   `.blend` and its `.blend1`. `test_session_folder.py`: an unsaved file's cache, the
-  first save and Save As keeping it and the controller, a copy recording nothing, an
-  earlier version's folders removed on save, and a real save and reopen.
+  first save and Save As keeping it and the controller, a copy recording nothing, and
+  a real save and reopen.
   `test_cache.py` runs `cache_file.py` step by step in fresh Blenders: a new file
   saved twice, reopened and saved again (one cache throughout, nothing beside the
   file but its `.blend1`); moved and renamed; copied (its own cache, filled from it);
   opened while its cache is claimed by a live Blender; a crash after an unsaved turn
   (the turn is kept, the dead claim ignored); the older `.blend1` put in its place
-  (the file wins); caches 31 days old deleted, 29 days old or claimed kept; and an
-  earlier version's file with `old.whittle/` holding newer work and a replaced folder
-  (migrated, newer work kept, Whittle's folders gone and nothing else touched).
+  (the file wins); caches 31 days old deleted, 29 days old or claimed kept.
 - Screens: `ui.md` §10.
 
 ---

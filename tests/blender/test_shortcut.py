@@ -13,7 +13,7 @@ from unittest import mock
 import bpy
 
 from tests.blender.ui_helpers import RecordingLayout
-from whittle.addon import shortcut
+from whittle.addon import shortcut, ui
 
 
 def controller(*, busy=False, question=None):
@@ -136,13 +136,28 @@ class PopupTest(unittest.TestCase):
         self.assertEqual(field["prop"], "prompt")
         self.assertEqual(field["placeholder"], "Ask Claude…")
         self.assertNotIn("textbox", field, "the multi-line box never takes the keyboard in a popup")
-        self.assertEqual(layout.labels(), ["Ask Claude"])
+        self.assertEqual(layout.labels(), ["Ask Claude", shortcut.HINT])
+
+    def test_every_field_has_the_one_placeholder(self):
+        for name in shortcut.FIELDS:
+            shortcut._field = name
+            (field,) = self.draw().of("prop")
+            self.assertEqual((field["prop"], field["placeholder"]), (name, "Ask Claude…"))
+
+    def test_the_hint_fits_the_popup(self):
+        self.assertEqual(shortcut.HINT, "Enter sends · End keeps your draft · long prompts: use the sidebar box")
+        context = SimpleNamespace(preferences=SimpleNamespace(system=SimpleNamespace(ui_scale=1.0)))
+        self.assertEqual(shortcut.hint(context), shortcut.HINT, "whole at the usual scale")
+        # A wider font than Blender's own.
+        with mock.patch.object(ui.Ctx, "measure", lambda self, text: len(text) * 9.0 * self.scale):
+            self.assertEqual(shortcut.hint(context), "Enter sends · End keeps your draft",
+                             "tips that do not fit are dropped whole")
 
     def test_the_field_picked_on_the_press_stays(self):
         shortcut._field = "amend_text"
         layout = self.draw()
         self.assertEqual(layout.props(), ["amend_text"])
-        self.assertEqual(layout.labels(), ["Amend the Running Turn"])
+        self.assertEqual(layout.labels()[0], "Amend the Running Turn")
 
     def test_invoke_opens_the_sidebar_and_the_popup(self):
         ctl = controller(busy=True, question={"question": "Bevel?", "choices": []})
