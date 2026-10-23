@@ -332,8 +332,8 @@ Every message has `"v": 1` and `"type"`:
 
 | method | params | data on success |
 |---|---|---|
-| `start_session` | `session_dir`, `store_dir` (the chat's SDK transcript store or null, §14), `model`, `resume` (sdk session id or null), `fork` (bool), `resume_at` (message uuid or null: where a fork cuts the resumed conversation, §6), `settings` (`{self_check_rounds, poly_budget, style_notes, render_size}`, plus optional `max_turns`, `max_budget_usd` passed to the SDK) | `{}` — replaces any live SDK client; answered once the SDK client has connected |
-| `submit` | `turn_id` (node id), `bundle_dir` (absolute), `prompt` (str), `context` ([str], optional, default []: lines from Whittle put before the prompt), `model` (str or null: the chat's model; a live session on another one is switched to it before the query, §15) | `{"accepted": true}` immediately; the turn then streams events |
+| `start_session` | `session_dir`, `store_dir` (the chat's SDK transcript store or null, §14), `model`, `effort` (`low` \| `medium` \| `high`, default `high`, §15), `resume` (sdk session id or null), `fork` (bool), `resume_at` (message uuid or null: where a fork cuts the resumed conversation, §6), `settings` (`{self_check_rounds, poly_budget, style_notes, render_size}`, plus optional `max_turns`, `max_budget_usd` passed to the SDK) | `{}` — replaces any live SDK client; answered once the SDK client has connected |
+| `submit` | `turn_id` (node id), `bundle_dir` (absolute), `prompt` (str), `context` ([str], optional, default []: lines from Whittle put before the prompt), `model` (str or null: the chat's model; a live session on another one is switched to it before the query, §15), `effort` (`low` \| `medium` \| `high` or null: the chat's effort, switched likewise) | `{"accepted": true}` immediately; the turn then streams events |
 | `amend` | `turn_id`, `amend` (int, the amendment number; optional for older callers), `text` (may be ""), `bundle_dir` (absolute amend bundle or null) | `{"queued": true}`; `no_session` before `start_session`, `not_found` when `turn_id` is not the running turn (it already finished) |
 | `interrupt` | `turn_id` | `{}` |
 | `ping` | `{}` | `{"time": float}` |
@@ -369,8 +369,8 @@ All carry `turn_id` (null outside a turn).
 |---|---|
 | `status` | `state` (`"idle"`, `"connecting"`, `"running"`, `"waiting_user"`, `"interrupting"`, `"session_ended"`), `detail` |
 | `turn_started` | `turn_id` |
-| `text` | `text` — one full assistant `TextBlock` |
-| `thinking` | `text` |
+| `text` | `text` — one full assistant `TextBlock`, or a progress note Claude wrote between tool calls (a narration thinking block, §5) |
+| `thinking` | `text` — any other thinking block (usually empty: the API omits thinking text) |
 | `tool_use` | `tool_use_id`, `tool` (short name, e.g. `exec`), `input` (dict) |
 | `tool_result` | `tool_use_id`, `is_error`, `summary` (first 500 chars of text content), `images` (paths) |
 | `turn_finished` | `session_id`, `subtype`, `is_error`, `interrupted` (bool), `cost_usd` (this turn), `session_cost_usd` (the SDK session's running total), `num_turns`, `duration_ms` (both summed over the turn's queries), `result_text`, `errors` (list of str), `amends_undelivered` ([int]: amendments queued but never delivered — interrupt, session end, CLI crash), `message_uuid` (str \| null: uuid of the turn's last `AssistantMessage`/`UserMessage`, where a later branch forks) |
@@ -553,7 +553,8 @@ run, so a timeout would report as not done what may still complete.
 class Runner(Protocol):
     async def start_session(self, params: dict) -> None
     async def submit(self, turn_id: str, bundle_dir: str, prompt: str,
-                     context: tuple[str, ...] = (), model: str | None = None) -> None
+                     context: tuple[str, ...] = (), model: str | None = None,
+                     effort: str | None = None) -> None
     async def amend(self, turn_id: str, text: str, bundle_dir: str | None) -> None
     async def interrupt(self, turn_id: str) -> None
     async def close(self) -> None
@@ -567,6 +568,7 @@ Models API (`runner.list_api_models` in the real agent, §15, nothing in tests).
 ClaudeAgentOptions(
     system_prompt=prompt.build(settings),          # custom string, not the claude_code preset
     model=params["model"],
+    effort=params["effort"],                       # --effort; switched live later (below)
     tools=["Skill"],                               # every other built-in tool off
     allowed_tools=[*TOOL_NAMES],                   # the mcp__… names below
     permission_mode="dontAsk",                     # deny anything not pre-approved
@@ -580,10 +582,26 @@ ClaudeAgentOptions(
     resume_session_at=params["resume_at"],         # --resume-session-at: cut the fork here
     cwd=params["session_dir"],
     env={"MCP_TOOL_TIMEOUT": "86400000",           # ask can wait on the user for a long time
+         "CLAUDE_CODE_THINKING_DISPLAY_UPDATES": "1",  # progress notes (below)
          "CLAUDE_AGENT_SDK_CLIENT_APP": f"whittle/{VERSION}"},
     stderr=lambda line: log.debug("cli: %s", line),
 )
 ```
+
+**Progress notes.** On Opus 5.5 the text Claude writes between tool calls comes back
+in thinking blocks, which are empty at the API's default thinking display. `thinking`
+is left unset on purpose: with no explicit display, the bundled CLI requests
+`thinking.display: "updates"` (and its beta) on models that have it, unless
+`CLAUDE_CODE_THINKING_DISPLAY_UPDATES` is off, which Whittle pins on. The CLI's
+`--thinking-display` accepts only `summarized`, `omitted` and `highlights`; any of
+them turns the updates off (`summarized` would return thinking summaries instead).
+A note arrives as a `ThinkingBlock` whose signature marks it as narration: the
+signature is base64 protobuf, and field 2 → 1 → 8 holds `narration` (`summary` for a
+thinking summary), which is how the CLI itself tells them apart. `runner.thinking_kind`
+reads it the same way, and `map_message` turns a non-empty narration block into a
+`text` event, so the sidebar shows it as Claude's text between tool groups. Any other
+thinking block, including an older model's full thinking, stays a `thinking` event
+inside the tool group.
 
 `cli_path` is left unset: the SDK finds `claude_agent_sdk/_bundled/claude`. The API key,
 when set, is already in the process environment, which the CLI inherits.
@@ -597,8 +615,13 @@ two children in one task group: a *reader* (`async for msg in client.receive_mes
 `model` differs from the session's (`SdkRunner.model`: `start_session`'s, then the
 last switched to) queues its query with that model, and the controller calls
 `client.set_model(model)` right before `client.query(...)`, in the same session: the
-conversation carries on (§15). A failed switch fails the turn like a failed query.
-`start_session` while a client is live stops the old task first.
+conversation carries on (§15). Effort works the same way (`SdkRunner.effort`): the
+controller calls `runner.set_effort(client, effort)` after any model switch and before
+the query. The pinned Python SDK has no method for it, so that sends the CLI's own
+`apply_flag_settings` control request, `{"effortLevel": effort}`, through
+`client._query._send_control_request`; the CLI sets the session's effort from it for
+the following requests, as `/effort` does. A failed switch fails the turn like a failed
+query. `start_session` while a client is live stops the old task first.
 
 **Turn accounting.** A Blender turn = one `submit` plus any amendments. The runner counts
 queries sent and `ResultMessage`s received; `turn_finished` is emitted when they match
@@ -648,7 +671,7 @@ right after `turn_started` rode on the first exec result and the model acted on 
 | SDK message | event(s) |
 |---|---|
 | `SystemMessage` subtype `init` | `status running`; remember `data["session_id"]` |
-| `AssistantMessage` with `TextBlock` / `ThinkingBlock` / `ToolUseBlock` | `text` / `thinking` / `tool_use` (tool name stripped of `mcp__<server>__`) |
+| `AssistantMessage` with `TextBlock` / `ThinkingBlock` / `ToolUseBlock` | `text` / `thinking` (`text` for a narration block: a progress note) / `tool_use` (tool name stripped of `mcp__<server>__`) |
 | `UserMessage` with `ToolResultBlock` | `tool_result` (image paths come from the tool handler's record, keyed by `tool_use_id` order) |
 | `ResultMessage` | turn accounting; maybe `turn_finished` |
 | anything else (`StreamEvent`, rate limit, task messages) | `log` at debug |
@@ -711,9 +734,10 @@ with code 3 (crash tests); `finish` → `turn_finished` with a fake `session_id`
 `message_uuid` `"fake-msg-<hex8>"`. A top-level `"resume_fails": true` refuses every
 `start_session` that has a `resume` with `internal`; a turn with `"refuse": "<code>"`
 answers its submit with that error. `start_session` echoes `resume`/`fork`/`resume_at`
-(and `store_dir`, §14) in its status detail and a `log` event, plus `session model: <id>`, and `submit` logs each `context` line as
-`context: <line>`, and `model: <id>` when its `model` differs from the session's (the
-switch), which the Blender tests read. A top-level `"models": {"models": [ids],
+(and `store_dir`, §14) in its status detail and a `log` event, plus `session model: <id>`
+and `session effort: <level>`, and `submit` logs each `context` line as
+`context: <line>`, `model: <id>` when its `model` differs from the session's (the
+switch), and `effort: <level>` likewise, which the Blender tests read. A top-level `"models": {"models": [ids],
 "source": …}` is sent as the `models` event when the process's first session starts. `interrupt` stops after the current step and finishes with
 `interrupted: true`; `sleep` and `wait_amend` are cut short by it. Amendments ride on
 the next `call`/`ask` result as `note: …` summary lines; any left when the steps run
@@ -1633,7 +1657,8 @@ aside, below). Nothing is ever written beside a `.blend`.
   chats.json                               the index
   chats/<chat id>/                         one chat; also the agent's cwd for it
     chat.json                              {"format": "whittle.chat", "version": 1, "id", "title",
-                                            "title_custom": bool, "created", "model": str | null}
+                                            "title_custom": bool, "created", "model": str | null,
+                                            "effort": str | null}
     session.json, nodes/, compare/          the session folder of §8, unchanged
     sdk/<session id>.jsonl                 the chat's SDK transcripts (FolderSessionStore)
     sdk/<session id>/<subpath>.jsonl       subagent transcripts, if any
@@ -1676,7 +1701,8 @@ so two turns ending in one second still sort: the end of its last turn, else
 `created`), `turns` (int: non-folded nodes other than the root), `size` (int: bytes it
 adds to the `.blend`: `packed_size` of the folder when a turn ends, the zip's size once
 saved), `digest` (str \| null: the sha256 of the zip the `.blend` last got), `model`
-(str \| null: the chat's model, §15; optional, so an index from before it reads). The menu
+(str \| null: the chat's model, §15; optional, so an index from before it reads),
+`effort` (str \| null: the chat's effort, §15; optional likewise). The menu
 draws from the index alone. The end of every turn (finished or folded) refreshes the
 entry (`turn_ended`), and a save sets size and digest. A missing or unreadable index is
 rebuilt from the chat folders (`chat.json` and `session.json`).
@@ -1939,7 +1965,7 @@ into the `.blend`.
 
 ---
 
-## 15. The model per chat
+## 15. The model and effort per chat
 
 `ui.md` §3.13 is the sidebar's side.
 
@@ -1959,6 +1985,19 @@ before that turn's query (§5): the same session and transcript, so the chat sta
 resumable and forkable (§6), and a branch or resume later starts its session on the
 chat's model from the start. Switching chats closes the controller as before; the next
 chat's session starts on its own model.
+
+**Effort.** Each chat also has an effort, `low`, `medium` or `high`
+(`models.EFFORTS`): `Entry.effort` and `chat.json`'s `effort`, kept like the model;
+null runs at `models.DEFAULT_EFFORT`, `high`, so a new chat runs at high
+(`models.effort_level`). There is no preference for it. Opus 5.5's own default is
+medium, so Whittle always sets it: `start_session.effort` becomes `--effort`, and every
+`submit.effort` is the chat's, which the runner switches the live session to before
+the query when it differs (`apply_flag_settings`, §5). The session and transcript
+stay, so the chat stays resumable, and a later session starts at the chat's effort.
+`whittle.chat_effort` (`models.set_chat_effort`) sets it from the model menu's Effort
+section, between turns only, like the model. It is not part of `launch_settings()`.
+Changing effort mid-conversation invalidates the prompt cache for the next request
+(`prompting.md`).
 
 **The list.** `whittle/models.py` (stdlib):
 
@@ -2001,11 +2040,14 @@ task started when the first session connects, never on a turn's path):
 cache), `test_runner.py` `ModelTest` (`set_model` before the query and only on a
 change, a failed switch, the Models API's list first and the CLI's only without it, once per process, with an injected
 `list_models` and its paging through a mocked `urlopen`: no test calls the API),
-`test_chats.py` `ModelTest`, `test_dispatch.py`, `test_fake_runner.py`;
-`tests/blender/test_models.py` (the menu and submenu drawing, the composer button and
-its hiding during a turn, the cache, and with the fake agent: the first turn keeping
-the default, a switch between turns in the same session, a new chat on the default, a
-switch back finding the chat's model). Screens: `model_menu`, `model_menu_older`.
+`test_chats.py` `ModelTest` and `EffortTest`, `test_dispatch.py`, `test_fake_runner.py`;
+`test_runner.py` also covers effort (`--effort`, `apply_flag_settings` before the query
+only on a change, a failed switch) and progress notes (`thinking_kind`, narration blocks
+as `text`); `tests/blender/test_models.py` (the menu and submenu drawing, the Effort
+section, the composer button and its hiding during a turn, the cache, and with the fake
+agent: the first turn keeping the default, a switch of model or effort between turns in
+the same session, a new chat on the defaults, a switch back finding the chat's own).
+Screens: `model_menu`, `model_menu_older`.
 
 ---
 
@@ -2278,7 +2320,12 @@ read from the installed `claude_agent_sdk` 0.2.167 (bundled CLI 2.1.300).
   (read from the bundled CLI's schema; `unavailable_models` is `@internal`). No
   separate models request exists in the SDK or the CLI's control protocol.
   `client.set_model(model)` sends the `set_model` control request; the session and
-  its id stay.
+  its id stay. Effort has no client method in 0.2.167 (the TypeScript SDK has
+  `applyFlagSettings`); the CLI's `apply_flag_settings` control request with
+  `{"effortLevel": "low" | "medium" | "high" | "xhigh"}` (or null to clear) sets the
+  live session's effort, overriding `--effort`, and `get_settings` reports the effort
+  `applied`. `set_max_thinking_tokens` takes an optional `thinking_display` for the rest
+  of the session (read from the bundled CLI 2.1.300).
 - The offline alternative, `claude_agent_sdk.fork_session(S, directory=,
   up_to_message_id=)`, copies a transcript with fresh uuids; Whittle does not need it.
 

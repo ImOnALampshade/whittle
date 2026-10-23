@@ -115,6 +115,7 @@ repeated here: the attention box has them.
  Agent: ready
    ·the agent exited with code 3·    (dim, only when crashed or failed)
  Model: Opus 5.5 (claude-opus-5-5)   the current chat's (§3.13)
+ Effort: High                       the current chat's (§3.13)
  Chats: in crate.blend              (FILE_BLEND)
  [ Stop Agent ]                     (or [ Start Agent ])
  [ Preferences… ]
@@ -287,7 +288,11 @@ failure):
   siblings; if that line is too long to share, its last word moves down a line. The ⋯
   of the running turn is disabled until it ends.
 - **Claude's text**: each assistant text entry, wrapped, no prefix, no icon, always in
-  full (an earlier "More" fold after 8 lines interrupted replies mid-list).
+  full (an earlier "More" fold after 8 lines interrupted replies mid-list). That
+  includes Claude's short notes between tool calls, which Opus 5.5 sends as narration
+  thinking blocks (`architecture.md` §5): they are ordinary text between tool groups,
+  not part of a group, so a turn reads as a few lines of intent and progress with the
+  tool calls folded between them.
 - **Markdown** in Claude's text (and in its questions) is rendered, not shown raw
   (`whittle/markdown.py`, drawn by `ui.draw_markdown`). A label has one font, so the
   styling lives in the text and the markers go:
@@ -749,10 +754,10 @@ The key is an add-on keymap item, `whittle.type_prompt` in the Window keymap, li
 and rebindable in Preferences → Keymap (Window → Ask Claude). Why this key:
 `decisions.md`, Shortcut.
 
-### 3.13 Model
+### 3.13 Model and effort
 
-`architecture.md` §15 has where the list comes from and how a chat's model reaches
-the agent.
+`architecture.md` §15 has where the list comes from and how a chat's model and effort
+reach the agent.
 
 Each chat runs on a model of its own, as in the Claude apps: the button beside Send
 names it (`Opus 5.5 ▾`) and opens the model menu. A new chat starts on the add-on's
@@ -761,6 +766,12 @@ model it was sent with, so changing the preference later moves only chats that h
 turn yet. Changing a chat's model applies from its next turn, in the same Claude
 session (the conversation carries on); the button is hidden while a turn runs, and the
 menu's items say why they are disabled while Claude asks.
+
+Each chat also has an effort, how much Claude thinks: Low, Medium or High, picked in
+the same menu. A new chat runs at High; a change applies from the chat's next turn, in
+the same session, like the model. There is no preference for it: High suits
+multi-step modelling turns, and Low or Medium trade depth for speed and cost on small
+edits.
 
 **The model menu** (`WHITTLE_MT_models`, opened from the button):
 
@@ -774,6 +785,11 @@ menu's items say why they are disabled while Claude asks.
  ─────────────────
    Older Models                 ▸
    Other Model…
+ ─────────────────
+   ·Effort·                       a dim heading
+   Low
+   Medium
+ ✓ High                           the chat's effort (High by default)
  ─────────────────
    Use Sonnet 5.5 for New Chats   only when the chat's model is not the default
  ─────────────────
@@ -791,6 +807,11 @@ menu's items say why they are disabled while Claude asks.
 - **Other Model…** opens a dialog with the chat's id in a text field, for any model id
   (a proxy's name, a dated snapshot). The chat then shows that id in the button and
   first in the menu.
+- **Effort**: a dim `Effort` label, then `whittle.chat_effort` for `low`, `medium` and
+  `high` (text `Low`, `Medium`, `High`), `CHECKMARK` on the chat's and `BLANK1` on the
+  others. Each tooltip says what the level is for (`Least thinking: fastest and
+  cheapest, for small, clear edits`). The agent popover lists it under the model
+  (`Effort: High`).
 - **Use … for New Chats** (`whittle.default_model`) sets the preference.
 - The dim last line says where the list is from: `Listed by the Models API <age>`, or
   `Listed by Claude <age>` when only the CLI's own list could be had (age as in the
@@ -1159,6 +1180,7 @@ Added for the model per chat (§3.13; no undo step):
 | Id | Label | Does |
 |---|---|---|
 | `whittle.chat_model` | Model | `model`: the current chat runs on it from its next turn (a file without a chat gets one); empty: a props dialog (`Other Model`, confirm `Use Model`) for any id. Poll: not while a turn runs or Claude asks. Description: `Claude Opus 4.6 (claude-opus-4-6)` |
+| `whittle.chat_effort` | Effort | `effort` (`low` \| `medium` \| `high`): the current chat runs at it from its next turn (a file without a chat gets one). Poll as `whittle.chat_model`. Description: what the level is for |
 | `whittle.default_model` | Use for New Chats | `model`: sets the add-on's Model preference |
 
 `WindowManager.whittle_show_all_chats` (BoolProperty, `SKIP_SAVE`) holds whether the
@@ -1282,7 +1304,7 @@ Every feature of the old panels, and where it lives now.
 | Open Transcript | Activity button | Turn ⋯; 🕘 popover footer |
 | Entries count | Activity field | Removed: fixed length rule (§3.6) |
 | Agent state and phase | Main panel | Header icon (busy or not) and agent popover; phase line in the running turn |
-| Model | Main panel (one for all) | Per chat: composer → model button ▾ (§3.13); the default for new chats in Preferences; named in the agent popover |
+| Model | Main panel (one for all) | Per chat: composer → model button ▾ (§3.13); the default for new chats in Preferences; named in the agent popover. Effort per chat in the same menu |
 | Session folder, development session warning | Main panel | Agent popover: the file that stores the chats, or the unsaved-file warning |
 | Session folder move waiting | Activity | Removed: the chats' cache never moves (architecture §14) |
 | Crash reason + Restart Agent | Main panel alert box | Attention box (Restart and Retry); the reason in the agent popover |

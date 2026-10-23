@@ -19,6 +19,11 @@ from . import formats
 CACHE_FORMAT = "whittle.models"
 CACHE_NAME = "models.json"
 DEFAULT_MODEL = "claude-opus-5-5"
+# How hard Claude thinks, per chat (the CLI's effort levels Whittle offers).
+# High suits multi-step modelling turns; low and medium trade depth for
+# speed and cost. Opus 5.5's own default is medium, so it is always set.
+EFFORTS = ("low", "medium", "high")
+DEFAULT_EFFORT = "high"
 # The menu's family order; other families follow by name.
 FAMILIES = ("opus", "sonnet", "haiku", "fable")
 # Served models as of this release, newest first in each family. A report
@@ -56,6 +61,11 @@ class Model:
     @property
     def full_name(self) -> str:
         return f"Claude {self.name}"
+
+
+def effort_level(value) -> str:
+    """A chat's effort: its own when it is one Whittle offers, else the default."""
+    return value if value in EFFORTS else DEFAULT_EFFORT
 
 
 def parse(model_id: str) -> Model | None:

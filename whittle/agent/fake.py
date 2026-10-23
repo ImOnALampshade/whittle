@@ -33,7 +33,8 @@ error instead of starting. Steps:
 
 A submit whose model differs from the session's switches it, as the real
 runner does with set_model, and logs "model: <id>"; start_session logs its
-model as "session model: <id>".
+model as "session model: <id>". Effort likewise: "effort: <level>" and
+"session effort: <level>".
 
 Session ids are fake-<hex>: a new one for a fresh session or a fork, the
 same one for a plain resume. Each turn reports a fake message uuid. With a
@@ -94,6 +95,7 @@ class FakeRunner:
         self._bundle_dir: str | None = None
         self._tool_ids = 0
         self.model: str | None = None
+        self.effort: str | None = None
         self._models_reported = False
 
     async def start_session(self, params: dict) -> None:
@@ -113,18 +115,20 @@ class FakeRunner:
                                                       f"with session id {resume}")
         self.session = params
         self.model = params.get("model")
+        self.effort = params.get("effort")
         self.session_id = resume if resume and not fork else _new_id("fake-")
         self.sessions_started += 1
         await self._event(Event.STATUS, {"state": "idle", "detail": f"fake session ({described})"})
         await self._event(Event.LOG, {"level": "info", "message": f"fake session {self.session_id}: "
                                                                   f"{described}"})
         await self._event(Event.LOG, {"level": "info", "message": f"session model: {self.model}"})
+        await self._event(Event.LOG, {"level": "info", "message": f"session effort: {self.effort}"})
         if self.script.get("models") and not self._models_reported:
             self._models_reported = True
             await self.conn.send_event(Event.MODELS, {"turn_id": None, **self.script["models"]})
 
     async def submit(self, turn_id: str, bundle_dir: str, prompt: str, context=(),
-                     model: str | None = None) -> None:
+                     model: str | None = None, effort: str | None = None) -> None:
         if self.session is None:
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is not None:
@@ -143,6 +147,9 @@ class FakeRunner:
         if model and model != self.model:
             self.model = model
             await self._event(Event.LOG, {"level": "info", "message": f"model: {model}"})
+        if effort and effort != self.effort:
+            self.effort = effort
+            await self._event(Event.LOG, {"level": "info", "message": f"effort: {effort}"})
         for line in context:
             await self._event(Event.LOG, {"level": "info", "message": f"context: {line}"})
         self._task = asyncio.create_task(self._play(turn_id, turn))

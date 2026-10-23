@@ -11,7 +11,7 @@ from pathlib import Path
 
 from claude_agent_sdk import project_key_for_directory
 
-from whittle import chats, formats, tree
+from whittle import chats, formats, models, tree
 from whittle.chats import Chats
 
 
@@ -436,6 +436,49 @@ class ModelTest(TempRoot):
         obj["chats"][chat]["model"] = 4
         with self.assertRaises(formats.FormatError):
             chats.validate_index(obj)
+
+
+class EffortTest(TempRoot):
+    def test_a_chat_keeps_its_effort(self):
+        found = self.chats()
+        chat = found.new()
+        self.assertIsNone(found.effort(chat), "a new chat runs at the default")
+        self.assertEqual(models.effort_level(found.effort(chat)), "high")
+        found.set_effort(chat, "low")
+        self.assertEqual(found.effort(chat), "low")
+        self.assertEqual(found.read_chat(chat)["effort"], "low")
+        self.assertEqual(self.chats().effort(chat), "low", "kept in the index")
+        found.set_model(chat, "claude-sonnet-5-5")
+        self.assertEqual(found.read_chat(chat)["effort"], "low", "the model leaves it alone")
+        found.set_effort(chat, "")
+        self.assertIsNone(found.effort(chat))
+        self.assertIsNone(found.effort(None))
+
+    def test_the_effort_survives_a_lost_index_and_the_blend(self):
+        found = self.chats()
+        chat = self.chat_with_turns(found)
+        found.set_effort(chat, "medium")
+        payload = found.pack_all()
+        index = json.loads(chats.index_json(found.index))
+        other = self.chats(self.tmp / "copy.whittle")
+        other.reconcile(index, payload)
+        self.assertEqual(other.effort(chat), "medium")
+        found.index_path().unlink()
+        self.assertEqual(self.chats().effort(chat), "medium")
+
+    def test_an_index_from_before_efforts_reads(self):
+        found = self.chats()
+        chat = self.chat_with_turns(found)
+        obj = json.loads(chats.index_json(found.index))
+        del obj["chats"][chat]["effort"]
+        self.assertIsNone(chats.index_from_json(obj).chats[chat].effort)
+        obj["chats"][chat]["effort"] = 2
+        with self.assertRaises(formats.FormatError):
+            chats.validate_index(obj)
+
+    def test_effort_level(self):
+        self.assertEqual([models.effort_level(e) for e in ("low", "medium", "high", None, "max", "")],
+                         ["low", "medium", "high", "high", "high", "high"])
 
 
 class MigrateTest(TempRoot):

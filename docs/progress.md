@@ -485,6 +485,20 @@ its own conversation, history tree and Claude session; the panel shows the curre
   but its `.blend1`), and `test_session_folder.py` (saving keeps the cache). Screens: `chat_menu`,
   `chat_menu_many`, `new_chat`, `switched_chat`, `delete_confirm`, `delete_many`.
 
+**Opus 5.5 harness settings** (`prompting.md`, architecture §5 and §15).
+- **Progress notes**: Claude's short notes between tool calls show as its text in the
+  conversation. The bundled CLI requests thinking display `updates` when no display is
+  set, so Whittle sets none, and the runner turns narration thinking blocks (told apart
+  by their signature, as the CLI does) into `text` events. Other thinking stays in the
+  tool group.
+- **Effort per chat**: Low, Medium or High in the model menu, High for new chats, kept
+  in the chat like its model. `--effort` at session start; a change switches the live
+  session before the next query (`apply_flag_settings`), so the conversation carries on.
+- Tests: `tests/agent/test_runner.py` (options, `thinking_kind`, narration as text,
+  effort switches), `test_dispatch.py`, `test_chats.py` `EffortTest`,
+  `tests/blender/test_models.py` (the Effort section, a switch between turns with the
+  fake agent).
+
 ## How to run
 
 ```sh
@@ -570,6 +584,11 @@ them at each save. Nothing is written beside the `.blend`.
     handlers and real saves, moves and reopens under `-b`.
 - **Branch** brings back the node's request strokes and references, not the strokes
   or text of its amendments.
+- **Opus 5.5 settings, offline only**: the progress notes and the live effort switch
+  were built from the bundled CLI's source and are tested with the fake client; no
+  real turn has shown a narration block or switched effort yet. If notes never show,
+  check the CLI log (`cli:` lines) for the `thinking-display-updates` beta; if a
+  switch fails, the turn fails with the CLI's reason.
 
 - **Not built yet**:
   - view gizmos and snap-to-view, default keymap entries for the sketch operators (they
@@ -728,6 +747,8 @@ Extras on; the scripts named are under `tests/fixtures/fake/`).
    the preferences and send: the agent is started again ("Starting Claude…" in the turn)
    and the turn runs. Then pick another model with the button beside Send and send: the
    turn runs on it without a restart (the model preference only sets new chats' model).
+   Pick Low under Effort in the same menu and send: the turn runs at it, again without a
+   restart, and the agent popover says `Effort: Low`.
 7. **Amend right after Send** (`amend.json`): type into the amend field and press Amend
    (it appears once text is typed) straight after Send, before the turn starts: the turn notes that the amendment waits
    for the turn, then that it was delivered.

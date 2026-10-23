@@ -2,6 +2,7 @@
 """The Claude Agent SDK runner. The only module that imports claude_agent_sdk."""
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -60,8 +61,18 @@ def build_options(params: dict, servers: dict, *, inline_skills: bool) -> Claude
         # Where a branch cuts the resumed conversation: the last message of
         # the history node it starts from.
         resume_session_at=params.get("resume_at"),
+        # The chat's effort; a later submit at another one switches the live
+        # session (set_effort).
+        effort=params.get("effort"),
         cwd=params["session_dir"],
+        # Thinking display is left unset on purpose: then the CLI asks the
+        # API for display "updates" (with its beta) on models that have it,
+        # so Claude's short notes between tool calls come back as text in
+        # narration thinking blocks (map_message). An explicit display
+        # ("summarized", "omitted") turns that off. The variable pins the
+        # CLI's default on.
         env={"MCP_TOOL_TIMEOUT": MCP_TOOL_TIMEOUT_MS,
+             "CLAUDE_CODE_THINKING_DISPLAY_UPDATES": "1",
              "CLAUDE_AGENT_SDK_CLIENT_APP": f"whittle/{__version__}"},
         stderr=lambda line: log.debug("cli: %s", line.rstrip()),
         max_turns=settings.get("max_turns"),
@@ -76,6 +87,17 @@ def build_options(params: dict, servers: dict, *, inline_skills: bool) -> Claude
         kwargs["plugins"] = [{"type": "local", "path": str(prompt.PLUGIN_DIR)}]
         kwargs["skills"] = [f"{prompt.PLUGIN_NAME}:{name}" for name in prompt.SKILLS]
     return ClaudeAgentOptions(**kwargs)
+
+
+async def set_effort(client, effort: str) -> None:
+    """Switches the live session's effort, keeping its conversation. The
+    pinned Python SDK has no method for it, so this sends the CLI's own
+    apply_flag_settings control request with effortLevel, which sets the
+    session's effort for the following requests, as /effort does."""
+    query = getattr(client, "_query", None)
+    if query is None:
+        raise RuntimeError("the SDK client is not connected")
+    await query._send_control_request({"subtype": "apply_flag_settings", "settings": {"effortLevel": effort}})
 
 
 NO_SKETCH = ("This request has no sketch: no strokes and no sketch views, so there are no "
@@ -155,6 +177,74 @@ def _tool_result_text(content) -> str:
     return ""
 
 
+NARRATION = "narration"
+
+
+def _varint(data: bytes, i: int) -> tuple[int, int] | None:
+    value = 0
+    for n in range(10):
+        if i >= len(data):
+            return None
+        byte = data[i]
+        i += 1
+        value |= (byte & 0x7F) << (7 * n)
+        if not byte & 0x80:
+            return value, i
+    return None
+
+
+def _bytes_field(data: bytes, number: int) -> bytes | None:
+    """The last length-delimited field `number` of a protobuf message; None
+    when it has none, or the bytes are not a message."""
+    found, i = None, 0
+    while i < len(data):
+        key = _varint(data, i)
+        if key is None:
+            return None
+        tag, i = key
+        wire, field = tag & 7, tag >> 3
+        if wire == 0:
+            value = _varint(data, i)
+            if value is None:
+                return None
+            i = value[1]
+        elif wire in (1, 5):
+            i += 8 if wire == 1 else 4
+            if i > len(data):
+                return None
+        elif wire == 2:
+            size = _varint(data, i)
+            if size is None or size[0] > len(data) - size[1]:
+                return None
+            start, i = size[1], size[1] + size[0]
+            if field == number:
+                found = data[start:i]
+        else:
+            return None
+    return found
+
+
+def thinking_kind(signature: str) -> str | None:
+    """What a thinking block holds, read from its signature as the bundled
+    CLI reads it: "narration" for a progress note (display "updates"),
+    "summary" for summarized thinking, None when it does not say."""
+    try:
+        data = base64.b64decode(signature or "", validate=True)
+    except ValueError:
+        return None
+    for number in (2, 1, 8):
+        data = _bytes_field(data, number)
+        if data is None:
+            return None
+    return data.decode("utf-8", "replace")
+
+
+def is_update(block: ThinkingBlock) -> bool:
+    """A short note Claude wrote to the user between tool calls. On Opus 5.5
+    that text arrives as a narration thinking block, not a text block."""
+    return bool(block.thinking.strip()) and thinking_kind(block.signature) == NARRATION
+
+
 def map_message(msg, turn_id: str | None) -> list[tuple[str, dict]]:
     """Translates one SDK message into bridge events. ResultMessages are left to
     the runner, which needs them for turn accounting."""
@@ -168,6 +258,9 @@ def map_message(msg, turn_id: str | None) -> list[tuple[str, dict]]:
         for block in msg.content:
             if isinstance(block, TextBlock):
                 events.append((Event.TEXT, {**base, "text": block.text}))
+            elif isinstance(block, ThinkingBlock) and is_update(block):
+                # Said to the user, so the sidebar shows it as Claude's text.
+                events.append((Event.TEXT, {**base, "text": block.thinking.strip()}))
             elif isinstance(block, ThinkingBlock):
                 events.append((Event.THINKING, {**base, "text": block.thinking}))
             elif isinstance(block, ToolUseBlock):
@@ -206,6 +299,8 @@ class SdkRunner:
         # The model the live session runs on: a submit for another one
         # switches it before its query.
         self.model: str | None = None
+        # Likewise its effort.
+        self.effort: str | None = None
         # The models are reported once per agent process.
         self._models_task: asyncio.Task | None = None
         self.inline_skills = inline_skills_from_env() if inline_skills is None else inline_skills
@@ -237,6 +332,7 @@ class SdkRunner:
         options = build_options(params, build_servers(self.ctx), inline_skills=self.inline_skills)
         self.session_id = params.get("resume")
         self.model = params.get("model")
+        self.effort = params.get("effort")
         self.init_data = None
         self._session_cost = 0.0
         self._commands = asyncio.Queue()
@@ -252,7 +348,7 @@ class SdkRunner:
         await self._event(Event.STATUS, {"state": "idle", "detail": None})
 
     async def submit(self, turn_id: str, bundle_dir: str, prompt_text: str, context=(),
-                     model: str | None = None) -> None:
+                     model: str | None = None, effort: str | None = None) -> None:
         if not self._session_open():
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is not None:
@@ -272,9 +368,11 @@ class SdkRunner:
         # already failed this turn, and the query would go nowhere.
         if self._session_open() and self.turn_id == turn_id:
             text = submit_text(prompt_text, bundle_dir, context, sketch_size(bundle_dir))
-            # A chat whose model changed since the session started switches
-            # the live session, which keeps its conversation, before this query.
-            self._commands.put_nowait(("query", (text, model if model != self.model else None)))
+            # A chat whose model or effort changed since the session started
+            # switches the live session, which keeps its conversation, before
+            # this query.
+            self._commands.put_nowait(("query", (text, model if model != self.model else None,
+                                                 effort if effort != self.effort else None)))
 
     async def amend(self, turn_id: str, text: str, bundle_dir: str | None,
                     number: int | None = None) -> None:
@@ -340,11 +438,15 @@ class SdkRunner:
                 return
             try:
                 if kind == "query":
-                    text, model = payload
+                    text, model, effort = payload
                     if model:
                         await client.set_model(model)
                         self.model = model
                         await self._event(Event.LOG, {"level": "info", "message": f"switched to model {model}"})
+                    if effort:
+                        await set_effort(client, effort)
+                        self.effort = effort
+                        await self._event(Event.LOG, {"level": "info", "message": f"switched to effort {effort}"})
                     await client.query(text)
                 elif kind == "interrupt":
                     await client.interrupt()
@@ -424,7 +526,7 @@ class SdkRunner:
         so it goes as one more query and the Blender turn continues."""
         notes = self.ctx.take_amend_notes()
         self._queries += 1
-        self._commands.put_nowait(("query", (follow_up_text([note for _n, note in notes]), None)))
+        self._commands.put_nowait(("query", (follow_up_text([note for _n, note in notes]), None, None)))
         for number, _note in notes:
             await self._event(Event.AMEND_DELIVERED, {"amend": number, "via": "query"})
 

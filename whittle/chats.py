@@ -313,6 +313,8 @@ class Entry:
     # The model the chat runs on; None follows the add-on's default until
     # the chat's first turn, which keeps the model it was sent with.
     model: str | None = None
+    # The chat's effort (models.EFFORTS); None runs at the default.
+    effort: str | None = None
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -321,7 +323,7 @@ class Entry:
 _ENTRY_SPEC = {"title": str, "created": str, "updated": str, "turns": int, "size": int,
                "digest": (str, None)}
 # Keys an index from an earlier version may lack.
-_ENTRY_OPTIONAL = {"model": (str, None)}
+_ENTRY_OPTIONAL = {"model": (str, None), "effort": (str, None)}
 
 
 @dataclass
@@ -457,7 +459,7 @@ class Chats:
 
     def _write_chat(self, chat: str, **values) -> None:
         data = {"format": CHAT_FORMAT, "version": 1, "id": chat, "title": NEW_TITLE,
-                "title_custom": False, "created": now_iso(), "model": None}
+                "title_custom": False, "created": now_iso(), "model": None, "effort": None}
         data.update({k: v for k, v in self.read_chat(chat).items() if k in data})
         data.update(values)
         formats.write_json_atomic(self.folder(chat) / CHAT_NAME, data)
@@ -490,7 +492,9 @@ class Chats:
         found = self._tree(chat)
         created = info.get("created") or (found.created if found else "") or now_iso()
         model = info.get("model") if isinstance(info.get("model"), str) else None
-        entry = Entry(title=info.get("title") or NEW_TITLE, created=created, updated=created, model=model)
+        effort = info.get("effort") if isinstance(info.get("effort"), str) else None
+        entry = Entry(title=info.get("title") or NEW_TITLE, created=created, updated=created, model=model,
+                      effort=effort)
         if found is not None:
             turns = self._turns(found)
             entry.turns = len(turns)
@@ -574,7 +578,7 @@ class Chats:
             folder.mkdir(parents=True, exist_ok=True)
             entry = self.index.chats.get(chat)
             self._write_chat(chat, title=entry.title if entry else NEW_TITLE,
-                             model=entry.model if entry else None)
+                             model=entry.model if entry else None, effort=entry.effort if entry else None)
 
     def rename(self, chat: str, title: str) -> str:
         """A title by hand; an empty one puts back the automatic title."""
@@ -599,6 +603,18 @@ class Chats:
         model = (model or "").strip() or None
         self._write_chat(chat, model=model)
         self.index.chats[chat].model = model
+        self.save()
+
+    def effort(self, chat: str | None) -> str | None:
+        """The chat's own effort; None when it runs at the default."""
+        entry = self.index.chats.get(chat) if chat else None
+        return entry.effort if entry is not None else None
+
+    def set_effort(self, chat: str, effort: str | None) -> None:
+        """The effort the chat's next turn runs at."""
+        effort = (effort or "").strip() or None
+        self._write_chat(chat, effort=effort)
+        self.index.chats[chat].effort = effort
         self.save()
 
     def began(self, chat: str, prompt: str, target: str | None = None, model: str | None = None) -> None:
@@ -746,7 +762,8 @@ class Chats:
                     report["discarded"].append(chat)
                 if not folder.is_dir():
                     folder.mkdir(parents=True, exist_ok=True)
-                    self._write_chat(chat, title=entry.title, created=entry.created, model=entry.model)
+                    self._write_chat(chat, title=entry.title, created=entry.created, model=entry.model,
+                                     effort=entry.effort)
                 report["in_step"].append(chat)
                 continue
             digest = hashlib.sha256(data).hexdigest()

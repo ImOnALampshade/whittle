@@ -3,7 +3,7 @@ import asyncio
 import unittest
 
 from whittle.agent.connection import BridgeCallError
-from whittle.agent.dispatch import DEFAULT_MODEL, make_dispatcher
+from whittle.agent.dispatch import DEFAULT_EFFORT, DEFAULT_MODEL, make_dispatcher
 
 
 class RecordingRunner:
@@ -13,8 +13,8 @@ class RecordingRunner:
     async def start_session(self, params):
         self.calls.append(("start_session", params))
 
-    async def submit(self, turn_id, bundle_dir, prompt, context=(), model=None):
-        self.calls.append(("submit", turn_id, bundle_dir, prompt, context, model))
+    async def submit(self, turn_id, bundle_dir, prompt, context=(), model=None, effort=None):
+        self.calls.append(("submit", turn_id, bundle_dir, prompt, context, model, effort))
 
     async def amend(self, turn_id, text, bundle_dir, number):
         self.calls.append(("amend", turn_id, text, bundle_dir, number))
@@ -50,8 +50,21 @@ class DispatchTest(unittest.IsolatedAsyncioTestCase):
         await self.dispatch("start_session", {"session_dir": "/tmp/s"})
         (_, params), = self.runner.calls
         self.assertEqual(params, {"session_dir": "/tmp/s", "store_dir": None, "model": DEFAULT_MODEL,
-                                  "resume": None, "fork": False, "resume_at": None, "settings": {}})
+                                  "effort": DEFAULT_EFFORT, "resume": None, "fork": False, "resume_at": None,
+                                  "settings": {}})
+        self.assertEqual(DEFAULT_EFFORT, "high")
         await self.assertCode("bad_request", "start_session", {"session_dir": "/s", "store_dir": 3})
+
+    async def test_effort(self):
+        await self.dispatch("start_session", {"session_dir": "/s", "effort": "low"})
+        self.assertEqual(self.runner.calls[0][1]["effort"], "low")
+        params = {"turn_id": "n0004", "bundle_dir": "/b", "effort": "medium"}
+        await self.dispatch("submit", params)
+        await self.dispatch("submit", {**params, "effort": None})
+        self.assertEqual([c[-1] for c in self.runner.calls[1:]], ["medium", None])
+        for bad in ("max", "xhigh", 3):
+            await self.assertCode("bad_request", "submit", {**params, "effort": bad})
+            await self.assertCode("bad_request", "start_session", {"session_dir": "/s", "effort": bad})
 
     async def test_start_session_branch(self):
         await self.dispatch("start_session", {"session_dir": "/s", "resume": "S", "fork": True,
@@ -71,13 +84,13 @@ class DispatchTest(unittest.IsolatedAsyncioTestCase):
     async def test_submit(self):
         self.assertEqual(await self.dispatch("submit", {"turn_id": "n0001", "bundle_dir": "/b"}),
                          {"accepted": True})
-        self.assertEqual(self.runner.calls, [("submit", "n0001", "/b", "", (), None)])
+        self.assertEqual(self.runner.calls, [("submit", "n0001", "/b", "", (), None, None)])
         await self.assertCode("bad_request", "submit", {"turn_id": "n0001"})
 
     async def test_submit_context(self):
         params = {"turn_id": "n0002", "bundle_dir": "/b", "context": ["one", "two"]}
         await self.dispatch("submit", params)
-        self.assertEqual(self.runner.calls, [("submit", "n0002", "/b", "", ("one", "two"), None)])
+        self.assertEqual(self.runner.calls, [("submit", "n0002", "/b", "", ("one", "two"), None, None)])
         await self.assertCode("bad_request", "submit", {**params, "context": "one"})
         await self.assertCode("bad_request", "submit", {**params, "context": [1]})
 
@@ -85,7 +98,7 @@ class DispatchTest(unittest.IsolatedAsyncioTestCase):
         params = {"turn_id": "n0003", "bundle_dir": "/b", "model": "claude-sonnet-5-5"}
         await self.dispatch("submit", params)
         await self.dispatch("submit", {**params, "model": None})
-        self.assertEqual([c[-1] for c in self.runner.calls], ["claude-sonnet-5-5", None])
+        self.assertEqual([c[-2] for c in self.runner.calls], ["claude-sonnet-5-5", None])
         await self.assertCode("bad_request", "submit", {**params, "model": 5})
 
     async def test_amend_and_interrupt(self):

@@ -11,6 +11,7 @@ from pathlib import Path
 import bpy
 
 from .. import formats, protocol
+from ..models import effort_level
 from ..protocol import SESSION_ENDED, ErrorCode, Event, Method
 from ..tree import SessionPlan, session_plan
 from . import (bundle, chats, commands, compare, execution, history, models, paths, prefs, sketch, snapshot,
@@ -233,6 +234,10 @@ class TurnController:
         else the chat's, else the add-on's default."""
         return self.model or chats.model_for(self.session.root) or models.default_model()
 
+    def chat_effort(self) -> str:
+        """The effort this chat's next turn runs at: its own, else the default."""
+        return effort_level(chats.effort_for(self.session.root))
+
     @property
     def launch_changed(self) -> bool:
         """The running agent was started with settings that no longer hold."""
@@ -338,7 +343,7 @@ class TurnController:
         self.commands.settings = settings
         # The chat's SDK transcripts live in its folder (agent/store.py).
         params = {"session_dir": str(self.session.root), "store_dir": str(self.session.root / "sdk"),
-                  "model": self.chat_model(),
+                  "model": self.chat_model(), "effort": self.chat_effort(),
                   "resume": plan.resume, "fork": plan.fork, "resume_at": plan.resume_at,
                   "settings": settings}
         self.session_starts.append(params)
@@ -411,7 +416,7 @@ class TurnController:
             raise
         self.stream.note(f"Turn {node}: {text or '(sketch only)'}", kind="submit", turn_id=node)
         self.bridge.call(Method.SUBMIT, {"turn_id": node, "bundle_dir": str(dest), "prompt": text,
-                                         "context": context, "model": model},
+                                         "context": context, "model": model, "effort": self.chat_effort()},
                          self._on_submit_result)
         self.process.set_busy(True)
         self._set_phase("starting")

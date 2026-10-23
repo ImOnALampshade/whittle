@@ -36,7 +36,8 @@ SCENARIOS = {
     "switched_chat": "Switched back to an earlier chat: its conversation, the scene as the other chat left it.",
     "delete_confirm": "The confirmation of deleting a chat from its trash icon.",
     "delete_many": "The Delete Chats dialog on Older Than a Month.",
-    "model_menu": "The model menu from the button beside Send: the newest of each family, Sonnet 5.5 checked.",
+    "model_menu": ("The model menu from the button beside Send: the newest of each family, Sonnet 5.5 checked, "
+                   "and the Effort section with High checked."),
     "model_menu_older": "The Older Models submenu, one column per family, with the chat on Opus 4.6.",
 }
 
