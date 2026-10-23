@@ -387,6 +387,21 @@ class AskTest(SteeringTestCase):
         ctl.after_undo()
         self.assertEqual(ctl.commands.notes, [], "no turn, no note")
 
+    def test_a_turn_ends_after_undo_frees_its_scene(self):
+        # A real Ctrl+Z reads the undo step back in and frees the Scene the
+        # turn began with (tests/gui's undo_turn); background Blender cannot
+        # undo, so the Scene it holds is one that was removed.
+        ctl = self.start("stream.json")
+        node = ctl.turn_id
+        gone = bpy.data.scenes.new("Freed by undo")
+        ctl._scene = gone
+        bpy.data.scenes.remove(gone)
+        self.finish(ctl)
+        self.assertEqual(ctl.history.current, node)
+        self.assertFalse(ctl.history.node(node).folded)
+        self.assertEqual(self.props.history_node, node)
+        self.assertIn("Crate_Lid", [t.object.name for t in self.props.targets if t.object])
+
     def test_interrupt_while_asking(self):
         ctl = self.start("ask.json", attended=True)
         pump(ctl, lambda: ctl.question is not None, 15, "the question")

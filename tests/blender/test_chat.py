@@ -79,6 +79,20 @@ class AutoTargetTest(AddonTestCase):
         self.assertTrue(self.sync())
         self.assertEqual(self.picked(), ["Crate_Lid"])
 
+    def test_entering_sketch_mode_keeps_an_active_only_target(self):
+        # A click on empty space leaves the crate active and nothing
+        # selected. Entering sketch mode makes the sketch active, and the
+        # mode switch updates the depsgraph, which syncs (tests/gui's
+        # auto_targets): it must not take the sketch for the selection.
+        self.select(active=self.crate)
+        self.sync()
+        self.addCleanup(sketch.end_session)
+        sketch.start_session(bpy.context, use_timer=False)
+        self.assertIs(self.layer.objects.active, sketch.find_sketch_object())
+        self.layer.update()
+        self.sync()
+        self.assertEqual(self.picked(), ["Crate"])
+
     def test_not_outside_object_mode(self):
         self.select(self.crate, active=self.crate)
         self.sync()

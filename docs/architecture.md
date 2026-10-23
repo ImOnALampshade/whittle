@@ -1070,8 +1070,14 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
   does not hit Grease Pencil objects, so the sketch never occludes itself. Perspective:
   from the eye towards the point. Orthographic: along the view axis from the render
   camera's eye plane (which lies in front of everything visible). A point is on a
-  surface when the first hit lies within 1 mm + 1 % of the point's depth of it; the
-  normal (world space, 4 dp) and object name are recorded only then.
+  surface when it lies within 1 mm + 1 % of its depth of the first hit, measured along
+  the hit's normal, and within ten times that along the ray; the normal (world space,
+  4 dp) and object name are recorded only then. Measured across the surface because
+  the real draw tool puts points short of an oblique surface along the line of sight
+  (exact head-on; about 1 cm above the crate-sized cube's top, 5 cm along the ray, at
+  2.5 m and an 11° grazing angle, growing with distance; `tests/gui`'s
+  `blank_sketch`): along the ray alone, strokes drawn on a surface seen at a slant
+  were sent as off it.
 - **Submitted vs pending strokes**: curve-domain INT attribute `whittle_turn`, 0 for
   pending. `TurnController.run_sketch` writes the bundle, then stamps every visible
   stroke with the node number. Strokes drawn during the turn stay 0. When a sketch turn
@@ -1394,6 +1400,14 @@ timeout 900 blender -b --factory-startup --python-exit-code 1 --python tests/ble
   test can run alone: `blender -b --factory-startup --python tests/blender/run.py -- -k test_live_fork`.
   Like unittest, it exits 5 when no test ran; `run_tests.sh` treats 5 on one side as
   "nothing matched there" and fails only when both sides ran nothing.
+- **GUI checks** (`./gui_checks.sh`, or `WHITTLE_GUI=1 ./run_tests.sh`; `tests/gui/`,
+  `docs/progress.md` has the details): what `-b` cannot do (a real Ctrl+Z, the draw tool,
+  a transform's modal operator, file browsers, the Asset Browser, autosave and File →
+  Recover, the title bar's `*`) runs in GUI Blenders started with
+  `--enable-event-simulate` in the screenshot harness's hidden nested session, one per
+  phase of a check, with the fake agent and the run's own user and temporary folders.
+  Phases are generators on a persistent timer; input goes through
+  `Window.event_simulate`; a crash phase ends with a `kill -9` of its own Blender.
 - Every shell command in development and CI is wrapped in `timeout`.
 
 ---
@@ -1633,7 +1647,9 @@ first turn then finds the root and leaves it alone. Labels: "Start", "Blank",
   0.5, `hide_render`, `REFERENCE_PROP = "image"`, `whittle_ref_path` = the source path) in
   `Whittle References`: FRONT faces -Y and stands 1 m behind the cursor (+Y), RIGHT faces
   +X 1 m to the cursor's -X, TOP lies just under it; VIEW takes the viewport's
-  `view_rotation` and `view_location` and falls back to FRONT without a viewport.
+  `view_rotation` and `view_location` and falls back to FRONT without a viewport. The
+  chip's menu runs `whittle.ref_place` in the sidebar, whose `context.region_data` is
+  None, so the view is found with `views.viewport_from_context` (the area's main region).
 
 
 ---
@@ -2018,6 +2034,13 @@ the line, since each cache records the path.
   opened while its cache is claimed by a live Blender; a crash after an unsaved turn
   (the turn is kept, the dead claim ignored); the older `.blend1` put in its place
   (the file wins); caches 31 days old deleted, 29 days old or claimed kept.
+- GUI checks (`tests/gui/`): reopening through File → Open and resuming
+  (`restart_resume`), a crash and a reopen (`crash_keeps_chats`), File → Recover from
+  `quit.blend` and from Blender's own autosave (`recover_last_session`,
+  `recover_autosave`), Save As through the file browser during a turn and the file left
+  behind (`save_as`), the title bar's `*` around saves, opens and switches
+  (`dirty_flag`), switching, resuming and deleting chats (`chats`), and a file whose
+  cache was deleted (`file_carries_chats`).
 - Screens: `ui.md` §10.
 
 ---
@@ -2297,8 +2320,36 @@ read from the installed `claude_agent_sdk` 0.2.167 (bundled CLI 2.1.300).
   `is_updated_shading`. ID property writes → no update. Entering Edit Mode → Object +
   Mesh geometry. `ID.session_uid` exists and equals `update.id.original.session_uid`.
   `view_layer.update()` with nothing pending ≈ 2 µs.
-- Undo cannot run under `-b`, so the undo handlers (`_after_undo`) are checked by
-  calling them, not by a real Ctrl+Z.
+- Undo cannot run under `-b`, so the tests check the undo handlers (`_after_undo`) by
+  calling them; the GUI checks press a real Ctrl+Z.
+- A real (memfile) undo reads the undo step back in and frees the IDs that changed,
+  the Scene among them: a `Scene` kept across it raises `ReferenceError`. The turn
+  controller and the sketch session keep the scene's name and look it up again
+  (`TurnController._turn_scene`, `SketchSession.scene`).
+- Ctrl+Z goes to the state of the undo step before the active one. Changes made since
+  the last push without one of their own (a script, the agent's `exec`) go with it.
+- GUI (5.2.2, `--enable-event-simulate`): `Window.event_simulate(type, value, x, y,
+  unicode=…)` events go through the keymaps and handlers like real ones, and real input
+  is ignored. A text field in edit mode takes keys with `unicode`. Sending an event to a
+  window that has closed (a file browser after the Return that confirmed it) crashes
+  Blender. Popup menus open with their last chosen item under the pointer, so arrow-key
+  navigation in them depends on what was chosen before.
+- An operator run from the 3D viewport's sidebar (a button, or a popup menu opened
+  there) has `context.region` the sidebar and `context.region_data` None; the view is
+  the area's main region's (`views.viewport_from_context`).
+- The Grease Pencil draw tool with Surface placement puts points short of a surface
+  seen at a slant, along the line of sight: none head-on, about 1 cm above a cube's top
+  seen at 11° from 2.5 m, about 2.5 cm from 6.4 m. The offset grows with distance and
+  obliquity and does not change with the clip start. Off every surface a point lands on
+  the view plane through the 3D cursor.
+- File → Recover → Last Session and → Auto Save give the opened file the original's
+  path (`bpy.data.filepath` is the file that was saved, not `quit.blend` or
+  `<name>_<pid>_autosave.blend`). Autosaves go to the temporary folder (`TMPDIR`), every
+  `auto_save_time` minutes (1 at least), and quitting writes `quit.blend` there.
+- `bpy.data.is_dirty` is still set right after `wm.save_as_mainfile` returns, with or
+  without Whittle's handlers; Blender clears it (and the title bar's `*`) when it handles
+  the save's notifier, on the next pass of the event loop. A turn (its undo pushes) sets
+  it.
 - UI: `UILayout.panel(idname, default_closed=False)` → `(header, body)` with `body`
   None while closed, and `template_icon(icon_value, scale)` exist in 5.2.
   `bpy.utils.previews` loads a PNG under `-b` (`image_size` is right) but `icon_id`
@@ -2358,9 +2409,9 @@ read from the installed `claude_agent_sdk` 0.2.167 (bundled CLI 2.1.300).
 - A Text datablock is no store for binary data: `from_string` of 6.8 MB of base64 on
   one line did not finish in 150 s, and 0.7 MB of base64 in 76-character lines added
   1.6 MB to the file.
-- `bpy.data.is_dirty` read from Python (background, or a GUI timer) did not follow
-  edits or saves, so whether deleting the payload in `save_post` / `load_post` marks the
-  file modified is to be checked by hand (the title bar's `*`).
+- Deleting the payload in `save_post` / `load_post` does not mark the file modified:
+  the GUI check `dirty_flag` reads `bpy.data.is_dirty` (the title bar's `*`) after the
+  save's notifier, when Blender has cleared it (App, timers, handlers, extensions).
 
 ### claude-agent-sdk 0.2.167
 

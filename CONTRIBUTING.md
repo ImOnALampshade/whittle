@@ -19,6 +19,8 @@ problem or idea before a large change saves everyone time.
   only outside `whittle/addon/` (bpy) and `whittle/agent/runner.py` (the SDK).
 - Add or update tests with the change, and run the whole suite: `./run_tests.sh`. For a
   sidebar change, run `./screens.sh` for the affected scenarios and look at the images.
+  For a change to sketching, undo, start points, saving or anything else the GUI checks
+  cover (`tests/gui/catalog.py`), run `./gui_checks.sh` too.
 - Keep `README.md` and `docs/` in step with what you change (`docs/progress.md` lists
   what exists and the known gaps).
 - New source files start with `# SPDX-License-Identifier: GPL-3.0-or-later`.

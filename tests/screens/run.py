@@ -60,25 +60,26 @@ def blender_env(user_dir: Path) -> dict:
     return env
 
 
-def hidden_display() -> str | None:
+def hidden_display(log_dir: Path = WORK, visible: str = "WHITTLE_SCREENS_VISIBLE") -> str | None:
     """The socket of the hidden session, started if it is not running; None
-    when it is turned off. Exits when it cannot be had."""
-    if os.environ.get("WHITTLE_SCREENS_VISIBLE") == "1":
+    when the variable named by visible is 1. Exits when it cannot be had.
+    KWin's log goes to log_dir. tests/gui/run.py shares it."""
+    if os.environ.get(visible) == "1":
         return None
     runtime = os.environ.get("XDG_RUNTIME_DIR")
     kwin = shutil.which("kwin_wayland")
     if not runtime:
-        _no_hidden_session("XDG_RUNTIME_DIR is not set")
+        _no_hidden_session("XDG_RUNTIME_DIR is not set", visible)
     if not kwin:
-        _no_hidden_session("kwin_wayland is not installed")
+        _no_hidden_session("kwin_wayland is not installed", visible)
     path = Path(runtime) / HIDDEN_SOCKET
     if path.exists() and not _listening(path):
         # Left by a session that died: every Blender would fail to connect.
         path.unlink(missing_ok=True)
     if not path.exists():
         env = {k: v for k, v in os.environ.items() if k != "DISPLAY"}
-        WORK.mkdir(parents=True, exist_ok=True)
-        with open(WORK / "kwin.log", "a") as log:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with open(log_dir / "kwin.log", "a") as log:
             # Outlives this run on purpose: the next one reuses it.
             subprocess.Popen([kwin, "--virtual", "--width", str(HIDDEN_SIZE[0]),
                               "--height", str(HIDDEN_SIZE[1]), "--socket", HIDDEN_SOCKET,
@@ -89,7 +90,7 @@ def hidden_display() -> str | None:
                 break
             time.sleep(0.25)
         else:
-            _no_hidden_session(f"the hidden session did not start (see {WORK / 'kwin.log'})")
+            _no_hidden_session(f"the hidden session did not start (see {log_dir / 'kwin.log'})", visible)
     return HIDDEN_SOCKET
 
 
@@ -103,9 +104,9 @@ def _listening(path: Path) -> bool:
     return True
 
 
-def _no_hidden_session(why: str):
-    raise SystemExit(f"screens: {why}, so the windows cannot be hidden. "
-                     "Set WHITTLE_SCREENS_VISIBLE=1 to show them on your desktop instead.")
+def _no_hidden_session(why: str, visible: str):
+    raise SystemExit(f"{why}, so the windows cannot be hidden. "
+                     f"Set {visible}=1 to show them on your desktop instead.")
 
 
 def make_base_blend(path: Path) -> None:

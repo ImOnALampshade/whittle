@@ -488,7 +488,8 @@ class SketchSession:
     def __init__(self, scene, *, viewport_provider: Callable[[], views.Viewport | None] | None = None,
                  clock: Callable[[], float] = time.monotonic, use_timer: bool = True,
                  window_manager=None):
-        self.scene = scene
+        self._scene = scene
+        self._scene_name = scene.name
         self.viewport_provider = viewport_provider
         self._window_manager = window_manager
         self.clock = clock
@@ -504,6 +505,17 @@ class SketchSession:
         self._handler = self._on_depsgraph_update
         self._tagging = False
 
+    @property
+    def scene(self):
+        """The scene being sketched in. Ctrl+Z reads the undo step back in
+        and frees the Scene the session began with, so a stale one gives way
+        to the scene of that name."""
+        try:
+            self._scene.name
+        except ReferenceError:
+            self._scene = bpy.data.scenes.get(self._scene_name) or bpy.context.scene
+        return self._scene
+
     def enter(self, context) -> None:
         obj = ensure_sketch_layers(self.scene)
         view_layer = context.view_layer
@@ -511,22 +523,30 @@ class SketchSession:
         if current is not None and current is not obj and current.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")
         self._previous_active = current.name if current is not None and current is not obj else None
-        view_layer.objects.active = obj
-        obj.select_set(True)
-        tools = self.scene.tool_settings
-        self._saved = {"gpencil_stroke_placement_view3d": tools.gpencil_stroke_placement_view3d,
-                       "gpencil_surface_offset": tools.gpencil_surface_offset,
-                       "use_keyframe_insert_auto": tools.use_keyframe_insert_auto}
-        # Strokes stick to the surface under the cursor; off the surface they
-        # fall back to the view plane at the 3D cursor's depth.
-        tools.gpencil_stroke_placement_view3d = "SURFACE"
-        tools.gpencil_surface_offset = 0.0
-        # Auto-keying would give the drawing a new key at the playhead, away
-        # from the fixed sketch key.
-        tools.use_keyframe_insert_auto = False
-        if obj.mode != "PAINT_GREASE_PENCIL":
-            bpy.ops.object.mode_set(mode="PAINT_GREASE_PENCIL")
+        # Active before the sketch is: the mode switch updates the depsgraph,
+        # and Auto targets, which hold still while sketching, would otherwise
+        # take the sketch for the new selection and drop a target that was
+        # only the active object.
         self.active = True
+        try:
+            view_layer.objects.active = obj
+            obj.select_set(True)
+            tools = self.scene.tool_settings
+            self._saved = {"gpencil_stroke_placement_view3d": tools.gpencil_stroke_placement_view3d,
+                           "gpencil_surface_offset": tools.gpencil_surface_offset,
+                           "use_keyframe_insert_auto": tools.use_keyframe_insert_auto}
+            # Strokes stick to the surface under the cursor; off the surface
+            # they fall back to the view plane at the 3D cursor's depth.
+            tools.gpencil_stroke_placement_view3d = "SURFACE"
+            tools.gpencil_surface_offset = 0.0
+            # Auto-keying would give the drawing a new key at the playhead,
+            # away from the fixed sketch key.
+            tools.use_keyframe_insert_auto = False
+            if obj.mode != "PAINT_GREASE_PENCIL":
+                bpy.ops.object.mode_set(mode="PAINT_GREASE_PENCIL")
+        except BaseException:
+            self.active = False
+            raise
         if self.use_timer and not bpy.app.timers.is_registered(self._timer):
             bpy.app.timers.register(self._timer, first_interval=POLL_INTERVAL)
         if self._handler not in bpy.app.handlers.depsgraph_update_post:

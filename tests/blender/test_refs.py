@@ -140,6 +140,21 @@ class PlaceEmptyTest(RefsCase):
         self.assertAlmostEqual(obj.rotation_euler.x, math.radians(60), places=5)
         self.assertEqual(tuple(round(v, 5) for v in obj.location), (0.1, 0.2, 0.3))
 
+    def test_place_facing_the_view_from_the_sidebar(self):
+        # The chip's menu runs in the sidebar region, which has no view of
+        # its own (tests/gui's references_view): the viewport beside it has.
+        self.add_ref(self.front)
+        rv3d = SimpleNamespace(view_rotation=Quaternion((1, 0, 0), math.radians(60)),
+                               view_location=Vector((0.1, 0.2, 0.3)))
+        sidebar = SimpleNamespace(type="UI", data=None)
+        main = SimpleNamespace(type="WINDOW", data=rv3d)
+        area = SimpleNamespace(type="VIEW_3D", regions=[sidebar, main])
+        context = SimpleNamespace(area=area, region=sidebar, region_data=None, scene=self.scene)
+        op = SimpleNamespace(index=0, align="VIEW", report=lambda *_args: None)
+        self.assertEqual(refs.WHITTLE_OT_ref_place.execute(op, context), {"FINISHED"})
+        (obj,) = [o for o in bpy.data.objects if o.get(targets.REFERENCE_PROP) == "image"]
+        self.assertAlmostEqual(obj.rotation_euler.x, math.radians(60), places=5)
+
     def test_missing_image(self):
         with self.assertRaises(FileNotFoundError):
             refs.place_empty(self.scene, self.tmp / "nope.png")

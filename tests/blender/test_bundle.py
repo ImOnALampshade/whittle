@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 import bpy
+from mathutils import Vector
 
 from tests.blender.sketch_helpers import add_stroke, look_at_view
 from tests.fixtures.crate.scene import build_scene
@@ -195,3 +196,18 @@ class BundleTest(unittest.TestCase):
         ortho = look_at_view(9, (0, -2, 0.25), (0, 0, 0.25), ortho=True)
         on, _n, _h = bundle.surface_info(self.scene, depsgraph, ortho, [(0.1, -0.25, 0.1), (0.1, 0.25, 0.1)])
         self.assertEqual(on, [True, False], "the back face is hidden in ortho too")
+
+    def test_on_surface_seen_at_a_grazing_angle(self):
+        # The crate's top seen almost edge on. The draw tool puts points short
+        # of an oblique surface along the line of sight (tests/gui's
+        # blank_sketch measured 5 cm at 2.5 m): they are still on it.
+        eye = Vector((0.0, -2.5, 0.75))
+        view = look_at_view(9, tuple(eye), (0, 0, 0.5))
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        on_top = Vector((0.05, 0.0, 0.5))
+        towards_eye = (eye - on_top).normalized()
+        points = [on_top + towards_eye * 0.05, on_top + towards_eye * 0.002,
+                  on_top + Vector((0, 0, 0.05)), on_top - towards_eye * 0.4]
+        on, _normals, hits = bundle.surface_info(self.scene, depsgraph, view, points)
+        self.assertEqual(on, [True, True, False, False])
+        self.assertEqual(hits[:2], ["Crate", "Crate"])
