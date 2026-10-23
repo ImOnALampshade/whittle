@@ -1,0 +1,17 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"say": "Blocking out the lid."},
+        {"call": "inspect", "params": {"query": "object", "name": "Crate"}, "expect": "ok"},
+        {"call": "exec", "params": {"label": "lid", "code": "mesh = bpy.data.meshes.new('Crate_Lid')\nbm = bmesh.new()\nbmesh.ops.create_cube(bm, size=1.0)\nbm.to_mesh(mesh)\nbm.free()\nlid = bpy.data.objects.new('Crate_Lid', mesh)\nlid.scale = (0.54, 0.54, 0.04)\nlid.location = (0, 0, 0.52)\nbpy.context.scene.collection.objects.link(lid)\nprint('lid', lid.name)"}, "expect": "ok"},
+        {"call": "render", "params": {"view": 1, "mode": "overlay", "size": 256}, "expect": "ok"},
+        {"call": "render", "params": {"camera": {"location": [1.5, -1.5, 1.2], "look_at": [0, 0, 0.3]}, "mode": "shaded", "size": 128}, "expect": "ok"},
+        {"call": "checkpoint", "params": {"label": "lid done"}, "expect": "ok"},
+        {"call": "render", "params": {"view": 9, "mode": "overlay"}, "expect": "error:not_found"},
+        {"say": "Done."}
+      ],
+      "finish": {"subtype": "success", "is_error": false, "result": "Added a lid."}
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+schema_version = "1.0.0"
+
+id = "whittle"
+version = "0.1.0"
+name = "Whittle"
+tagline = "Sketch over a model and let a Claude agent make the edit"
+maintainer = "ImOnALampshade"
+website = "https://github.com/ImOnALampshade/whittle"
+type = "add-on"
+
+blender_version_min = "5.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+platforms = ["linux-x64"]
+
+[permissions]
+network = "Runs a Claude agent that calls the Anthropic API"
+files = "Chat caches in its user folder and a private venv"
+
+[build]
+paths_exclude_pattern = ["__pycache__/", "/.git/", "/*.zip"]

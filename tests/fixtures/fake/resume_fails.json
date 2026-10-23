@@ -1,0 +1,62 @@
+{
+ "resume_fails": true,
+ "turns": [
+  {
+   "steps": [
+    {
+     "call": "exec",
+     "params": {
+      "label": "scale",
+      "code": "bpy.data.objects['Crate'].scale = (1.2, 1.2, 1.2)"
+     },
+     "expect": "ok"
+    },
+    {
+     "say": "Scaled the crate."
+    }
+   ],
+   "finish": {
+    "subtype": "success",
+    "is_error": false
+   }
+  },
+  {
+   "steps": [
+    {
+     "call": "exec",
+     "params": {
+      "label": "lid",
+      "code": "mesh = bpy.data.meshes.new('Crate_Lid')\nbm = bmesh.new()\nbmesh.ops.create_cube(bm, size=1.0)\nbm.to_mesh(mesh)\nbm.free()\nlid = bpy.data.objects.new('Crate_Lid', mesh)\nlid.scale = (0.54, 0.54, 0.04)\nlid.location = (0, 0, 0.52)\nbpy.context.scene.collection.objects.link(lid)"
+     },
+     "expect": "ok"
+    },
+    {
+     "say": "Added a lid."
+    }
+   ],
+   "finish": {
+    "subtype": "success",
+    "is_error": false
+   }
+  },
+  {
+   "steps": [
+    {
+     "call": "exec",
+     "params": {
+      "label": "recolour",
+      "code": "bpy.data.materials['Wood'].diffuse_color = (0.8, 0.1, 0.1, 1.0)"
+     },
+     "expect": "ok"
+    },
+    {
+     "say": "Recoloured."
+    }
+   ],
+   "finish": {
+    "subtype": "success",
+    "is_error": false
+   }
+  }
+ ]
+}

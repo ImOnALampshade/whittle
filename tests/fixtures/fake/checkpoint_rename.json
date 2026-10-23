@@ -1,0 +1,53 @@
+{
+ "turns": [
+  {
+   "steps": [
+    {
+     "call": "exec",
+     "params": {
+      "label": "rename",
+      "code": "bpy.data.objects['Crate'].name = 'Hull'"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "checkpoint",
+     "params": {
+      "label": "renamed"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "exec",
+     "params": {
+      "label": "scale",
+      "code": "bpy.data.objects['Hull'].scale = (1.5, 1.5, 1.5)"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "restore_checkpoint",
+     "params": {
+      "checkpoint_id": "c1"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "exec",
+     "params": {
+      "label": "move",
+      "code": "bpy.data.objects['Hull'].location.z = 1.0"
+     },
+     "expect": "ok"
+    },
+    {
+     "say": "Renamed it."
+    }
+   ],
+   "finish": {
+    "subtype": "success",
+    "is_error": false
+   }
+  }
+ ]
+}

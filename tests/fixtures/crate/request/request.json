@@ -1,0 +1,33 @@
+{
+ "format": "whittle.request",
+ "version": 1,
+ "node": "n0001",
+ "parent": "n0000",
+ "prompt": "Add a lid that overhangs the crate slightly, and carve a handle slot in the front.",
+ "target": [
+  {
+   "uid": "fixture-crate",
+   "name": "Crate",
+   "type": "MESH"
+  }
+ ],
+ "stroke_types": [
+  "add",
+  "carve"
+ ],
+ "views": [
+  1,
+  2
+ ],
+ "units": {
+  "system": "METRIC",
+  "scale_length": 1.0
+ },
+ "settings": {
+  "self_check_rounds": 2,
+  "poly_budget": 500,
+  "style_notes": ""
+ },
+ "refs": [],
+ "amend": null
+}

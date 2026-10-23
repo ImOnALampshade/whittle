@@ -1,0 +1,5 @@
+{
+  "turns": [
+    {"steps": [{"say": "About to crash."}, {"sleep": 0.2}, {"fail": "scripted crash"}]}
+  ]
+}

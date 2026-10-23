@@ -1,0 +1,11 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"wait_amend": 10},
+        {"call": "exec", "params": {"label": "probe", "code": "print('working')"}, "expect": "ok"},
+        {"read_amend": 1}
+      ]
+    }
+  ]
+}

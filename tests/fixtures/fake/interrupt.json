@@ -1,0 +1,14 @@
+{
+  "turns": [
+    {"steps": [
+      {"say": "Working slowly."},
+      {"gather": [
+        {"call": "exec", "params": {"code": "print('one')", "label": "one"}},
+        {"call": "exec", "params": {"code": "print('two')", "label": "two"}},
+        {"call": "exec", "params": {"code": "print('three')", "label": "three"}}
+      ]},
+      {"sleep": 3},
+      {"say": "This should not be said after an interrupt."}
+    ]}
+  ]
+}

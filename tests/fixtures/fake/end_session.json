@@ -1,0 +1,15 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"say": "The CLI is about to go away."},
+        {"end_session": "scripted session end"}
+      ],
+      "finish": {"subtype": "success", "is_error": false}
+    },
+    {
+      "steps": [{"say": "New session."}],
+      "finish": {"subtype": "success", "is_error": false}
+    }
+  ]
+}

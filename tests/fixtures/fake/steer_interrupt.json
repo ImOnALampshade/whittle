@@ -1,0 +1,11 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"call": "exec", "params": {"label": "scale and lid", "code": "bpy.data.objects['Crate'].scale = (1.5, 1.5, 1.5)\nmesh = bpy.data.meshes.new('Crate_Lid')\nbm = bmesh.new()\nbmesh.ops.create_cube(bm, size=1.0)\nbm.to_mesh(mesh)\nbm.free()\nlid = bpy.data.objects.new('Crate_Lid', mesh)\nbpy.context.scene.collection.objects.link(lid)"}, "expect": "ok"},
+        {"sleep": 20},
+        {"say": "should not be said"}
+      ]
+    }
+  ]
+}

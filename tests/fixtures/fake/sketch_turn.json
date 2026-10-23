@@ -1,0 +1,12 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"say": "Looking at the sketch."},
+        {"call": "render", "params": {"view": 1, "mode": "overlay", "size": 64}, "expect": "ok"},
+        {"say": "Done."}
+      ],
+      "finish": {"subtype": "success", "is_error": false, "result": "Carved the slot."}
+    }
+  ]
+}

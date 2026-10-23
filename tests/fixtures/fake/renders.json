@@ -1,0 +1,13 @@
+{
+  "turns": [
+    {"steps": [
+      {"gather": [
+        {"call": "render", "params": {"camera": {"location": [2, -2, 1.5], "look_at": [0, 0, 0.25]}, "mode": "shaded", "size": 64}},
+        {"call": "render", "params": {"camera": {"location": [2, -2, 1.5], "look_at": [0, 0, 0.25]}, "mode": "shaded", "size": 64}},
+        {"call": "render", "params": {"camera": {"location": [2, -2, 1.5], "look_at": [0, 0, 0.25]}, "mode": "matcap", "size": 64}},
+        {"call": "render", "params": {"camera": {"location": [2, -2, 1.5], "look_at": [0, 0, 0.25]}, "mode": "wireframe", "size": 64}},
+        {"call": "render", "params": {"camera": {"location": [2, -2, 1.5], "look_at": [0, 0, 0.25]}, "mode": "shaded", "size": 64}}
+      ]}
+    ]}
+  ]
+}

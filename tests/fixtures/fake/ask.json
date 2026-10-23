@@ -1,0 +1,6 @@
+{
+  "turns": [
+    {"steps": [{"ask": "Bevel the lid edges?", "choices": ["yes", "no"], "expect": "ok"},
+               {"say": "Answer received."}]}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "turns": [
+    {
+      "steps": [{"wait_amend": 10}],
+      "after_amend": [{"say": "Folded in."}]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"call": "exec", "params": {"label": "scale", "code": "bpy.data.objects['Crate'].scale = (1.5, 1.5, 1.5)"}, "expect": "ok"},
+        {"call": "checkpoint", "params": {"label": "scaled"}, "expect": "ok"},
+        {"call": "exec", "params": {"label": "lid", "code": "mesh = bpy.data.meshes.new('Crate_Lid')\nlid = bpy.data.objects.new('Crate_Lid', mesh)\nbpy.context.scene.collection.objects.link(lid)\nbpy.data.objects['Crate'].location.z = 1.0"}, "expect": "ok"},
+        {"call": "restore_checkpoint", "params": {"checkpoint_id": "c1"}, "expect": "ok"},
+        {"sleep": 20},
+        {"say": "should not be said"}
+      ]
+    }
+  ]
+}

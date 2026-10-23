@@ -1,0 +1,10 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"ask": "Ready?", "expect": "ok"},
+        {"call": "render", "params": {"view": 1, "mode": "overlay", "size": 256}, "expect": "ok"}
+      ]
+    }
+  ]
+}

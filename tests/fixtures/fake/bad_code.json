@@ -1,0 +1,10 @@
+{
+  "turns": [
+    {"steps": [
+      {"call": "exec", "params": {"code": "def broken(:\n    pass", "label": "syntax"}, "expect": "ok"},
+      {"call": "exec", "params": {"code": "x = 1\nraise ValueError('nope')", "label": "raise"}, "expect": "ok"},
+      {"call": "inspect", "params": {"query": "object", "name": "Missing"}, "expect": "error:not_found"},
+      {"call": "frobnicate", "params": {}, "expect": "error:unknown_method"}
+    ]}
+  ]
+}

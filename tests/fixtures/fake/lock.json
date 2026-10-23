@@ -1,0 +1,11 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"call": "exec", "params": {"label": "move", "code": "bpy.data.objects['Crate'].location.x += 0.25"}, "expect": "ok"},
+        {"ask": "Continue?", "expect": "ok"},
+        {"call": "exec", "params": {"label": "check", "code": "print('checked')"}, "expect": "ok"}
+      ]
+    }
+  ]
+}

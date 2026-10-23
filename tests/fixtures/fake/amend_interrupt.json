@@ -1,0 +1,7 @@
+{
+  "turns": [
+    {
+      "steps": [{"wait_amend": 10}, {"sleep": 20}, {"say": "should not be said"}]
+    }
+  ]
+}

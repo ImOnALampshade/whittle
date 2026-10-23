@@ -1,0 +1,23 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"say": "Looking at the request."},
+        {"call": "inspect", "params": {"query": "summary"}, "expect": "ok"}
+      ],
+      "finish": {"subtype": "error_max_turns", "is_error": true, "result": ""}
+    },
+    {
+      "steps": [
+        {"call": "exec", "params": {"label": "scale", "code": "bpy.data.objects['Crate'].scale = (1.2, 1.2, 1.2)"}, "expect": "ok"}
+      ],
+      "finish": {"subtype": "error_during_execution", "is_error": true, "result": ""}
+    },
+    {
+      "steps": [
+        {"call": "exec", "params": {"label": "lid", "code": "bpy.data.objects['Crate'].location.x += 0.1"}, "expect": "ok"}
+      ],
+      "finish": {"subtype": "success", "is_error": false}
+    }
+  ]
+}

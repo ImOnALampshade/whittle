@@ -1,0 +1,6 @@
+{
+  "name": "whittle",
+  "version": "0.1.0",
+  "description": "Working bpy and bmesh recipes for building, fusing and checking props from sketches inside Blender.",
+  "author": {"name": "ImOnALampshade"}
+}

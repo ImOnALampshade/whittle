@@ -1,0 +1,78 @@
+{
+ "turns": [
+  {
+   "steps": [
+    {
+     "call": "exec",
+     "params": {
+      "label": "scale",
+      "code": "bpy.data.objects['Crate'].scale = (1.5, 1.5, 1.5)"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "checkpoint",
+     "params": {
+      "label": "scaled"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "exec",
+     "params": {
+      "label": "lid and move",
+      "code": "mesh = bpy.data.meshes.new('Crate_Lid')\nbm = bmesh.new()\nbmesh.ops.create_cube(bm, size=1.0)\nbm.to_mesh(mesh)\nbm.free()\nlid = bpy.data.objects.new('Crate_Lid', mesh)\nlid.scale = (0.54, 0.54, 0.04)\nlid.location = (0, 0, 0.52)\nbpy.context.scene.collection.objects.link(lid)\nbpy.data.objects['Crate'].location.z = 1.0\nbpy.data.objects['Crate'].data.vertices[0].co.x += 0.2"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "restore_checkpoint",
+     "params": {
+      "checkpoint_id": "c1"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "restore_checkpoint",
+     "params": {
+      "checkpoint_id": "c9"
+     },
+     "expect": "error:not_found"
+    },
+    {
+     "say": "Backed out to the checkpoint."
+    }
+   ],
+   "finish": {
+    "subtype": "success",
+    "is_error": false
+   }
+  },
+  {
+   "steps": [
+    {
+     "call": "exec",
+     "params": {
+      "label": "nudge",
+      "code": "bpy.data.objects['Crate'].location.x += 0.1"
+     },
+     "expect": "ok"
+    },
+    {
+     "call": "checkpoint",
+     "params": {
+      "label": "again"
+     },
+     "expect": "ok"
+    },
+    {
+     "say": "Checkpoint again."
+    }
+   ],
+   "finish": {
+    "subtype": "success",
+    "is_error": false
+   }
+  }
+ ]
+}

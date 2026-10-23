@@ -1,0 +1,10 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"call": "exec", "params": {"label": "reuse the lamp", "code": "bpy.data.objects['UserLamp'].name = 'Lamp_Post'\nmesh = bpy.data.meshes.new('Crate_Lid')\nlid = bpy.data.objects.new('Crate_Lid', mesh)\nbpy.context.scene.collection.objects.link(lid)"}, "expect": "ok"},
+        {"sleep": 20}
+      ]
+    }
+  ]
+}
