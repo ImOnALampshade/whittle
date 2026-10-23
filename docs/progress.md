@@ -242,6 +242,16 @@ session can start from the scene, from nothing, from a primitive or from an asse
   environment, and `VenvSetup`, which runs them as subprocesses with a timeout each,
   cancel, a log, and a dry run. Tested under `.venv/bin/python` with a fake process and
   clock plus one real-subprocess run that installs nothing (`tests/agent/test_venv.py`).
+  It accepts Linux x64, Windows x64 and Apple silicon macOS (`venv.compatible()`), checks
+  for `claude.exe` on Windows, and on Windows also reads a venv whose base Python's
+  `pyvenv.cfg` home is gone as `broken`.
+- `whittle/platforms.py` (stdlib): what differs on Windows and macOS. Spawn flags (no
+  console window on Windows), `ProcessTree` (the process group on POSIX, a
+  kill-on-close Job Object through ctypes on Windows, `taskkill /T` if that fails),
+  `pid_alive` (OpenProcess and GetExitCodeProcess on Windows, where `os.kill(pid, 0)`
+  would send Ctrl+C) and `replace` (retries a held file on Windows). Each branch takes
+  the platform as an argument and kernel32 as a fake, so the Linux suite runs the
+  Windows code (`tests/agent/test_platforms.py`); none of it has run on Windows.
 - `addon/setup.py`: the venv folder (the `venv_dir` preference or `<user dir>/venv`),
   `begin()` with its refusals (a turn or a setup running, wrong platform, a foreign
   folder, no online access, background Blender), the timer (persistent, so opening or
@@ -576,8 +586,19 @@ them at each save. Nothing is written beside the `.blend`.
     can be bound by hand, e.g. to tablet buttons);
   - per-file overrides of the triangle budget and style notes (design §10 guardrails): the
     preferences are the defaults for every file;
-  - Windows and macOS: the manifest lists `linux-x64` only and the lock holds manylinux
-    x86_64 wheels, so `venv.compatible()` refuses other platforms.
+  - Windows and macOS have never run. The manifest lists `windows-x64` and `macos-arm64`
+    and the code handles them (`whittle/platforms.py`, `venv.compatible()`), but every
+    platform branch is only unit-tested on Linux with the platform passed in and kernel32
+    faked. Unchecked there: a real venv setup (Blender's bundled `ensurepip`, pip finding
+    the platform's wheels in the lock, `claude.exe` passing verify), the Job Object
+    ending the CLI, no console windows flashing, `chats.project_key` matching what
+    `claude.exe` writes (drive-letter case, mapped drives), paths past 260 characters,
+    and Gatekeeper letting the bundled `claude` run on macOS. The SDK's resume folder
+    (`claude-resume-*` in the temp folder, holding a copy of the CLI's credentials file
+    when there is one) is left behind when a Windows agent is killed instead of shut
+    down.
+  - Intel Macs and Windows on Arm (no wheels for the pinned `cryptography` / SDK), and
+    Linux arm64 (wheels exist; unchecked).
 - **The venv install** ran for real once from the GUI (and a real Haiku turn ran from
   it). Tests check the commands, the state machine with a fake process, a dry run and a
   real-subprocess run that installs nothing. A cancelled setup leaves its folder marked

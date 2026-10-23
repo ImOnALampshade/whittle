@@ -4,7 +4,6 @@
 import logging
 import os
 import secrets
-import signal
 import socket
 import subprocess
 import time
@@ -14,6 +13,7 @@ from pathlib import Path
 
 import bpy
 
+from .. import platforms
 from ..protocol import ErrorCode, Method
 from . import paths, prefs
 from .bridge import Bridge, start_timer, stop_timer
@@ -74,6 +74,7 @@ class AgentProcess:
         self.reason: str | None = None
         self.bridge: Bridge | None = None
         self.popen: subprocess.Popen | None = None
+        self.tree: platforms.ProcessTree | None = None
         self.log_path: Path | None = None
         self.hello: dict | None = None
         self.exit_code: int | None = None
@@ -131,16 +132,20 @@ class AgentProcess:
         _prune_logs(self.log_path.parent)
         self._log_file = open(self.log_path, "ab")
         try:
-            # Its own process group, so terminating or killing it reaches the
-            # Claude Code CLI it runs too.
+            # Its own process group (a Job Object on Windows), so terminating
+            # or killing it reaches the Claude Code CLI it runs too.
             self.popen = subprocess.Popen(argv, cwd=session_dir, env=env, stdin=subprocess.DEVNULL,
                                           stdout=self._log_file, stderr=subprocess.STDOUT,
-                                          start_new_session=True)
+                                          **platforms.own_group())
         except OSError as exc:
             listener.close()
             self._close_log()
             self._set_state(AgentState.FAILED, f"cannot start the agent: {exc}")
             return
+        if self.tree is not None:
+            # A tree left from an agent that never exited; its job ends it.
+            self.tree.close()
+        self.tree = platforms.ProcessTree(self.popen)
         self.bridge = Bridge(self, listener, token, self.handlers, self.on_event)
         self._deadline = time.monotonic() + HANDSHAKE_TIMEOUT
         self._terminated = False
@@ -187,10 +192,10 @@ class AgentProcess:
                 self.exit_code = code
                 self._finish(AgentState.STOPPED)
             elif not self._terminated and now - self._stop_started > TERMINATE_AFTER:
-                self._signal(signal.SIGTERM)
+                self.tree.terminate()
                 self._terminated = True
             elif now - self._stop_started > TERMINATE_AFTER + KILL_AFTER:
-                self._signal(signal.SIGKILL)
+                self.tree.kill()
             return
         if code is not None and self.alive:
             self.exit_code = code
@@ -267,26 +272,20 @@ class AgentProcess:
                 break
             except subprocess.TimeoutExpired:
                 pass
+        # Terminate and kill reach the agent's whole process tree: the CLI
+        # it runs, which may be in the middle of an API request, goes too.
         if self.popen is not None and self.popen.poll() is None:
-            self._signal(signal.SIGTERM)
+            self.tree.terminate()
             try:
                 self.exit_code = self.popen.wait(timeout=KILL_AFTER)
             except subprocess.TimeoutExpired:
-                self._signal(signal.SIGKILL)
+                self.tree.kill()
                 self.exit_code = self.popen.wait(timeout=KILL_AFTER)
         self._finish(AgentState.STOPPED)
 
-    def _signal(self, sig) -> None:
-        """Signals the agent's whole process group: the CLI it runs, which
-        may be in the middle of an API request, goes with it."""
-        try:
-            os.killpg(self.popen.pid, sig)
-        except (AttributeError, ProcessLookupError, PermissionError):
-            self.popen.send_signal(sig)
-
     def _kill(self) -> None:
         if self.popen is not None and self.popen.poll() is None:
-            self._signal(signal.SIGKILL)
+            self.tree.kill()
             try:
                 self.exit_code = self.popen.wait(timeout=KILL_AFTER)
             except subprocess.TimeoutExpired:
@@ -303,6 +302,9 @@ class AgentProcess:
         if self.popen is not None and self.popen.poll() is not None:
             self.exit_code = self.popen.returncode
             self.popen = None
+            # On Windows this also ends anything the agent left running.
+            self.tree.close()
+            self.tree = None
         self._close_log()
         self._set_state(state, reason)
 

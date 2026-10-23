@@ -14,6 +14,7 @@ import bpy
 import numpy as np
 from mathutils import Matrix, Vector
 
+from .. import platforms
 # Imported under another name: render() takes the sketch object as `sketch`.
 from . import sketch as sketch_strokes
 
@@ -322,7 +323,7 @@ def render(scene, camera: dict, mode: str, size: int, out: Path, *, aspect: floa
             strokes = load_pixels(strokes_tmp)
             strokes_path = Path(strokes_out) if strokes_out else out.with_name(f"{out.stem}-strokes.png")
             strokes_path.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(strokes_tmp, strokes_path)
+            platforms.replace(strokes_tmp, strokes_path)
             save_pixels(composite(strokes, base), out)
         else:
             save_pixels(base, out)

@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from . import platforms
+
 LOCK_NAME = "requirements.lock"
 # Written last, after the install was verified; its absence means the
 # folder is not (or not yet) a working Whittle venv.
@@ -40,10 +42,12 @@ TICK = 0.25
 DROPPED_ENV_PREFIXES = ("PIP_", "PYTHON", "UV_", "VIRTUAL_ENV", "CONDA_")
 VERIFY_PREFIX = "whittle-verify:"
 # Imports the SDK (and so its whole dependency tree) and checks that the
-# wheel brought its bundled Claude Code CLI along.
+# wheel brought its bundled Claude Code CLI along, under the name the SDK
+# looks for (bundled_cli_name).
 VERIFY_SCRIPT = (
-    "import importlib.metadata, json, pathlib, claude_agent_sdk; "
-    "cli = pathlib.Path(claude_agent_sdk.__file__).parent / '_bundled' / 'claude'; "
+    "import importlib.metadata, json, pathlib, sys, claude_agent_sdk; "
+    "cli = pathlib.Path(claude_agent_sdk.__file__).parent / '_bundled' / "
+    "('claude.exe' if sys.platform == 'win32' else 'claude'); "
     f"print({VERIFY_PREFIX!r} + json.dumps({{'sdk': importlib.metadata.version({SDK!r}), "
     "'cli': cli.is_file()}), flush=True)"
 )
@@ -106,16 +110,37 @@ def lock_digest(lock: Path) -> str:
     return hashlib.sha256(Path(lock).read_bytes()).hexdigest()
 
 
+# (OS, machine) pairs the lock has a wheel of every pin for, by the names
+# sys.platform and platform.machine() use. The lock was compiled on Linux,
+# but its hashes cover every file of each pin, so Windows x64 and Apple
+# silicon install from it too. Intel Macs are left out: cryptography 50 has
+# no x86_64 macOS wheel (and Blender 5.2 no Intel build). Windows on Arm is
+# left out: the SDK has no win_arm64 wheel.
+SUPPORTED = {"linux": ("x86_64", "amd64"), "win32": ("amd64", "x86_64"), "darwin": ("arm64", "aarch64")}
+SUPPORTED_TEXT = "Linux x64, Windows x64 and macOS on Apple silicon"
+_OS_NAMES = {"linux": "Linux", "win32": "Windows", "darwin": "macOS"}
+
+
 def compatible(version_info, machine: str, platform: str) -> str | None:
     """Why this interpreter cannot use the lock, or None. The lock holds
-    CPython 3.14 manylinux x86_64 wheels only."""
+    CPython 3.14 wheels for the platforms in SUPPORTED."""
     if tuple(version_info[:2]) != (3, 14):
         return f"the agent environment needs Python 3.14, but Blender runs {version_info[0]}.{version_info[1]}"
-    if not platform.startswith("linux"):
-        return f"the agent environment is only available on Linux for now, not {platform}"
-    if machine.lower() not in ("x86_64", "amd64"):
-        return f"the agent environment is only available on x86_64 for now, not {machine}"
-    return None
+    system = "linux" if platform.startswith("linux") else platform
+    if system not in SUPPORTED:
+        return f"the agent environment is available on {SUPPORTED_TEXT}, not {platform}"
+    if machine.lower() in SUPPORTED[system]:
+        return None
+    if system == "darwin":
+        return (f"the agent environment needs a Mac with Apple silicon, not {machine}: one of its "
+                "packages (cryptography) has no Intel Mac build")
+    return (f"the agent environment is available on {SUPPORTED_TEXT}, not {_OS_NAMES[system]} "
+            f"on {machine}")
+
+
+def bundled_cli_name(platform: str = sys.platform) -> str:
+    """The Claude Code CLI's file name in the SDK's _bundled folder."""
+    return "claude.exe" if platforms.is_windows(platform) else "claude"
 
 
 # -- commands -------------------------------------------------------------------
@@ -171,7 +196,21 @@ def read_marker(venv: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def status(venv: Path, lock: Path) -> VenvStatus:
+def base_home(venv: Path) -> Path | None:
+    """The folder of the Python the venv was made from, as its pyvenv.cfg
+    records it; None when it records none."""
+    try:
+        text = (Path(venv) / "pyvenv.cfg").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip().lower() == "home" and value.strip():
+            return Path(value.strip())
+    return None
+
+
+def status(venv: Path, lock: Path, platform: str = sys.platform) -> VenvStatus:
     venv = Path(venv)
     if not venv.is_dir() or not any(venv.iterdir()):
         return VenvStatus.MISSING
@@ -180,11 +219,17 @@ def status(venv: Path, lock: Path) -> VenvStatus:
     marker = read_marker(venv)
     if marker is None or marker.get("format") != MARKER_FORMAT or not marker.get("complete"):
         return VenvStatus.BROKEN
-    python = venv_python(venv)
+    python = venv_python(venv, platform)
     # A venv's python is a symlink to the interpreter it was made from; if
     # that Python was removed or upgraded away, the link dangles.
     if not python.is_file() or not os.access(python, os.X_OK):
         return VenvStatus.BROKEN
+    # On Windows it is a copied launcher that stays behind, so the base
+    # Python's folder recorded in pyvenv.cfg is what tells.
+    if platforms.is_windows(platform):
+        home = base_home(venv)
+        if home is not None and not home.is_dir():
+            return VenvStatus.BROKEN
     if marker.get("lock_sha256") != lock_digest(lock):
         return VenvStatus.STALE
     return VenvStatus.READY
@@ -200,7 +245,7 @@ def write_marker(venv: Path, lock: Path, *, sdk: str | None, base_python: Path,
             "written": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     tmp = venv / f".{MARKER}.tmp"
     tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, venv / MARKER)
+    platforms.replace(tmp, venv / MARKER)
 
 
 # -- running the steps ------------------------------------------------------------
@@ -212,7 +257,8 @@ class VenvSetup:
 
     def __init__(self, steps: list[Step], *, venv: Path, lock: Path, log_path: Path,
                  dry_run: bool = False, popen=subprocess.Popen, clock=time.monotonic,
-                 env=None, base_python: Path | None = None, on_finish=None):
+                 env=None, base_python: Path | None = None, on_finish=None,
+                 platform: str = sys.platform):
         self.steps = list(steps)
         self.venv = Path(venv)
         self.lock = Path(lock)
@@ -223,6 +269,7 @@ class VenvSetup:
         self._popen = popen
         self._clock = clock
         self._env = subprocess_env(os.environ if env is None else env)
+        self._platform = platform
         self.state = "idle"
         self.step: str | None = None
         self.reason: str | None = None
@@ -391,8 +438,11 @@ class VenvSetup:
         self._timeout_reason = f"timed out in {step.name}"
         self._write(f"$ {shlex.join(step.argv)}\n")
         try:
+            # Each step is a single process (pip downloads in-process), so
+            # terminate() and kill() reach all of it on every platform.
             self._proc = self._popen(step.argv, stdin=subprocess.DEVNULL, stdout=self._log,
-                                     stderr=subprocess.STDOUT, env=self._env)
+                                     stderr=subprocess.STDOUT, env=self._env,
+                                     **platforms.hidden_window(self._platform))
         except OSError as exc:
             self._proc = None
             self._fail(f"cannot run {step.name}: {exc}")

@@ -37,16 +37,38 @@ def make_runner(args, connection):
     return SdkRunner(connection, list_models=list_api_models)
 
 
+def watch_signals(loop, shutdown: asyncio.Event, signals=signal) -> list:
+    """Makes a terminate signal end the agent like shutdown, and returns the
+    signals watched.
+
+    On Linux and macOS Blender terminates an agent that takes too long to
+    stop with SIGTERM: it still closes its session, so the SDK's temporary
+    config folder (which holds a copy of the credentials) and the CLI go too.
+    Windows' event loop takes no signal handlers, so a plain handler passes
+    the signal on; it sees SIGBREAK from a console (Ctrl+Break), but Blender
+    stops a Windows agent with TerminateProcess, which no handler sees. There
+    the shutdown call is the only graceful stop, and the Job Object Blender
+    puts the agent in makes sure the CLI ends with it."""
+    watched = []
+    for name in ("SIGTERM", "SIGBREAK"):
+        sig = getattr(signals, name, None)
+        if sig is None:
+            continue
+        try:
+            loop.add_signal_handler(sig, shutdown.set)
+        except (NotImplementedError, RuntimeError):
+            try:
+                signals.signal(sig, lambda *_: loop.call_soon_threadsafe(shutdown.set))
+            except (OSError, ValueError, RuntimeError):
+                continue
+        watched.append(sig)
+    return watched
+
+
 async def main(argv: list[str]) -> int:
     args = parse_args(argv)
     shutdown = asyncio.Event()
-    # Blender terminates an agent that takes too long to stop: it still
-    # closes its session, so the SDK's temporary config folder (which holds
-    # a copy of the credentials) and the CLI go too.
-    try:
-        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, shutdown.set)
-    except (NotImplementedError, RuntimeError):
-        pass
+    watch_signals(asyncio.get_running_loop(), shutdown)
     token = os.environ.get("WHITTLE_TOKEN", "")
     mode = "fake" if args.fake else "sdk"
     try:

@@ -29,7 +29,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
-from . import formats, tree as trees
+from . import formats, platforms, tree as trees
 
 log = logging.getLogger("whittle")
 
@@ -292,7 +292,7 @@ def _write_bytes_atomic(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_bytes(data)
-    os.replace(tmp, path)
+    platforms.replace(tmp, path)
 
 
 # -- the index ----------------------------------------------------------------------

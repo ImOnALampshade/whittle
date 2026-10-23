@@ -6,9 +6,33 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
 - Blender 5.2.2 LTS, bundled Python 3.14 (a distribution-packaged Blender may use the system `/usr/bin/python3.14`). Grease Pencil is the v3 API (`bpy.types.GreasePencil` with layers, drawings and attributes) — the 4.2-era GP API does not apply.
 - Extension format: `blender_manifest.toml`, minimum Blender 5.2: the Grease Pencil v3 API, and the lock's wheels are built for its Python 3.14, so an older Blender would install the extension and then fail.
 
+- **Platforms** (2026-10-23): `linux-x64`, `windows-x64` and `macos-arm64`, in one
+  extension zip. Linux is the only one tested; the others are marked untested in the README.
+  - The lock stays as it is. It was compiled for manylinux x86_64, but uv's
+    `--generate-hashes` wrote the hash of every file of each pin, so the Windows x64
+    and macOS arm64 wheels of all 30 pins at their pinned versions already verify under
+    `--require-hashes --only-binary :all: --no-deps`. The one package a Windows resolve
+    would add is `pywin32` (`mcp` requires it on win32). It is deliberately left out:
+    `mcp` guards the import and only its stdio client uses it, and Whittle's MCP tools
+    are in-process SDK servers.
+  - No Intel Macs: `cryptography` 50.0.2 has no macOS x86_64 wheel (upstream dropped them
+    in 49), and Blender 5.2 has no Intel Mac build. No Windows on Arm: the SDK has no
+    `win_arm64` wheel. Linux arm64 has every wheel but is unchecked.
+  - One zip, not `extension build --split-platforms`. Splitting only filters the
+    manifest's `wheels` entries per platform, to shrink uploads that bundle binaries;
+    Whittle bundles none (pip downloads the platform's own wheels at setup), so it would
+    make three identical zips.
+  - Windows process handling: the agent and the setup steps start with
+    `CREATE_NO_WINDOW`; the agent goes into a Job Object with
+    `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` (ctypes), since TerminateProcess does not reach
+    the CLI the agent starts and there is no process group to signal. A Windows
+    terminate is a hard kill, so the shutdown message is the graceful path there. Where
+    the platforms differ, the code lives in `whittle/platforms.py` and takes the
+    platform as an argument, so the Linux suite covers each branch.
+
 ## Agent process
 - **Python**: Blender's bundled Python. The extension creates a private venv from Blender's `sys.executable` and installs `agent_env/requirements.lock` with `--require-hashes --only-binary :all: --no-deps`, after user confirmation in preferences. Never auto-upgrades.
-- **SDK**: `claude-agent-sdk==0.2.167`, exact pins + hashes in `agent_env/requirements.lock`. The wheel bundles the Claude Code CLI (`claude_agent_sdk/_bundled/claude`), so no separate CLI install is required.
+- **SDK**: `claude-agent-sdk==0.2.167`, exact pins + hashes in `agent_env/requirements.lock`. The wheel bundles the Claude Code CLI (`claude_agent_sdk/_bundled/claude`, `claude.exe` on Windows), so no separate CLI install is required.
 - **Dev venv**: `.venv/` at the repo root, made from Blender 5.2's Python 3.14 with the lock installed the way the add-on installs it (README, Development). Use `.venv/bin/python` for agent-side code and tests. Do not install anything else.
 - **Auth** (changed 2026-10-23): an Anthropic API key only: the preference, else `ANTHROPIC_API_KEY` in Blender's environment. No key, no agent; the sidebar asks for one. The agent's environment loses every other Claude or Anthropic credential variable and the bundled CLI runs with Whittle's own `CLAUDE_CONFIG_DIR`, so it can never sign in with the user's claude.ai login, nor read their Claude settings, hooks or MCP servers (architecture §2, Authentication). Why: Anthropic does not allow third-party products built on the Agent SDK to offer claude.ai login or use subscription plan limits; developers are to use API key authentication. The earlier default, the user's existing Claude login, is gone.
 - **Model**: per chat, picked from the button beside Send (the newest of each family, older versions in a submenu, any id by hand); new chats start on the preference, default `claude-opus-5-5`. The list comes from the Models API through the key (older versions included), else the bundled CLI's initialize response, cached in the user folder over a bundled list (architecture §15). A change applies from the next turn via `set_model` in the same SDK session.

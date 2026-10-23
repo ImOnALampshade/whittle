@@ -12,6 +12,8 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+from . import platforms
+
 REQUEST_FORMAT = "whittle.request"
 STROKES_FORMAT = "whittle.strokes"
 TARGET_FORMAT = "whittle.target"
@@ -35,7 +37,7 @@ def write_json_atomic(path, obj) -> None:
             f.write("\n")
         # mkstemp creates the file private; give it the usual permissions.
         os.chmod(tmp, 0o644)
-        os.replace(tmp, path)
+        platforms.replace(tmp, path)
     except BaseException:
         try:
             os.unlink(tmp)

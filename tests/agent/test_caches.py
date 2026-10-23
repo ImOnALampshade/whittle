@@ -8,6 +8,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.agent.test_chats import write_session
 from whittle import caches, chats
@@ -118,6 +119,22 @@ class FindTest(CacheDirCase):
         self.lock(root, 1, host="elsewhere")
         self.assertTrue(caches.in_use_elsewhere(root))
         self.assertFalse(caches.in_use_elsewhere(root, here_only=True))
+
+    def test_in_use_on_windows_asks_kernel32(self):
+        # os.kill(pid, 0) is no probe there: it would send Ctrl+C.
+        from tests.agent.test_platforms import FakeKernel
+        from whittle import platforms
+
+        root = self.cache / caches.new_file_id()
+        self.lock(root, 1234)
+        probe = platforms.pid_alive
+        for kernel, expected in ((FakeKernel(), True), (FakeKernel(exit_code=0), False),
+                                 (FakeKernel(fail={"open_process"}, error=87), False)):
+            alive = lambda pid, kernel=kernel: probe(pid, "win32", kernel)
+            with self.subTest(expected=expected), \
+                    mock.patch.object(caches.platforms, "pid_alive", alive), \
+                    mock.patch.object(caches.os, "kill", side_effect=AssertionError("os.kill")):
+                self.assertEqual(caches.in_use_elsewhere(root), expected)
         caches.release(root)
         self.assertTrue((root / caches.LOCK_NAME).exists(), "another's claim stays")
 
