@@ -96,6 +96,13 @@ def claude_config_dir() -> Path:
     return path
 
 
+def agents_dir() -> Path:
+    """Where a Windows agent is recorded while it runs (platforms.note_agent),
+    so an agent starting in any Blender knows which resume folders may be in
+    use. Not made until one is recorded."""
+    return user_dir() / "agents"
+
+
 def logs_dir() -> Path:
     path = user_dir() / "logs"
     path.mkdir(parents=True, exist_ok=True)

@@ -735,7 +735,8 @@ them at each save. Nothing is written beside the `.blend`.
     and Gatekeeper letting the bundled `claude` run on macOS. The SDK's resume folder
     (`claude-resume-*` in the temp folder, holding a copy of the CLI's credentials file
     when there is one) is left behind when a Windows agent is killed instead of shut
-    down.
+    down; the next agent start removes Whittle's that are a day stale and that no live
+    agent can own (architecture §2), so one stays for up to a day.
   - Intel Macs and Windows on Arm (no wheels for the pinned `cryptography` / SDK), and
     Linux arm64 (wheels exist; unchecked).
 - **The venv install** ran for real once from the GUI (and a real Haiku turn ran from

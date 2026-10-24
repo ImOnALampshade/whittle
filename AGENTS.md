@@ -17,7 +17,7 @@ supported. One zip serves all three: it carries no wheels, and the setup install
 platform's own from the hash-pinned lock. What differs per platform lives in
 `whittle/platforms.py` and takes the platform as an argument, so the Linux suite covers
 the Windows branches with kernel32 faked; route new process spawning, killing, liveness
-probes and atomic file replaces through it.
+probes, atomic file replaces and the clean-up of what a killed agent leaves through it.
 
 Three processes:
 

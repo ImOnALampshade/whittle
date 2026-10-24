@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """What differs between Linux, Windows and macOS: starting a child process
 without a console window, stopping it together with everything it started,
-asking whether a pid is alive, and replacing a file another program holds
-open.
+asking whether a pid is alive, replacing a file another program holds open,
+and clearing the SDK's resume folders that a killed Windows agent leaves.
 
 Stdlib only, so the add-on and the agent-side tests share it. Every function
 takes the platform (a `sys.platform` value) and, on Windows, the kernel32
@@ -11,12 +11,16 @@ and macOS share the POSIX branch.
 """
 
 import ctypes
+import json
 import logging
+import math
 import os
+import shutil
 import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 log = logging.getLogger("whittle")
 
@@ -291,3 +295,134 @@ def replace(src, dst, *, platform: str = sys.platform, sleep=time.sleep) -> None
         except PermissionError:
             sleep(delay)
     os.replace(src, dst)
+
+
+# -- the SDK's resume folders --------------------------------------------------------
+
+# To resume a chat from its transcript store, the SDK copies the transcript
+# (and the CLI's credentials file, when there is one) into a temp folder of
+# this prefix and removes it when the session closes. A Windows agent ended
+# with TerminateProcess never closes its session, so its folder stays.
+RESUME_PREFIX = "claude-resume-"
+# A folder is cleared once nothing in it changed for this long...
+RESUME_STALE_AFTER = 24 * 3600.0
+# ...and only when it was made before every live agent started, by more than
+# this (file times and the clock can disagree a little), so it cannot be one
+# of theirs.
+RESUME_SLACK = 60.0
+
+
+def note_agent(folder, pid: int, started: float, platform: str = sys.platform) -> None:
+    """Records a Windows agent as running, in folder (one file per pid), so
+    an agent starting in any Blender knows which resume folders may be in
+    use. Elsewhere a terminated agent closes its session itself."""
+    if not is_windows(platform):
+        return
+    folder = Path(folder)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        part = folder / f"{pid}.json.part"
+        part.write_text(json.dumps({"pid": pid, "started": started}), encoding="utf-8")
+        replace(part, folder / f"{pid}.json", platform=platform)
+    except OSError as exc:
+        log.warning("cannot record agent %d as running: %s", pid, exc)
+
+
+def forget_agent(folder, pid: int, platform: str = sys.platform) -> None:
+    """The agent's note_agent record goes once it has exited."""
+    if not is_windows(platform):
+        return
+    try:
+        (Path(folder) / f"{pid}.json").unlink(missing_ok=True)
+    except OSError as exc:
+        log.warning("cannot remove agent %d's record: %s", pid, exc)
+
+
+def live_agent_starts(folder, *, alive=None, platform: str = sys.platform) -> list[float]:
+    """When each agent recorded in folder that is still running started.
+    The records of agents that are gone, and unreadable ones, are removed."""
+    if alive is None:
+        def alive(pid):
+            return pid_alive(pid, platform)
+    starts = []
+    try:
+        records = sorted(Path(folder).glob("*.json"))
+    except OSError:
+        return starts
+    for record in records:
+        try:
+            found = json.loads(record.read_text(encoding="utf-8"))
+            pid, started = found["pid"], float(found["started"])
+            if not isinstance(pid, int) or isinstance(pid, bool):
+                raise TypeError("pid")
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            pid = None
+        if pid is not None and alive(pid):
+            starts.append(started)
+            continue
+        try:
+            record.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return starts
+
+
+def folder_times(folder: Path) -> tuple[float, float]:
+    """(when folder was made, when anything in it last changed). Windows
+    has a creation time; elsewhere the earliest time stat gives stands in."""
+    st = folder.lstat()
+    made = getattr(st, "st_birthtime", None)
+    if made is None:
+        made = min(st.st_ctime, st.st_mtime)
+    touched = st.st_mtime
+    for root, dirs, files in os.walk(folder, followlinks=False):
+        for name in dirs + files:
+            try:
+                touched = max(touched, os.lstat(os.path.join(root, name)).st_mtime)
+            except OSError:
+                pass
+    return made, touched
+
+
+def _resume_project(folder: Path, project_prefix: str) -> bool:
+    """Whether the resume folder holds a session run in one of Whittle's
+    session folders (its projects/ folder is named after their path)."""
+    try:
+        return any(p.name.startswith(project_prefix) for p in (folder / "projects").iterdir())
+    except OSError:
+        return False
+
+
+def clear_stale_resume_folders(temp_dir, project_prefix: str, live_starts: list[float], *,
+                               platform: str = sys.platform, now: float | None = None,
+                               times=folder_times, rmtree=shutil.rmtree) -> list[Path]:
+    """Removes the SDK's resume folders in temp_dir that a killed Windows
+    agent left: only Whittle's (a project named with project_prefix), only
+    those unchanged for a day, and never one made after a live agent
+    (live_starts, from live_agent_starts) started, which may be its own.
+    Returns the folders removed; elsewhere it does nothing."""
+    if not is_windows(platform):
+        return []
+    now = time.time() if now is None else now
+    earliest = min(live_starts, default=math.inf)
+    removed = []
+    try:
+        candidates = sorted(Path(temp_dir).glob(RESUME_PREFIX + "*"))
+    except OSError:
+        return removed
+    for folder in candidates:
+        try:
+            if folder.is_symlink() or not folder.is_dir() or not _resume_project(folder, project_prefix):
+                continue
+            made, touched = times(folder)
+        except OSError:
+            continue
+        if now - touched < RESUME_STALE_AFTER or made > earliest - RESUME_SLACK:
+            continue
+        try:
+            rmtree(folder)
+        except OSError as exc:
+            log.warning("cannot remove the stale resume folder %s: %s", folder, exc)
+            continue
+        removed.append(folder)
+    return removed

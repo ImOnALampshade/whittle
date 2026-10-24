@@ -11,8 +11,11 @@ import bpy
 
 from tests.blender.helpers import CRATE_BUNDLE, AgentTestCase, pump
 from tests.fixtures.crate.scene import build_scene
+from whittle import platforms
+from whittle.addon import paths, process
 from whittle.addon.bridge import Deferred
 from whittle.addon.process import AgentState
+from whittle.chats import project_key
 from whittle.protocol import ErrorCode, Event, Method
 
 
@@ -128,6 +131,46 @@ class LifecycleTest(AgentTestCase):
         self.assertEqual(len(results), 1)
         self.assertFalse(results[0][0])
         self.assertEqual(results[0][1]["code"], ErrorCode.AGENT_CRASHED)
+
+
+class ResumeFoldersTest(AgentTestCase):
+    """A killed Windows agent leaves the SDK's claude-resume-* folder: the next
+    start clears stale ones (the rules are tested in tests/agent/test_platforms.py)."""
+
+    def test_start_clears_and_records_the_agent_and_its_exit_forgets_it(self):
+        with mock.patch.object(process, "clear_resume_folders") as clear, \
+                mock.patch.object(platforms, "note_agent") as note, \
+                mock.patch.object(platforms, "forget_agent") as forget:
+            ctl = self.make_controller()
+            self.start_ready(ctl)
+            pid = ctl.process.popen.pid
+            ctl.stop(wait=True)
+        clear.assert_called_once_with()
+        self.assertEqual(note.call_args.args[:2], (paths.agents_dir(), pid))
+        self.assertLessEqual(note.call_args.args[2], time.time())
+        forget.assert_called_once_with(paths.agents_dir(), pid)
+
+    def test_clears_whittles_stale_folders_on_windows_only(self):
+        temp = self.user_dir / "temp"
+        old = time.time() - 2 * platforms.RESUME_STALE_AFTER
+
+        def resume_folder(name, cwd):
+            folder = temp / name
+            transcript = folder / "projects" / project_key(cwd) / "s.jsonl"
+            transcript.parent.mkdir(parents=True)
+            transcript.write_text("{}\n")
+            for path in (transcript, transcript.parent, transcript.parent.parent, folder):
+                os.utime(path, (old, old))
+            return folder
+
+        stale = resume_folder("claude-resume-whittle", paths.cache_dir() / "f1" / "chats" / "c1")
+        other = resume_folder("claude-resume-other", self.user_dir / "elsewhere")
+        with mock.patch.object(process.tempfile, "gettempdir", return_value=str(temp)):
+            self.assertEqual(process.clear_resume_folders(platform="linux"), [])
+            self.assertTrue(stale.exists())
+            self.assertEqual(process.clear_resume_folders(platform="win32"), [stale])
+        self.assertFalse(stale.exists())
+        self.assertTrue(other.exists(), "another program's folder stays")
 
 
 class ModalTest(AgentTestCase):

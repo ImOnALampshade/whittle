@@ -75,7 +75,9 @@ SDK has no Windows Arm wheel, and Linux Arm is not checked yet.
 What differs on Windows: setup steps and the agent run without a console window; the
 agent and the Claude Code CLI it starts share a Job Object, so stopping the agent (or
 Blender crashing) ends the CLI too; and a stop is graceful only through Whittle's own
-shutdown message, since Windows has no terminate signal. The lock leaves out `pywin32`,
+shutdown message, since Windows has no terminate signal. A killed agent leaves the
+SDK's `claude-resume-*` folder in the temp folder; the next agent start removes
+Whittle's once they are a day old, never one a running agent may use. The lock leaves out `pywin32`,
 which `mcp` lists for Windows: `mcp` only needs it for MCP servers it starts as
 processes, and Whittle's tools run inside the agent. Windows paths can get long (the
 user folder is under `%APPDATA%\Blender Foundation\Blender\5.2\extensions\.user\…`):

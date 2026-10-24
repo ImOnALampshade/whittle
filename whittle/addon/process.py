@@ -6,6 +6,8 @@ import os
 import secrets
 import socket
 import subprocess
+import sys
+import tempfile
 import time
 from collections import deque
 from enum import StrEnum
@@ -14,6 +16,7 @@ from pathlib import Path
 import bpy
 
 from .. import platforms
+from ..chats import MAX_PROJECT_KEY, project_key
 from ..protocol import ErrorCode, Method
 from . import paths, prefs
 from .bridge import Bridge, start_timer, stop_timer
@@ -134,7 +137,9 @@ class AgentProcess:
 
         self.log_path = paths.logs_dir() / f"agent-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}-{port}.log"
         _prune_logs(self.log_path.parent)
+        clear_resume_folders()
         self._log_file = open(self.log_path, "ab")
+        started = time.time()
         try:
             # Its own process group (a Job Object on Windows), so terminating
             # or killing it reaches the Claude Code CLI it runs too.
@@ -150,6 +155,7 @@ class AgentProcess:
             # A tree left from an agent that never exited; its job ends it.
             self.tree.close()
         self.tree = platforms.ProcessTree(self.popen)
+        platforms.note_agent(paths.agents_dir(), self.popen.pid, started)
         self.bridge = Bridge(self, listener, token, self.handlers, self.on_event)
         self._deadline = time.monotonic() + HANDSHAKE_TIMEOUT
         self._terminated = False
@@ -305,6 +311,7 @@ class AgentProcess:
         self.bridge = None
         if self.popen is not None and self.popen.poll() is not None:
             self.exit_code = self.popen.returncode
+            platforms.forget_agent(paths.agents_dir(), self.popen.pid)
             self.popen = None
             # On Windows this also ends anything the agent left running.
             self.tree.close()
@@ -324,6 +331,25 @@ class AgentProcess:
             log.info("agent %s: %s", state, reason)
         for listener in list(self.state_listeners):
             listener(state, reason)
+
+
+def clear_resume_folders(platform: str = sys.platform) -> list[Path]:
+    """Removes the resume folders (with a copy of the CLI's credentials file,
+    when there is one) that killed Windows agents left in the temp folder:
+    Whittle's only, unchanged for a day, and none a live agent of any Blender
+    may be using (platforms.clear_stale_resume_folders). Nothing elsewhere."""
+    if not platforms.is_windows(platform):
+        return []
+    try:
+        prefix = (project_key(paths.cache_dir()) + "-")[:MAX_PROJECT_KEY]
+        starts = platforms.live_agent_starts(paths.agents_dir(), platform=platform)
+        removed = platforms.clear_stale_resume_folders(tempfile.gettempdir(), prefix, starts, platform=platform)
+    except Exception:
+        log.exception("clearing stale resume folders failed")
+        return []
+    if removed:
+        log.info("removed %d stale resume folder(s) killed agents left", len(removed))
+    return removed
 
 
 def agent_environment(base, *, api_key: str, config_dir: Path, usage_data: bool = False) -> dict:

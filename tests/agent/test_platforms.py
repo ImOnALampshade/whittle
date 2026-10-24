@@ -302,5 +302,145 @@ class ReplaceTest(unittest.TestCase):
         self.assertEqual(replace.call_count, 1)
 
 
+DAY = 24 * 3600.0
+PREFIX = "C--Users-me-AppData-Roaming-Whittle-cache-"
+
+
+class ResumeFoldersTest(unittest.TestCase):
+    """The SDK's claude-resume-* folders a killed Windows agent leaves."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="whittle-resume-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.now = time.time()
+        self.made = {}
+
+    def folder(self, name, *, age=2 * DAY, made_age=None, project=PREFIX + "abc-chats-c1"):
+        """A resume folder as the SDK makes one, unchanged for age seconds and
+        made made_age (default age) seconds ago."""
+        folder = self.tmp / name
+        session = folder / "projects" / project
+        session.mkdir(parents=True)
+        (session / "0000.jsonl").write_text("{}\n")
+        (folder / ".credentials.json").write_text("{}")
+        when = self.now - age
+        for path in (session / "0000.jsonl", folder / ".credentials.json", session, folder / "projects", folder):
+            os.utime(path, (when, when))
+        self.made[folder] = self.now - (age if made_age is None else made_age)
+        return folder
+
+    def times(self, folder):
+        # Linux has no creation time to set: the folder's comes from the test.
+        return self.made[folder], platforms.folder_times(folder)[1]
+
+    def clear(self, starts=(), platform="win32"):
+        return platforms.clear_stale_resume_folders(self.tmp, PREFIX, list(starts), platform=platform,
+                                                    now=self.now, times=self.times)
+
+    def test_removes_a_stale_folder_of_whittles(self):
+        stale = self.folder("claude-resume-old")
+        self.assertEqual(self.clear(), [stale])
+        self.assertFalse(stale.exists())
+
+    def test_posix_does_nothing(self):
+        stale = self.folder("claude-resume-old")
+        self.assertEqual(self.clear(platform="linux"), [])
+        self.assertEqual(self.clear(platform="darwin"), [])
+        self.assertTrue(stale.exists())
+
+    def test_keeps_a_folder_changed_within_a_day(self):
+        fresh = self.folder("claude-resume-fresh", age=DAY - 600)
+        touched = self.folder("claude-resume-touched", made_age=3 * DAY)
+        # The CLI wrote to the transcript an hour ago: the folder is in use.
+        jsonl = next((touched / "projects").rglob("*.jsonl"))
+        os.utime(jsonl, (self.now - 3600, self.now - 3600))
+        self.assertEqual(self.clear(), [])
+        self.assertTrue(fresh.exists() and touched.exists())
+
+    def test_never_one_a_live_agent_may_own(self):
+        """A live agent's folder was made after it started: a folder made
+        after the earliest live agent's start (less the slack) stays, however
+        long unchanged."""
+        before = self.folder("claude-resume-before", age=3 * DAY)
+        after = self.folder("claude-resume-after", age=2 * DAY)
+        close = self.folder("claude-resume-close", age=2.5 * DAY)
+        started = self.now - 2.5 * DAY - platforms.RESUME_SLACK / 2
+        self.assertEqual(self.clear([self.now - DAY, started]), [before])
+        self.assertTrue(after.exists() and close.exists())
+        self.assertEqual(self.clear([]), [after, close], "once no agent runs, both are stale")
+
+    def test_only_whittles_folders(self):
+        other = self.folder("claude-resume-other", project="C--Users-me-code-some-other-app")
+        empty = self.tmp / "claude-resume-empty"
+        empty.mkdir()
+        self.made[empty] = self.now - 9 * DAY
+        os.utime(empty, (self.now - 9 * DAY,) * 2)
+        unrelated = self.folder("something-else")
+        self.assertEqual(self.clear(), [])
+        self.assertTrue(other.exists() and empty.exists() and unrelated.exists())
+
+    @unittest.skipUnless(POSIX, "symlinks need privileges on Windows")
+    def test_never_follows_a_link(self):
+        target = self.folder("target")
+        (self.tmp / "claude-resume-link").symlink_to(target, target_is_directory=True)
+        self.assertEqual(self.clear(), [])
+        self.assertTrue(target.exists())
+
+    def test_a_folder_that_cannot_be_removed_is_skipped(self):
+        first, second = self.folder("claude-resume-a"), self.folder("claude-resume-b")
+        failed = []
+
+        def rmtree(path):
+            if path == first:
+                failed.append(path)
+                raise PermissionError(13, "in use")
+            shutil.rmtree(path)
+
+        with self.assertLogs("whittle", "WARNING"):
+            removed = platforms.clear_stale_resume_folders(self.tmp, PREFIX, [], platform="win32", now=self.now,
+                                                           times=self.times, rmtree=rmtree)
+        self.assertEqual((removed, failed), ([second], [first]))
+        self.assertTrue(first.exists())
+
+    def test_folder_times(self):
+        folder = self.folder("claude-resume-x", age=5 * DAY)
+        made, touched = platforms.folder_times(folder)
+        self.assertAlmostEqual(touched, self.now - 5 * DAY, delta=1)
+        inner = next((folder / "projects").rglob("*.jsonl"))
+        os.utime(inner, (self.now, self.now))
+        self.assertAlmostEqual(platforms.folder_times(folder)[1], self.now, delta=1, msg="the newest inside counts")
+        self.assertLessEqual(made, self.now + 1)
+
+
+class AgentRecordsTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="whittle-agents-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.folder = self.tmp / "agents"
+
+    def test_windows_records_live_agents(self):
+        platforms.note_agent(self.folder, 101, 1000.0, platform="win32")
+        platforms.note_agent(self.folder, 202, 2000.0, platform="win32")
+        (self.folder / "303.json").write_text("not json")
+        alive = {101}.__contains__
+        self.assertEqual(platforms.live_agent_starts(self.folder, alive=alive, platform="win32"), [1000.0])
+        self.assertEqual(sorted(p.name for p in self.folder.iterdir()), ["101.json"],
+                         "gone agents' and unreadable records go")
+        platforms.forget_agent(self.folder, 101, platform="win32")
+        self.assertEqual(list(self.folder.iterdir()), [])
+        platforms.forget_agent(self.folder, 101, platform="win32")
+
+    def test_posix_records_nothing(self):
+        platforms.note_agent(self.folder, 101, 1000.0, platform="linux")
+        self.assertFalse(self.folder.exists())
+        self.assertEqual(platforms.live_agent_starts(self.folder, alive=lambda pid: True), [])
+
+    def test_windows_probes_with_kernel32_by_default(self):
+        platforms.note_agent(self.folder, 101, 1000.0, platform="win32")
+        with mock.patch.object(platforms, "pid_alive", return_value=True) as probe:
+            self.assertEqual(platforms.live_agent_starts(self.folder, platform="win32"), [1000.0])
+        probe.assert_called_once_with(101, "win32")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -26,7 +26,7 @@ whittle/                          repo root
 │   ├── models.py                 stdlib only: model ids by family and version, the model list's cache (§15)
 │   ├── style.py                  stdlib only: the bevel style suggestions and how the prompt words the style
 │   ├── venv.py                   stdlib only: venv status, setup commands, the VenvSetup state machine
-│   ├── platforms.py              stdlib only: what differs on Windows and macOS (spawn flags, process trees, pid probe, replace)
+│   ├── platforms.py              stdlib only: what differs on Windows and macOS (spawn flags, process trees, pid probe, replace, stale resume folders)
 │   ├── requirements.lock         byte-identical copy of agent_env/requirements.lock (packaging step)
 │   ├── addon/                    Blender side; may import bpy everywhere
 │   │   ├── __init__.py           register()/unregister() for every class, handler and timer
@@ -321,7 +321,18 @@ closed when the process is gone. On macOS it works as on Linux. On Windows (unte
   job's handle (when the agent is gone, or when Blender itself dies) ends anything left
   in it. If the job cannot be made, a kill runs `taskkill /T /F /PID`;
 - so a terminate is a hard kill there, and the `shutdown` call is the only graceful stop;
-  a killed agent leaves the SDK's `claude-resume-*` folder in the temp folder.
+  a killed agent leaves the SDK's `claude-resume-*` folder (the resumed transcript, and a
+  copy of the CLI's credentials file when there is one) in the temp folder. So every
+  agent start first clears stale ones (`process.clear_resume_folders`,
+  `platforms.clear_stale_resume_folders`): only Whittle's (a folder under its
+  `projects/` named after a session folder in Whittle's cache, `chats.project_key`),
+  only those where nothing changed for a day, and never one made after a live agent
+  started (less a minute's slack), since a live agent's folder is always made after its
+  start. Each Windows agent is recorded as `<user dir>/agents/<pid>.json` (`{"pid",
+  "started"}`, `platforms.note_agent`) from its spawn until Blender sees it exit; records
+  whose pid is no longer alive are dropped when read (`platforms.live_agent_starts`), so
+  agents of every Blender of this user count, and a reused pid only keeps a folder
+  longer. On Linux and macOS a terminated agent closes its session, so none of this runs.
   `agent/__main__.py` `watch_signals` falls back to `signal.signal` for SIGTERM and
   SIGBREAK when the event loop takes no signal handlers (Windows' proactor loop), which
   covers a console Ctrl+Break but not Blender's stop.
