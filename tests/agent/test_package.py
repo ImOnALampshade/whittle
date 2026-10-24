@@ -6,7 +6,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
-BPY_FREE = ["whittle", "whittle.protocol", "whittle.formats", "whittle.venv", "whittle.platforms", "whittle.chats",
+BPY_FREE = ["whittle", "whittle.protocol", "whittle.formats", "whittle.venv", "whittle.platforms", "whittle.style", "whittle.chats",
             "whittle.caches", "whittle.agent", "whittle.agent.__main__", "whittle.agent.connection",
             "whittle.agent.dispatch", "whittle.agent.fake", "whittle.agent.prompt", "whittle.agent.tools"]
 

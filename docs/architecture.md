@@ -83,13 +83,16 @@ whittle/                          repo root
 │   ├── agent/                    unittest, run with .venv/bin/python
 │   ├── blender/                  unittest, run inside `blender -b`; run.py is the entry point
 │   ├── fixtures/                 crate request bundle (+ scene.py, make_bundle.py), fake agent scripts
-│   └── screens/                  screenshots: catalog.py (scenarios, the README's images), scenarios.py, harness.py
-│                                 (runs inside each GUI Blender), run.py (drives them)
+│   ├── screens/                  screenshots: catalog.py (scenarios, the README's images), scenarios.py, harness.py
+│   │                             (runs inside each GUI Blender), run.py (drives them)
+│   └── gui/                      GUI checks: catalog.py, checks.py, harness.py, spy.py, alias.py, run.py
 ├── run_tests.sh                  the single test command
 ├── build.sh                      validates and builds the extension zip into build/ (gitignored)
 ├── screens.sh                    screenshots into build/screens/; --docs refreshes docs/images/ (README)
+├── gui_checks.sh                 GUI checks on the installed extension, into build/gui-checks/
 ├── README.md                     what it is, install, API key, use, privacy, development, tests
 ├── CONTRIBUTING.md               how to propose a change
+├── AGENTS.md                     the working guide for coding agents and contributors
 ├── LICENSE                       GPL-3.0 (the project is GPL-3.0-or-later)
 └── docs/
     └── images/                   the README's screenshots, made by ./screens.sh --docs

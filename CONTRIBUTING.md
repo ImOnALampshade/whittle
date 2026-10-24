@@ -6,15 +6,16 @@ problem or idea before a large change saves everyone time.
 ## Before you start
 
 - Skim [AGENTS.md](AGENTS.md), the working guide to the repo: layout, commands, hard
-  rules and where to start common changes. Coding agents read it too (`CLAUDE.md`
-  imports it for Claude Code); keep it in step with the code.
+  rules and where to start common changes. Coding agents read it too; keep it in step
+  with the code.
 - Read [README.md](README.md) (Development and Tests) and
   [docs/architecture.md](docs/architecture.md), the blueprint the code follows. The sidebar's
   spec is [docs/ui.md](docs/ui.md); agent-facing text (the system prompt, the skills, tool
   descriptions) follows [docs/prompting.md](docs/prompting.md).
 - You need Blender 5.2 and the development venv described in the README. Whittle is
-  developed on Linux x64; the scripts (`run_tests.sh`, `build.sh`, `screens.sh`) are POSIX
-  shell, and `screens.sh` needs Linux with KDE's `kwin_wayland`. Windows and Apple silicon
+  developed on Linux x64; the scripts (`run_tests.sh`, `build.sh`, `screens.sh`,
+  `gui_checks.sh`) are POSIX shell, and `screens.sh` and `gui_checks.sh` need Linux with
+  KDE's `kwin_wayland`. Windows and Apple silicon
   Macs are supported but untested: a report of what works there is a welcome
   contribution.
   You do not need an API key: the offline suite and the screenshots use a scripted fake
