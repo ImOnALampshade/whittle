@@ -1716,8 +1716,10 @@ def agent_popover(stage: GuiStage, spy):
 def file_setting(layout, key: str) -> tuple[str, bool]:
     """For This File's line for a setting: its label, and whether its reset
     button is enabled."""
-    label = {"poly_budget": "Triangle Budget", "style_notes": "Style Notes"}[key]
-    if key == "style_notes":
+    from whittle.addon import prefs, ui
+
+    label = prefs.LABELS[key]
+    if key in ui.OWN_LINE_SETTINGS:
         texts = [t for t in layout.labels() if t.startswith(label)]
     else:
         texts = [r.get("text") for r in layout.of("prop") if r["prop"] == key]
@@ -1735,18 +1737,19 @@ def agent_environ(stage: GuiStage) -> dict:
 
 def defaults_turn(stage: GuiStage, prompt: str):
     """A turn; returns its session's start and the agent's process id. The
-    request the turn sent carries the session's budget and notes too."""
+    request the turn sent carries the session's budget and style too."""
     script = stage.script("defaults", [{"steps": [say("Looked.")], "finish": done("Looked.")}] * 8)
     node = stage.submit(prompt, script)
     yield stage.finished(node)
     started = stage.ctl.session_starts[-1]
     request = json.loads((stage.ctl.session.request_dir(node) / "request.json").read_text())
-    expect_equal(budget_and_notes(request), budget_and_notes(started), "the budget and notes the request carries")
+    expect_equal(budget_and_style(request), budget_and_style(started), "the budget and style the request carries")
     return started, stage.ctl.process.popen.pid
 
 
-def budget_and_notes(sent: dict) -> tuple:
-    return sent["settings"]["poly_budget"], sent["settings"]["style_notes"]
+def budget_and_style(sent: dict) -> tuple:
+    """The triangle budget, palette, bevel style and style notes sent."""
+    return tuple(sent["settings"][key] for key in ("poly_budget", "palette", "bevel_style", "style_notes"))
 
 
 @phase("preferences_defaults")
@@ -1763,7 +1766,8 @@ def preferences_defaults(stage: GuiStage):
     expect_equal([r.get("text") for r in in_box(page, "Claude") if r["kind"] == "prop" and r["prop"] == "model"],
                  ["Model for New Chats"], "the model field's label")
     expect_equal([r["prop"] for r in in_box(page, "Defaults") if r["kind"] == "prop"],
-                 ["poly_budget", "self_check_rounds", "render_size", "style_notes"], "the Defaults box's fields")
+                 ["poly_budget", "self_check_rounds", "render_size", "palette", "bevel_style", "style_notes"],
+                 "the Defaults box's fields")
     expect_equal([r["prop"] for r in in_box(page, "Files") if r["kind"] == "prop"], ["store_chats"],
                  "the Files box's fields")
     expect(not p.usage_data, "Send Claude Code usage data is on by default")
@@ -1774,22 +1778,26 @@ def preferences_defaults(stage: GuiStage):
     started, pid = yield from defaults_turn(stage, "Look at it.")
     first_chat, first_model = chats.get().current, started["model"]
     expect_equal(first_model, p.model, "the first chat's model")
-    expect_equal(budget_and_notes(started), (p.poly_budget, p.style_notes), "the first session's budget and notes")
+    expect_equal(budget_and_style(started), (p.poly_budget, p.palette, p.bevel_style, p.style_notes),
+                 "the first session's budget and style")
     expect_equal(agent_environ(stage).get(NONESSENTIAL), "1", f"{NONESSENTIAL} with usage data off")
     layout = yield from agent_popover(stage, popover)
     expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget (default)", False), "For This File's budget")
-    expect_equal(file_setting(layout, "style_notes"), ("Style Notes (default)", False), "For This File's notes")
+    for key in ("palette", "bevel_style", "style_notes"):
+        expect_equal(file_setting(layout, key), (f"{prefs.LABELS[key]} (default)", False), f"For This File's {key}")
 
     # New defaults: the file shows them, and the next turn restarts the agent with them.
-    p.poly_budget, p.style_notes = 1500, "chunky bevels"
+    p.poly_budget, p.palette, p.bevel_style, p.style_notes = 1500, "oak, iron", "chunky", "worn wood"
     layout = yield from agent_popover(stage, popover)
     expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget (default)", False),
                  "For This File's budget after the preference changed")
-    expect_equal((stage.props.poly_budget, stage.props.style_notes), (1500, "chunky bevels"),
+    expect_equal((stage.props.poly_budget, stage.props.palette, stage.props.bevel_style, stage.props.style_notes),
+                 (1500, "oak, iron", "chunky", "worn wood"),
                  "what For This File's fields show")
     started, pid2 = yield from defaults_turn(stage, "Look again.")
     expect(pid2 != pid, "the agent was not restarted for the new defaults")
-    expect_equal(budget_and_notes(started), (1500, "chunky bevels"), "the session's budget and notes")
+    expect_equal(budget_and_style(started), (1500, "oak, iron", "chunky", "worn wood"),
+                 "the session's budget and style")
 
     # Usage data on: the restarted agent's CLI may send it.
     p.usage_data = True
@@ -1819,7 +1827,8 @@ def preferences_defaults(stage: GuiStage):
                  "For This File's notes beside the file's own budget")
     started, pid5 = yield from defaults_turn(stage, "Look with the file's budget.")
     expect(pid5 != pid3, "the agent was not restarted for the file's budget")
-    expect_equal(budget_and_notes(started), (800, "chunky bevels"), "the session's budget and notes")
+    expect_equal(budget_and_style(started), (800, "oak, iron", "chunky", "worn wood"),
+                 "the session's budget and style")
     stage.save_as(stage.work / "scene.blend")
     yield from stage.settle()
 

@@ -135,8 +135,9 @@ CHECKS = {
         "The Preferences' Model for New Chats starts the next new chat on that model and leaves "
         "older chats on theirs. Send Claude Code usage data restarts an idle agent, whose "
         "environment holds CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC only while it is off. The "
-        "Defaults' Triangle Budget and Style Notes show in the agent popover's For This File as "
-        "(default) and reach the session; changing one restarts the agent. A file's own budget "
+        "Defaults box has all six session settings; Triangle Budget, Palette, Bevel Style and Style "
+        "Notes show in the agent popover's For This File as (default) and reach the session and "
+        "the request; changing them restarts the agent. A file's own budget "
         "wins, survives a save and reopen in a fresh Blender, another file shows the default, "
         "and its reset button gives the preference back.",
         (Phase(), Phase(open="scene.blend"))),

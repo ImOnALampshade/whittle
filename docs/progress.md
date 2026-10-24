@@ -947,6 +947,6 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     the preferences' six settings, each "(default)" with its reset button greyed out. Type
     a budget into its field, then press its reset button: the "(default)" goes, then comes
     back with the preferences' value (the checks set the field and run the button as it
-    would: `preferences_defaults`). Click into Bevel Style: none, subtle and chunky are
-    offered, and other text can be typed. Set a palette and a bevel style, send: the turn's
-    `request.json` carries them.
+    would, and check that the palette and bevel style reach `request.json`:
+    `preferences_defaults`). Click into Bevel Style: none, subtle and chunky are offered,
+    and other text can be typed.
