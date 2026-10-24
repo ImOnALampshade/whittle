@@ -6,9 +6,17 @@ A check runs one GUI Blender per phase, one after another, in the same work
 folder and Whittle user folder, so a later phase sees what an earlier one
 saved, autosaved or left in the cache. Each phase opens a file: "base.blend"
 is a copy of the factory startup file; any other name must have been saved
-by an earlier phase."""
+by an earlier phase.
+
+Whittle runs installed as an extension, from a local repository of the
+run's own (tests/gui/run.py), so its module is bl_ext.<REPOSITORY>.whittle
+and the Preferences show its preferences."""
 
 from dataclasses import dataclass
+
+# The run's extension repository: its id, and its folder's name under
+# build/gui-checks/.
+REPOSITORY = "gui_checks"
 
 
 @dataclass(frozen=True)
@@ -68,8 +76,9 @@ CHECKS = {
         "the chats, the unsaved turn included.",
         (Phase(), Phase())),
     "crash_keeps_chats": Check(
-        "Save, run a turn, kill -9 Blender, open the file again: the unsaved turn is in the "
-        "conversation and the agent resumes its session.",
+        "Save, run a turn, kill -9 Blender, start Blender with the file again: the unsaved turn "
+        "is still in the history, the conversation follows the file's scene (the saved turn), and "
+        "the next turn branches from it, forking the agent's session and telling it so.",
         (Phase(), Phase(open="scene.blend"))),
     "dirty_flag": Check(
         "Saving packs the chats into the file and opening takes them out again: neither leaves "
@@ -107,6 +116,27 @@ CHECKS = {
     "references_turn": Check(
         "Two references added with the paperclip through the real file browser, one pinned; after a "
         "turn that succeeded only the pinned one stays."),
+    "preferences_key": Check(
+        "With no API key, Send asks for one: the sidebar's box has Get a Key (the Console's keys "
+        "page) and Preferences…, which opens the Preferences on Whittle. There the API Key field "
+        "hides what is typed, and the line under it says where the key comes from: nowhere, "
+        "ANTHROPIC_API_KEY in Blender's environment, then a key typed in the field, which wins; "
+        "with a key the sidebar's box goes. Fake keys only, and Blender has no online access."),
+    "preferences_environment": Check(
+        "Agent Environment in the Preferences says what is in its folder: nothing, a ready "
+        "environment (no agent override then), one for another lock, an unfinished one, and "
+        "someone else's files, each with Set Up and Reinstall. A dry run logs its commands under "
+        "the box and makes nothing; a stand-in setup (a sleep, never pip) shows its progress and "
+        "Cancel, and Cancel leaves it cancelled and the folder Whittle's to rebuild."),
+    "preferences_defaults": Check(
+        "The Preferences' Model for New Chats starts the next new chat on that model and leaves "
+        "older chats on theirs. Send Claude Code usage data restarts an idle agent, whose "
+        "environment holds CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC only while it is off. The "
+        "Defaults' Triangle Budget and Style Notes show in the agent popover's For This File as "
+        "(default) and reach the session; changing one restarts the agent. A file's own budget "
+        "wins, survives a save and reopen in a fresh Blender, another file shows the default, "
+        "and its reset button gives the preference back.",
+        (Phase(), Phase(open="scene.blend"))),
 }
 
 # The window every check runs in.
