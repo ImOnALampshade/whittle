@@ -861,11 +861,23 @@ def switched_chat(stage: Stage):
     yield 0.2
 
 
+def _lid_and_handles(stage: Stage, name: str):
+    """The file's first chat, one turn that does what its prompt asks: a
+    lid and a rope handle on each side, and a render showing both."""
+    stage.crate()
+    script = stage.script(name, [
+        {"steps": [say("Adding a lid, then a rope handle on each side."),
+                   exec_("add lid", LID), exec_("rope handles", ROPE_HANDLES),
+                   render((1.6, -1.2, 0.9)), say("The crate has a lid and two rope handles.")],
+         "finish": done("Added a lid and rope handles.")},
+    ])
+    yield from stage.turns(["Add a lid and rope handles to the crate."], script)
+
+
 @scenario
 def continue_chat(stage: Stage):
     """A chat made on another machine: it reads, and asks before sending."""
-    stage.crate()
-    yield from _chat(stage, "foreign", ["Add a lid and rope handles to the crate."], new=False)
+    yield from _lid_and_handles(stage, "foreign")
     store = chats.get()
     store.entry(store.current).origin = "i00000000000000ff"
     store.save()
@@ -876,8 +888,7 @@ def continue_chat(stage: Stage):
 @scenario
 def open_elsewhere(stage: Stage):
     """The same file open in another Blender: one quiet line at the top."""
-    stage.crate()
-    yield from _chat(stage, "elsewhere", ["Add a lid and rope handles to the crate."], new=False)
+    yield from _lid_and_handles(stage, "elsewhere")
     # Another Blender's claim on a cache of the same file, without one.
     chats.open_elsewhere = lambda **_kw: True
     yield 0.2
