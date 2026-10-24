@@ -435,6 +435,9 @@ to that key): they use `claude-haiku-5-5` with a tiny prompt, and `run_tests.sh`
 ## Contributing
 
 Issues and pull requests are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
+[AGENTS.md](AGENTS.md) is the short working guide to the repo (layout, commands, hard
+rules, where to start a common change), for coding agents and new contributors alike;
+`CLAUDE.md` imports it so Claude Code reads the same guide.
 Before you send a change, run `./run_tests.sh` (and `./screens.sh` for sidebar changes,
 looking at the images), keep `README.md` and `docs/` in step with what you change, and
 follow the supply-chain notes below: no new or upgraded dependencies without discussing
