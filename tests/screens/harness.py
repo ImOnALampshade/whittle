@@ -378,13 +378,18 @@ class Run:
     def _popup_unhover(self):
         """The popup opened under the pointer, so its first item shows as
         hovered: moves the pointer into the popup's top left corner, where
-        nothing is drawn, so the popup stays open with no item hovered."""
+        nothing is drawn, so the popup stays open. A menu keeps its last
+        hovered item lit when the pointer moves onto nothing, so a simulated
+        window deactivation then lets go of it (Blender drops a button's
+        highlight when the window loses focus; the popup stays open)."""
         if time.monotonic() < self.wait_until:
             return TICK
         after = screenshot_window(self.work / "window-after.png")
         x0, _y0, _x1, y1 = change_bounds(self.before_popup, after, status=STATUS_BAR)
         win, _area, _main, _ui = view3d()
-        win.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x0 + 12, y=y1 - 8)
+        x, y = x0 + 12, y1 - 8
+        win.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x, y=y)
+        win.event_simulate(type="WINDOW_DEACTIVATE", value="NOTHING", x=x, y=y)
         redraw_all()
         self.state = "popup_shoot"
         self.wait_until = time.monotonic() + 0.5

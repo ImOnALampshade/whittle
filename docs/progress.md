@@ -392,9 +392,10 @@ shot in a GUI Blender without a person at the keyboard.
   has no setter), which also keeps real input out of the window. A scenario that returns a
   `Popup` is shot as a popup: the pointer is moved over the sidebar (simulated), the window
   is shot, the popover (`wm.call_panel`) or the menu operator is opened, the pointer is
-  moved into the popup's empty top left corner so the item it opened over does not show as
-  hovered, and the window is shot again and cropped to what changed. A menu keeps its last
-  hovered item lit, so `model_menu_older` still shows one.
+  moved into the popup's empty top left corner and a window deactivation is simulated, so no
+  item shows as hovered (a menu keeps its last hovered item lit when the pointer moves onto
+  nothing, and lets go of it when the window loses focus; the popup stays open), and the
+  window is shot again and cropped to what changed.
 - `tests/screens/scenarios.py`: 23 states (empty, start, prompt_typed, prompt_only_done,
   sketching, streaming, conversation, branched, branch_edit, asking, interrupted,
   error_turn, folded_failure, crashed, setup_needed, key_needed, comparing, manual_targets,
