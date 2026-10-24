@@ -94,7 +94,7 @@ class RegisterTest(unittest.TestCase):
 
         handlers = bpy.app.handlers
         watched = (handlers.load_pre, handlers.exit_pre, handlers.depsgraph_update_post,
-                   handlers.undo_post, handlers.redo_post)
+                   handlers.undo_pre, handlers.undo_post, handlers.redo_post)
         before = [list(h) for h in watched]
         for _ in range(2):
             whittle.register()

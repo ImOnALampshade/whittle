@@ -121,8 +121,8 @@ repeated here: the attention box has them.
  ─────
  For This File                      (FILE_BLEND)
  [ Triangle Budget (default)  2000 ][⟲]   reset greyed while unset
-   Style Notes                      [⟲]   set: no "(default)", reset enabled
- [ chunky bevels                      ]
+ Style Notes                              set: no "(default)"
+ [ chunky bevels                    ][⟲]   reset enabled, on the field's line
  ─────
  [ Stop Agent ]                     (or [ Start Agent ])
  [ Preferences… ]
@@ -428,7 +428,8 @@ one row:
 ```
 
 `Return to Latest` restores the newest leaf under the current node (`whittle.branch_switch` with
-`node=<that leaf>`). Send reads `Send as Branch` (§3.9).
+`node=<that leaf>`). Send reads `Send as Branch`, or `Branch` when the sidebar is too
+narrow for it (§3.9).
 
 **The running turn**: drawn expanded, after the path. Under its last entry, the phase,
 dim, `SORTTIME`:
@@ -508,7 +509,9 @@ which becomes the current one. Under the rows, the checkbox **Markers While Sket
 
 **View markers**: while sketching, the viewport shows a small camera at each view's eye,
 pointing the way it looked (a frustum, or a box for an orthographic view), at a constant
-size on screen; the current view's is orange, the others light grey, and the one the
+size on screen; the current view's is in the theme's colour for the active item (Theme →
+User Interface → List Item → Inner Selected, blue in the factory theme, read as the
+viewport draws), the others light grey, and the one the
 viewport is at is hidden. Hovering one highlights it white; clicking it snaps the
 viewport back to that view, as its row does. The viewport's Gizmos overlay hides them
 too.
@@ -522,7 +525,7 @@ mode, Draw Mode included; listed and rebindable in Preferences → Keymap under 
 | Shift+Alt+D | `whittle.sketch_toggle` | Toggle Sketch Mode: starts sketching, or stops |
 | Shift+Alt+N | `whittle.next_stroke_type` | the next stroke type (free → add → carve → crease → region → note) |
 | Shift+Alt+V | `whittle.capture_view` | Capture View |
-| Shift+Alt+Enter | `whittle.submit` | Send |
+| Shift+Alt+Enter | `whittle.send_key` | as Enter in the prompt box: Send between turns, Amend while Claude works (with typed text or new strokes), Answer while Claude asks (with an answer typed); nothing when there is nothing to send |
 
 ### 3.9 Composer
 
@@ -554,7 +557,8 @@ mode, Draw Mode included; listed and rebindable in Preferences → Keymap under 
 - **Shift+Alt+C** types into this field from anywhere without the mouse (§3.12); the
   field's tooltip says so.
 - **Button row** (`scale_y=1.4`): `whittle.submit` with icon `PLAY`, text `Send`, or
-  `Send as Branch` when the current node is not at the end of its branch; then the
+  `Send as Branch` when the current node is not at the end of its branch (`Branch` when
+  the button is too narrow for that, as at the default sidebar width); then the
   model button (§3.13), `menu("WHITTLE_MT_models", text=<short name>)` (`Opus 5.5`,
   or the id itself for one Whittle cannot read), sized to its text; then the
   history popover (`popover("WHITTLE_PT_history", text="", icon="RECOVER_LAST")`, a
@@ -816,8 +820,9 @@ straight to typing a prompt:
    Blank text and a send that is not possible (a comparison) leave the text in the
    sidebar's box, as there. **Esc** closes the popup and leaves the field as it was.
 
-The field follows the composer: `prompt` (`Ask Claude`), `amend_text` while a turn runs
-(`Amend the Running Turn`), `ask_answer` while Claude asks (`Answer Claude`). It is
+The field follows the composer: `prompt`, `amend_text` while a turn runs, `ask_answer`
+while Claude asks. The title is `Ask Claude` for all three, as the placeholder is: the
+sidebar already shows the running turn or the question. It is
 picked when the key is pressed, so a turn ending mid-typing does not swap it. A draft
 already in the field opens selected, as in any Blender field: typing replaces it, End
 adds to it, Esc brings it back. The field is the sidebar's, so the text is in both.
@@ -1025,7 +1030,7 @@ prompt, strokes and references are back in the composer, and:
 
  [✎ Sketch]
  [Add rope handles on both sides.][📎]
- [▶ Send as Branch][Opus 5.5 ▾][🕘]
+ [▶ Branch][Opus 5.5 ▾][🕘]              Send as Branch when there is room
 ```
 
 ### 4.7 Sketching
@@ -1245,6 +1250,7 @@ Added for sketching (§3.8):
 |---|---|---|
 | `whittle.sketch_toggle` | Toggle Sketch Mode | Shift+Alt+D: `whittle.sketch` or `whittle.sketch_stop`, whichever applies; undo step |
 | `whittle.view_snap` | Snap to View | `id`: moves the viewport to the view and makes it current; no undo step, like Blender's view operators |
+| `whittle.send_key` | Send or Amend | Shift+Alt+Enter: runs what Enter in the prompt box would (`operators.send_key_action`): `whittle.submit` between turns, `whittle.amend` during a turn, `whittle.answer` while Claude asks; nothing when there is nothing to send |
 
 `WindowManager.whittle_show_view_markers` (BoolProperty, `SKIP_SAVE`, default on) holds
 whether the view markers show while sketching.
@@ -1289,8 +1295,8 @@ override in the file.
 
 Changed:
 
-- `whittle.submit` keeps its id (keymaps); the button text is `Send` / `Send as New
-  Branch`. It clears `prompt` when the turn is accepted, and a dropped run puts it
+- `whittle.submit` keeps its id; the button text is `Send` / `Send as Branch` (or
+  `Branch`). It clears `prompt` when the turn is accepted, and a dropped run puts it
   back. Its poll explains a comparison with `poll_message_set`.
 - `whittle.history_branch` on a folded turn only puts its prompt back
   (`operators.can_branch` allows it while the scene is at its parent).
@@ -1311,7 +1317,7 @@ Properties on `scene.whittle`:
   the objects by hand`.
 - `stream_length` is removed; old files that have it load fine, the value is ignored.
 
-Labels the user sees: Send, Send as Branch, Amend, Stop, Answer, Retry, Restart and
+Labels the user sees: Send, Send as Branch (Branch), Amend, Stop, Answer, Retry, Restart and
 Retry, Return to Latest, Auto, Sketch, Capture View, Edit & Resend, Go Back to This Turn,
 Go Back to the Start, Compare With Current, Ghost of Previous Turn, Hide Ghost, Open
 Render, Open Transcript, Start from, Selection, Blank, Primitive, Add Selected, Swap,
@@ -1320,15 +1326,18 @@ Claude…", "Claude stopped unexpectedly").
 
 ## 8. Undo
 
-Each turn pushes `Whittle: before <node>` when it starts and `Whittle: <node> <label>`
-when it finishes; Restore, Edit & Resend (`Whittle: edit & resend <node>`, after the
+Each turn pushes `Before Whittle turn` when it starts, before the agent's first edit,
+and `Whittle: <node> <label>` when it finishes; Restore, Edit & Resend (`Whittle: edit & resend <node>`, after the
 prompt and strokes are back), branch switch and Compare → Keep push one step each;
 sketch (Sketch, Stop Sketching) and reference (Add, Remove, Pin, Place) operators are
 `UNDO`. Because the conversation is drawn from `scene.whittle.history_node`, Ctrl+Z
 after a Restore or a branch switch moves the conversation back with the scene.
 
-Ctrl+Z during a turn goes back to the turn's start: the agent is told on its next call
-and a warning says so in the conversation. Ctrl+Z during a comparison ends it without
+Ctrl+Z during a turn lands exactly on the turn's start, `Before Whittle turn`: the agent
+is told on its next call and a warning says so in the conversation. Blender undoes to the
+step before the active one, and the agent's edits have no step of their own, so just
+before the undo (`undo_pre`) they get one (`Whittle: <node> so far`); Ctrl+Shift+Z brings
+them back. A second Ctrl+Z with no edit since goes on past the turn's start. Ctrl+Z during a comparison ends it without
 touching the scene (the undo put back a scene from before it). An undo that takes the
 sketch out of Draw Mode ends the sketch session.
 
@@ -1390,7 +1399,7 @@ Every feature of the old panels, and where it lives now.
 | Compare Toggle / Keep / End | History compare box | Comparison bar: Swap / Keep This / Done (and popover) |
 | Saving during a comparison warning | History compare box | Tooltips of the comparison bar's buttons |
 | Ghost | History → Ghost of … | Current turn ⋯ → Ghost of Previous Turn / Hide Ghost; popover → Hide Ghost |
-| "Next submit branches from …" | Request | Send reads "Send as Branch" |
+| "Next submit branches from …" | Request | Send reads "Send as Branch" (or "Branch") |
 | "End the comparison to submit" | Request | Send disabled, its tooltip says why |
 | Folded failed turns hidden | History | unchanged; shown once in the conversation with Retry |
 | Assistant text | Activity | Conversation |
@@ -1436,14 +1445,14 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `shortcut_popup` | §3.12; the `Ask Claude` popup under the pointer, its one-line field in edit mode holding the half-typed prompt, the dim hint whole below it |
 | `prompt_only_done` | one finished prompt-only turn; no red; no start line |
 | `sketching` | 4.7; Sketch pressed with Capture View beside it, types on their own row, depressed correctly, the active one named; view list open, no view dimmed, the current one tagged, rows left-aligned like labels, the markers checkbox under them; the draft once, in its field |
-| `view_markers` | a viewport shot, not the sidebar: one marker per view, each pointing at the crate, the current one orange; none on top of the eye |
+| `view_markers` | a viewport shot, not the sidebar: one marker per view, each pointing at the crate, the current one in the theme's active colour (blue); none on top of the eye |
 | `streaming` | 4.3; gear in the header; one busy sign: "Running 2 tools" in the group header, no Working…; Stop alone; Auto dim |
 | `asking` | 4.4; question not red and said once; Stop alone; placeholder `Ask Claude…` |
-| `conversation` | 4.5; older turn collapsed; two expanded; one ⋯ per message; text wraps to the width |
-| `markdown` | a Markdown reply: no `**`, `#` or `- ` markers; bold heading with a line under it; bold and italic words; bullets and numbers in a margin; the whole reply shown |
+| `conversation` | 4.5; older turn collapsed; two expanded; one ⋯ per message; text wraps to the width; each render shows what its reply says (the slot carved in the front, then the darker wood and lighter lid) |
+| `markdown` | a Markdown reply: no `**`, `#` or `- ` markers; bold heading with a line under it; bold and italic words; bullets and numbers in a margin; the whole reply shown; the render shows the two horns |
 | `markdown_stress` | a stress test shown whole (the 8-line cap lifted): headings told apart by their rules and dimming (H1 over a double line, H2 a line, H3 and H4 bold, H5 and H6 dim); struck text with a line through it; inline code monospace; escapes without backslashes; task boxes; nested quotes indented and dim with their list, a bar per quote level; indented and fenced code in boxes, each with a copy button on its first row, `python` dim beside it; a boxed table with a bold header, aligned columns and a wrapped cell; maths as symbols, the block centred; a closed "Click to expand" section; HTML styled, entities decoded; emoji without boxes; link text underlined; a link button at the end of a line with one link, and a menu button on the line with two; the bare Wikipedia address keeping its `(bar)`; superscript footnote references and the dim notes at the end; no raw markers |
-| `branched` | 4.6; switcher in the bubble's last row left of ⋯: ◂ 2/2 with a dim ▸ |
-| `branch_edit` | after Edit & Resend: later-turns row with Return to Latest, Send as Branch, prompt brought back |
+| `branched` | 4.6; switcher in the bubble's last row left of ⋯: ◂ 2/2 with a dim ▸; the render shows the rope handles |
+| `branch_edit` | after Edit & Resend: later-turns row with Return to Latest, Send reading `Branch` whole, prompt brought back |
 | `interrupted` | thumbnail, then one dim "Stopped, changes kept" |
 | `error_turn` | 4.9; recovered error not red; the failure one red line (wrapped at most once) with Retry beside it |
 | `folded_failure` | a failed turn that changed nothing: shown with Retry, no tree node, prompt box empty, no start row |
@@ -1456,7 +1465,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `long_session` | 4.10; panel no taller than `conversation` + 8 rows |
 | `history_popover` | 13-turn tree, two branches: one indentation step per level, siblings at equal indentation, lines flat, each branch's first row marked ↳ (no disclosure triangles), branch points say "2 branches", titles whole including the current row, current row highlighted, one ⋯ per row |
 | `turn_menu` | the ⋯ menu opened on a turn, Edit & Resend first, then Go Back to This Turn |
-| `agent_popover` | §3.1; Agent and Model lines (no agent yet, so no Chats line); For This File with `Triangle Budget (default)` and its reset greyed, `Style Notes` without "(default)", its reset enabled and the notes whole on their own line; Start Agent and Preferences…; nothing red |
+| `agent_popover` | §3.1; Agent and Model lines (no agent yet, so no Chats line); For This File with `Triangle Budget (default)` and its reset greyed, `Style Notes` without "(default)" at the fields' left edge, the notes whole on their own line with the enabled reset at its end, both resets in one column; Start Agent and Preferences…; nothing red |
 | `developer` | Developer Extras on: Development panel shown; off (every other scenario): absent |
 | `chat_menu` | three chats, the second-newest current: New Chat first; Conversations; each entry's title whole, its dim `N turns · <age> · <size>` line; ✓ on the current entry (highlighted), 🗑 on the others; the footer total and three items; nothing red |
 | `chat_menu_many` | 25 chats of varied age and size: 20 entries then `Show 5 More`; long titles shortened with `…` at a word's end, the ✓/🗑 column aligned on every row; ages from `just now` to `over a year ago` |

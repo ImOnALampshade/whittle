@@ -53,6 +53,18 @@ def _after_load(*_args):
 
 
 @bpy.app.handlers.persistent
+def _before_undo(*_args):
+    # Ctrl+Z during a turn lands on the turn's start (TurnController.before_undo).
+    ctl = turn.current()
+    if ctl is None:
+        return
+    try:
+        ctl.before_undo()
+    except Exception:
+        log.exception("before undo failed")
+
+
+@bpy.app.handlers.persistent
 def _after_undo(*_args):
     for step in (history.sync_from_scene,
                  # A comparison is no undo step: an undo puts back a scene from
@@ -111,7 +123,8 @@ def _load_failed(*_args):
 
 HANDLERS = ((bpy.app.handlers.load_pre, _stop_agent), (bpy.app.handlers.exit_pre, _stop_agent),
             (bpy.app.handlers.load_post, _after_load), (bpy.app.handlers.load_post_fail, _load_failed),
-            (bpy.app.handlers.undo_post, _after_undo), (bpy.app.handlers.redo_post, _after_undo),
+            (bpy.app.handlers.undo_pre, _before_undo), (bpy.app.handlers.undo_post, _after_undo),
+            (bpy.app.handlers.redo_post, _after_undo),
             (bpy.app.handlers.save_pre, _before_save), (bpy.app.handlers.save_post, _after_save),
             (bpy.app.handlers.save_post_fail, _save_failed))
 

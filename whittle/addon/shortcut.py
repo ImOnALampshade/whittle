@@ -21,12 +21,10 @@ CATEGORY = "Whittle"
 TAB_RETRIES = 10
 TAB_RETRY = 0.05
 
-# Each composer field's popup title. Every field has the same placeholder,
-# here and in the sidebar: the title (or the sidebar's question) says what
-# the text is for.
-FIELDS = {"prompt": "Ask Claude",
-          "amend_text": "Amend the Running Turn",
-          "ask_answer": "Answer Claude"}
+# The composer's fields. The popup has one title and every field the same
+# placeholder, here and in the sidebar, whichever the text goes to.
+FIELDS = ("prompt", "amend_text", "ask_answer")
+TITLE = "Ask Claude"
 PLACEHOLDER = "Ask Claude…"
 # A dim line under the popup's field, cut to its width.
 HINT = "Enter sends · End keeps your draft · long prompts: use the sidebar box"
@@ -96,13 +94,13 @@ class WHITTLE_PT_type_prompt(bpy.types.Panel):
     """The popup the shortcut opens: the composer's field, in edit mode."""
     bl_space_type = "VIEW_3D"
     bl_region_type = "HEADER"
-    bl_label = "Ask Claude"
+    bl_label = TITLE
     bl_ui_units_x = POPUP_UNITS
 
     def draw(self, context):
         name = _field or field(turn.current())
         layout = self.layout
-        layout.label(text=FIELDS[name])
+        layout.label(text=TITLE)
         # Only a one-line field takes the keyboard as a popup opens; the
         # multi-line box never does (docs/decisions.md).
         layout.activate_init = True
@@ -132,7 +130,7 @@ def hint(context) -> str:
 
 class WHITTLE_OT_type_prompt(bpy.types.Operator):
     bl_idname = "whittle.type_prompt"
-    bl_label = "Ask Claude"
+    bl_label = TITLE
     bl_description = ("Open the Whittle sidebar and a prompt field under the pointer, ready to type: Enter "
                       "sends, Esc closes. While a turn runs it amends the turn, or answers Claude's question")
 

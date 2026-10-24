@@ -5,6 +5,8 @@ the README's images."""
 
 import contextlib
 import io
+import re
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +15,12 @@ import bpy
 import numpy as np
 
 from tests.screens import catalog, harness, run, scenarios
+
+
+def png_size(path: Path) -> tuple[int, int]:
+    """A PNG's width and height, from its header."""
+    width, height = struct.unpack(">II", path.read_bytes()[16:24])
+    return width, height
 
 
 class ScreensTest(unittest.TestCase):
@@ -27,6 +35,22 @@ class ScreensTest(unittest.TestCase):
             self.assertIn(name, catalog.SCENARIOS)
             if label.startswith("wide/"):
                 self.assertIn(name, catalog.WIDE)
+
+    def test_the_readme_gallery_fits_githubs_column(self):
+        """Each gallery row, its images at their own width plus a table
+        cell's padding and border (13 px a side, 1 px), fits the column."""
+        repo = Path(__file__).resolve().parents[2]
+        section = (repo / "README.md").read_text().split("## Screenshots", 1)[1].split("\n## ", 1)[0]
+        shown = []
+        for line in section.splitlines():
+            images = re.findall(r"!\[([^\]]*)\]\((docs/images/[^)]+)\)", line)
+            if not images:
+                continue
+            widths = [png_size(repo / path)[0] for _alt, path in images]
+            self.assertLessEqual(sum(widths) + 27 * len(widths) + 1, catalog.GALLERY_WIDTH, line[:80])
+            self.assertTrue(all(alt for alt, _path in images), "every image has alt text")
+            shown += [Path(path).stem for _alt, path in images]
+        self.assertEqual(sorted(shown), sorted(n for n in catalog.DOCS if n != "hero"))
 
     def test_a_window_scenario_has_its_own_window(self):
         self.assertTrue(scenarios.SCENARIOS["hero"].window)

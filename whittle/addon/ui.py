@@ -488,11 +488,12 @@ def draw_file_settings(layout, scene) -> None:
         text = label if key in overrides else f"{label} (default)"
         col = layout.column(align=True)
         if key == "style_notes":
-            # A text field's own label would leave the notes little room.
+            # A text field's own label would leave the notes little room, so
+            # it goes above, at the field's edge; the reset stays on the
+            # field's line, as the budget's does.
+            col.label(text=text)
             row = col.row(align=True)
-            row.label(text=text, icon="BLANK1")
-            field = col.row(align=True)
-            field.prop(scene.whittle, key, text="")
+            row.prop(scene.whittle, key, text="")
         else:
             row = col.row(align=True)
             row.prop(scene.whittle, key, text=text)
@@ -1223,6 +1224,10 @@ def draw_sketch(layout, ctx: Ctx) -> None:
 COMPOSER_LINES = 3
 # The model button's room beyond its text: padding and the menu's chevron.
 MODEL_PAD = 2.0
+# Send's room beyond its text and icon.
+SEND_PAD = 1.0
+# Send's text off the end of a branch, and the shorter one when that does not fit.
+BRANCH_SEND = ("Send as Branch", "Branch")
 
 def draw_references(layout, ctx: Ctx) -> None:
     """The references as attachment chips right above the prompt, packed
@@ -1290,7 +1295,8 @@ def draw_composer(layout, ctx: Ctx) -> None:
     history_px = ctx.px(1.8)
     model_px = ctx.measure(model) + ctx.px(MODEL_PAD) if model else 0
     end_px = history_px + model_px
-    split = layout.split(factor=min(0.9, max(0.35, 1.0 - end_px / max(ctx.width, 1))))
+    factor = min(0.9, max(0.35, 1.0 - end_px / max(ctx.width, 1)))
+    split = layout.split(factor=factor)
     row, right = split.row(), split.row()
     row.scale_y = right.scale_y = 1.4
     if model:
@@ -1313,7 +1319,11 @@ def draw_composer(layout, ctx: Ctx) -> None:
         sub = row.row()
         sub.enabled = can_send(ctx)
         branching = ctx.tree is not None and not ctx.tree.is_leaf(ctx.tree.current)
-        sub.operator("whittle.submit", text="Send as Branch" if branching else "Send", icon="PLAY")
+        text = "Send"
+        if branching:
+            room = ctx.width * factor - ICON_PX * ctx.scale - ctx.px(SEND_PAD)
+            text = next((t for t in BRANCH_SEND if ctx.measure(t) <= room), BRANCH_SEND[-1])
+        sub.operator("whittle.submit", text=text, icon="PLAY")
     right.popover("WHITTLE_PT_history", text="", icon=HISTORY_ICON)
 
 

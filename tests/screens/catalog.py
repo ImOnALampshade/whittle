@@ -10,7 +10,7 @@ SCENARIOS = {
     "prompt_only_done": "One finished prompt-only turn (no sketch): text, tool calls and renders.",
     "sketching": "Sketch mode on with add and carve strokes drawn from two views, prompt typed.",
     "view_markers": "The viewport while sketching: a marker where each of two views was captured, "
-                    "the current one in orange (a viewport shot, not the sidebar).",
+                    "the current one in the theme's active colour (a viewport shot, not the sidebar).",
     "streaming": "Mid-turn: assistant text and finished tool calls, two more calls in flight.",
     "conversation": "Three finished turns with tool calls and render thumbnails.",
     "markdown": "A reply in Markdown: a heading, bold and italic, nested and numbered lists, a quote and code.",
@@ -76,4 +76,7 @@ DOCS = {
     "markdown": "wide/markdown",
     "chat-menu": "chat_menu",
     "model-menu": "model_menu",
+    "agent-popover": "agent_popover",
 }
+# How wide a row of the README's gallery may be: GitHub's content column.
+GALLERY_WIDTH = 880
