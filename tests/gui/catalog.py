@@ -129,7 +129,9 @@ CHECKS = {
     "preferences_environment": Check(
         "Agent Environment in the Preferences says what is in its folder: nothing, a ready "
         "environment (no agent override then), one for another lock, an unfinished one, and "
-        "someone else's files, each with Set Up and Reinstall. A dry run logs its commands under "
+        "someone else's files, each with Set Up and Reinstall, its status on rows of its own and "
+        "whole at the window's opening size, even with a long agent override path, which wraps "
+        "after a folder. A dry run logs its commands under "
         "the box and makes nothing; a stand-in setup (a sleep, never pip) shows its progress and "
         "Cancel, and Cancel leaves it cancelled and the folder Whittle's to rebuild."),
     "preferences_defaults": Check(

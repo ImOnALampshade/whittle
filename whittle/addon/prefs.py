@@ -47,6 +47,9 @@ DESCRIPTIONS = {
     "style_notes": "Extra style guidance for the agent, e.g. 'worn painted wood'",
 }
 LOG_LINES = 8
+# What the Preferences' main region keeps from its width for a line in one
+# of Whittle's boxes: the region's margins, the box's border and the icon.
+LINE_MARGIN = 96
 # Where to make an API key; the attention box and the preferences link here.
 KEYS_URL = "https://platform.claude.com/settings/keys"
 ENV_KEY = "ANTHROPIC_API_KEY"
@@ -178,8 +181,12 @@ def draw_environment(layout, p, setup) -> None:
     """The venv folder, its state, the install buttons and the log of the
     last setup. A plain function so tests can draw it."""
     layout.prop(p, "venv_dir")
+    # The status has rows of its own, wrapped to the window, so a long
+    # folder or agent path in it is never cut off.
     text, icon = setup.describe()
-    layout.label(text=text, icon=icon)
+    col = layout.column(align=True)
+    for i, line in enumerate(wrap_status(text, *_line_room())):
+        col.label(text=line, icon=icon if i == 0 else "BLANK1")
     running = setup.current()
     row = layout.row(align=True)
     if running is not None and running.running:
@@ -192,6 +199,72 @@ def draw_environment(layout, p, setup) -> None:
         col = layout.column(align=True)
         for line in running.log_tail(LOG_LINES):
             col.label(text=line[:160])
+
+
+def _line_room():
+    """The width a line in one of Whittle's boxes has in the region being
+    drawn, and how to measure text in the UI font; no width (no wrapping)
+    outside a drawn region."""
+    import blf
+
+    region = getattr(bpy.context, "region", None)
+    scale = bpy.context.preferences.system.ui_scale or 1.0
+    if region is None or not region.width:
+        return None, None
+    points = bpy.context.preferences.ui_styles[0].widget.points * scale
+
+    def measure(text: str) -> float:
+        blf.size(0, points)
+        return blf.dimensions(0, text)[0]
+
+    return region.width - LINE_MARGIN * scale, measure
+
+
+def wrap_status(text: str, width: float | None, measure) -> list[str]:
+    """text in lines no wider than width, broken at spaces; a word too long
+    for a line, such as a path, is broken after its last path separator
+    that fits (else where it must). No width: one line."""
+    if not width:
+        return [text]
+
+    def fitting(head: str, word: str) -> int:
+        """How many leading characters of word fit after head (none, or at
+        least one when head is empty)."""
+        lo, hi = 0 if head else 1, len(word)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if measure(head + word[:mid]) <= width:
+                lo = mid
+            else:
+                hi = mid - 1
+        return lo
+
+    def folder_end(word: str, n: int) -> int:
+        """Where to cut word within its first n characters: after its last
+        path separator there, else 0."""
+        return max(word.rfind("/", 0, n), word.rfind("\\", 0, n)) + 1
+
+    out, line = [], ""
+    for word in text.split(" "):
+        candidate = f"{line} {word}" if line else word
+        if measure(candidate) <= width:
+            line = candidate
+            continue
+        if line and measure(word) > width:
+            # A path too long for a line of its own starts on this one.
+            n = folder_end(word, fitting(line + " ", word))
+            if n > 1:
+                line, word = f"{line} {word[:n]}", word[n:]
+        if line:
+            out.append(line)
+        while len(word) > 1 and measure(word) > width:
+            n = fitting("", word)
+            n = folder_end(word, n) if folder_end(word, n) > 1 else n
+            out.append(word[:n])
+            word = word[n:]
+        line = word
+    out.append(line)
+    return out
 
 
 def get():

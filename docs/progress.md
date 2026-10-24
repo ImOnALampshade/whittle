@@ -276,7 +276,8 @@ session can start from the scene, from nothing, from a primitive or from an asse
   `needs_setup`.
 - `addon/prefs.py`: four boxes. Claude (the API key, where the key in use comes from on
   a row of its own so it is never cut off, a Get an API Key link under it, the model for new chats, the Powered by Claude line),
-  Agent Environment (folder, status, Install / Reinstall / Cancel, the setup log),
+  Agent Environment (folder, status on rows of its own, wrapped to the window and a long
+  path broken after a folder, Install / Reinstall / Cancel, the setup log),
   Defaults (triangle budget, self-check rounds, render size, palette, bevel style, style
   notes) and Development (agent Python). Every default comes from `DEFAULTS`; the palette
   and bevel style are empty, which leaves those choices to the agent.
@@ -768,7 +769,8 @@ them at each save. Nothing is written beside the `.blend`.
   targets following clicks, branch switching and Ctrl+Z, chats and the file carrying them, and, with
   Whittle installed as an extension, its preferences: the API key's field and source line
   (on its own row, whole at the window's opening size),
-  the sidebar's no-key box, Agent Environment's states, Model for New Chats, the usage
+  the sidebar's no-key box, Agent Environment's states (each status whole at the window's
+  opening size, a long agent override path included), Model for New Chats, the usage
   data setting reaching the agent's environment, and the Defaults as each file shows
   them. How the panel looks in each state is covered by the screenshot harness. What
   still needs a person is the checklist below.

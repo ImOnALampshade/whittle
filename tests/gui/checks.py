@@ -1622,12 +1622,46 @@ def preferences_key(stage: GuiStage):
     expect(stage.ctl.process.popen is None, "an agent was started with a fake key")
 
 
-def environment_status(layout) -> tuple[str, str]:
-    """The Agent Environment box's status line: the label after its folder."""
+def environment_status_lines(layout) -> list:
+    """The Agent Environment box's status: the labels after its folder, in
+    the column they share."""
     box = in_box(layout, "Agent Environment")
     index = next(i for i, r in enumerate(box) if r["kind"] == "prop" and r["prop"] == "venv_dir")
-    label = next(r for r in box[index + 1:] if r["kind"] == "label")
-    return label["text"], label["icon"]
+    first = next(r for r in box[index + 1:] if r["kind"] == "label")
+    return [r for r in box if r["kind"] == "label" and r["layout"] is first["layout"]]
+
+
+def environment_status(layout) -> tuple[str, str]:
+    """The Agent Environment box's status as one line, and its icon. Lines
+    wrapped after a path separator join without a space."""
+    lines = environment_status_lines(layout)
+    text = lines[0]["text"]
+    for r in lines[1:]:
+        text += r["text"] if text.endswith(("/", "\\")) else " " + r["text"]
+    return text, lines[0]["icon"]
+
+
+def expect_environment_status_whole(layout) -> None:
+    """The status has rows of its own (a column holding only its lines, the
+    icon on the first) and every line fits the Preferences window as Blender
+    opens it, so none is cut off."""
+    import blf
+
+    lines = environment_status_lines(layout)
+    (parent,) = [r for r in layout.calls if r.get("child") is lines[0]["layout"]]
+    expect_equal(parent["kind"], "column", "what holds the environment's status")
+    others = [r for r in layout.calls if r["layout"] is lines[0]["layout"] and r not in lines]
+    expect_equal(others, [], "what else the environment's status column holds")
+    expect_equal([r["icon"] for r in lines[1:]], ["BLANK1"] * (len(lines) - 1),
+                 "the icons of the status's continuation lines")
+    region = preferences_override()["region"]
+    scale = bpy.context.preferences.system.ui_scale
+    blf.size(0, bpy.context.preferences.ui_styles[0].widget.points * scale)
+    room = region.width - PREFERENCES_LINE_MARGIN * scale
+    for r in lines:
+        width = blf.dimensions(0, r["text"])[0]
+        expect(width <= room, f"the environment's status line {r['text']!r} is {width:.0f} px, wider than "
+                              f"the {room:.0f} px the Preferences window has for it")
 
 
 def environment_buttons(layout) -> list:
@@ -1681,8 +1715,28 @@ def preferences_environment(stage: GuiStage):
         p.venv_dir = str(folder)
         page = yield from drawn(spy, f"the {name} environment's status",
                                 lambda d, w=wanted: environment_status(d) == w)
+        expect_environment_status_whole(page)
         expect_equal(environment_buttons(page), SET_UP_BUTTONS, f"the {name} environment's buttons")
         yield from shoot_preferences(stage, f"environment-{name}", "Agent Environment")
+
+    # A developer override deep in a long path: the status wraps to the
+    # window, breaking the path after a folder, and every line fits.
+    deep = stage.work.joinpath("a-developer-checkout-of-whittle-with-a-long-name",
+                               *(["nested-folder-for-the-agent-environment"] * 4), "python")
+    deep.parent.mkdir(parents=True)
+    deep.symlink_to(agent)
+    os.environ["WHITTLE_AGENT_PYTHON"] = str(deep)
+    try:
+        p.venv_dir = str(folders / "missing")
+        wanted = (f"Not set up yet (the agent uses {deep})", "ERROR")
+        page = yield from drawn(spy, "the status with a long agent path",
+                                lambda d: environment_status(d) == wanted)
+        lines = environment_status_lines(page)
+        expect(len(lines) > 1, f"the status with a long agent path was not wrapped: {lines[0]['text']!r}")
+        expect_environment_status_whole(page)
+        yield from shoot_preferences(stage, "environment-long-path", "Agent Environment")
+    finally:
+        os.environ["WHITTLE_AGENT_PYTHON"] = agent
 
     # A dry run, as Set Up runs with dry_run: the commands are logged under
     # the box; nothing is made and nothing downloaded.

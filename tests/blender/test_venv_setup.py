@@ -173,6 +173,19 @@ class VenvSetupTest(unittest.TestCase):
         self.assertEqual([c["props"] for c in layout.operators("whittle.venv_install")][1].reinstall, True)
         self.assertIn("Not set up yet", layout.labels())
 
+    def test_status_wraps_a_long_path_after_a_folder(self):
+        def measure(text):
+            return 10.0 * len(text)
+
+        path = "/home/someone/checkouts/whittle-development/.venv/bin/python"
+        lines = prefs.wrap_status(f"Not set up yet (the agent uses {path})", 250, measure)
+        self.assertEqual(lines, ["Not set up yet (the agent", "uses /home/someone/",
+                                 "checkouts/", "whittle-development/", ".venv/bin/python)"])
+        self.assertTrue(all(measure(line) <= 250 for line in lines))
+        self.assertEqual(prefs.wrap_status("Ready: sdk 1.0", 250, measure), ["Ready: sdk 1.0"])
+        self.assertEqual(prefs.wrap_status("Ready: sdk 1.0", None, None), ["Ready: sdk 1.0"])
+        self.assertEqual(prefs.wrap_status("abcdefghij", 40, measure), ["abcd", "efgh", "ij"])
+
 
 class _BpyWith:
     """bpy with another bpy.app, since bpy.app's flags are read-only."""
