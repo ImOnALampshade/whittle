@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from string import Template
 
+from .. import style
+
 HERE = Path(__file__).parent
 PLUGIN_DIR = HERE / "plugin"
 PLUGIN_NAME = "whittle"
@@ -21,7 +23,8 @@ SKILLS = [
     "gn-scatter",
 ]
 
-DEFAULTS = {"self_check_rounds": 3, "poly_budget": 2000, "style_notes": "", "render_size": 512}
+DEFAULTS = {"self_check_rounds": 3, "poly_budget": 2000, "style_notes": "", "palette": "", "bevel_style": "",
+            "render_size": 512}
 
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 
@@ -49,12 +52,13 @@ def load_skill(name: str) -> str:
 
 def build(settings: dict | None = None, *, inline_skills: bool = False) -> str:
     values = {**DEFAULTS, **{k: v for k, v in (settings or {}).items() if v is not None}}
-    style = values["style_notes"].strip() or "No extra style notes for this file."
     text = Template((HERE / "system_prompt.md").read_text(encoding="utf-8")).safe_substitute(
         self_check_rounds=values["self_check_rounds"],
         poly_budget=values["poly_budget"],
         render_size=values["render_size"],
-        style_notes=style,
+        palette=style.palette_text(values["palette"]),
+        bevel_style=style.bevel_text(values["bevel_style"]),
+        style_notes=style.notes_text(values["style_notes"]),
     )
     if inline_skills:
         recipes = "\n\n".join(f"## Recipe: {name}\n\n{load_skill(name)}" for name in SKILLS)

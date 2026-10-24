@@ -267,16 +267,27 @@ session can start from the scene, from nothing, from a primitive or from an asse
 - `addon/prefs.py`: four boxes. Claude (the API key, where the key in use comes from
   and a Get an API Key link, the model for new chats, the Powered by Claude line),
   Agent Environment (folder, status, Install / Reinstall / Cancel, the setup log),
-  Defaults (triangle budget, style notes, self-check rounds, render size) and Development
-  (agent Python). Every default comes from `DEFAULTS`.
-- **Per-file settings** (design §10 guardrails, ui.md §3.1): `scene.whittle.poly_budget`
-  and `style_notes` override the preferences for one file and are saved with it; the
-  agent popover edits them under For This File, each "(default)" while unset and with a
-  reset button (`whittle.file_setting_reset`). `prefs.session_settings(scene)` puts them
-  over the preferences, so the session, the request bundle and the restart check all use
-  the file's values. Tests: `tests/blender/test_file_settings.py` (the default read
-  through, an override and its reset, the minimum, a wrong-typed value, another scene,
-  the popover, the values in a saved file read by a fresh Blender, a restart on change).
+  Defaults (triangle budget, self-check rounds, render size, palette, bevel style, style
+  notes) and Development (agent Python). Every default comes from `DEFAULTS`; the palette
+  and bevel style are empty, which leaves those choices to the agent.
+- **Per-file settings** (design §10 guardrails, ui.md §3.1): `scene.whittle.poly_budget`,
+  `self_check_rounds`, `render_size`, `palette`, `bevel_style` and `style_notes` override
+  the preferences for one file and are saved with it; the agent popover edits them under
+  For This File, each "(default)" while unset and with a reset button
+  (`whittle.file_setting_reset`). `prefs.session_settings(scene)` puts them over the
+  preferences, so the session, the request bundle and the restart check all use the
+  file's values. Bevel Style suggests none / subtle / chunky and takes any text.
+  Tests: `tests/blender/test_file_settings.py` (the default read through, an override and
+  its reset, the bounds, a wrong-typed value, another scene, the popover's names, order
+  and resets, the values in a saved file read by a fresh Blender, a restart on each kind
+  of change, the palette and bevel style in the built prompt), `tests/blender/test_prefs.py`
+  (names, tooltips, bounds, the bevel suggestions).
+- **Style in the system prompt**: the prompt ends with "Style for this file", the
+  palette, bevel style and notes as the user's preferences for the file, applied with
+  judgement (`whittle/style.py` words them; a suggested bevel style is spelled out, an
+  empty value leaves the choice to the agent). Tests: `tests/agent/test_prompt.py`,
+  `tests/agent/test_dispatch.py` (a non-string style value is refused). How the model
+  responds to the wording is unchecked: no live run has had a palette or bevel style yet.
 - **API key only** (architecture §2, Authentication): the agent starts only with a key
   (the preference, else `ANTHROPIC_API_KEY` in Blender's environment); without one the
   process goes to `needs_key` and the attention box asks for a key. The agent's
@@ -882,8 +893,9 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     viewport goes back there, and a stroke drawn now joins that view (its row's count
     goes up, no new view). Untick Markers While Sketching: they go.
 13. **Per-file settings** (`stream.json`): the agent popover's For This File shows the
-    preferences' triangle budget and style notes, each "(default)" with its reset button
-    greyed out. Change the budget: the "(default)" goes and the reset button wakes. Send:
-    the agent is started again and the turn's `request.json` carries the file's budget.
-    Save, reopen: the value is still there; another file still shows the default. Reset:
-    "(default)" is back.
+    preferences' six settings, each "(default)" with its reset button greyed out. Change
+    the budget: the "(default)" goes and the reset button wakes. Click into Bevel Style:
+    none, subtle and chunky are offered, and other text can be typed. Set a palette and
+    a bevel style, send: the agent is started again and the turn's `request.json` carries
+    the file's budget, palette and bevel style. Save, reopen: the values are still there;
+    another file still shows the defaults. Reset: "(default)" is back.

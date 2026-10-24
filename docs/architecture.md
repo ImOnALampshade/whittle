@@ -24,6 +24,7 @@ whittle/                          repo root
 │   ├── caches.py                 stdlib only: each file's hidden chats cache, its id and cleanup (§14)
 │   ├── markdown.py               stdlib only: Claude's Markdown (and its TeX, HTML) as Lines for the sidebar
 │   ├── models.py                 stdlib only: model ids by family and version, the model list's cache (§15)
+│   ├── style.py                  stdlib only: the bevel style suggestions and how the prompt words the style
 │   ├── venv.py                   stdlib only: venv status, setup commands, the VenvSetup state machine
 │   ├── requirements.lock         byte-identical copy of agent_env/requirements.lock (packaging step)
 │   ├── addon/                    Blender side; may import bpy everywhere
@@ -97,7 +98,7 @@ Rules:
 
 - Every source file starts with `# SPDX-License-Identifier: GPL-3.0-or-later` (after a
   shebang), and the manifest says `license = ["SPDX:GPL-3.0-or-later"]`.
-- `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `models.py`, `venv.py` and everything under `agent/`
+- `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `models.py`, `style.py`, `venv.py` and everything under `agent/`
   import only the stdlib at module level. `agent/runner.py` imports `claude_agent_sdk`;
   nothing else does, so the fake agent and the formats code run under any Python 3.14,
   including Blender's.
@@ -133,14 +134,22 @@ for text Whittle adds to a turn. The modeling practice
 live or baked booleans, topology, shading, remeshing, a loose triangle budget) is written
 as defaults with reasons rather than hard rules; the research behind it and its sources
 are in [modeling-practices.md](modeling-practices.md). Long technique detail lives in the
-skills. `prompt.build` fills `$self_check_rounds`, `$poly_budget`, `$render_size` and
-`$style_notes`.
+skills. `prompt.build` fills `$self_check_rounds`, `$poly_budget`, `$render_size`,
+`$palette`, `$bevel_style` and `$style_notes`. The last three make the prompt's closing
+section, "Style for this file": a line each, introduced as the user's preferences for this
+file, to apply with judgement (a request's prompt or sketch wins, and a preference that
+does not suit a part can be left off it). `whittle/style.py` (stdlib, shared with the
+add-on) words them: a suggested bevel style (`none`, `subtle`, `chunky`) is spelled out,
+other text goes in as typed, and an empty one says none is set and leaves the choice to
+the agent.
 
-Those settings come from `prefs.session_settings(scene)`: the preferences' Defaults, with
-the scene's per-file overrides on top. `scene.whittle.poly_budget` and `style_notes` read
-and write custom properties (`props.FILE_SETTINGS`: `file_poly_budget`,
-`file_style_notes`) on the scene's property group, so they are saved with the file. An
-unset one reads the preference, a value of the wrong type counts as unset, and
+Those settings come from `prefs.session_settings(scene)`: the preferences' Defaults
+(`prefs.SESSION_SETTINGS`), with the scene's per-file overrides on top. Each of
+`scene.whittle.poly_budget`, `self_check_rounds`, `render_size`, `palette`, `bevel_style`
+and `style_notes` reads and writes a custom property (`props.FILE_SETTINGS`:
+`file_<setting>`) on the scene's property group, so they are saved with the file. An
+unset one reads the preference, a value of the wrong type counts as unset, an integer
+is kept inside the preference's bounds (`prefs.LIMITS`), and
 `whittle.file_setting_reset` deletes one. The scene is the context's (a sketch run or an
 amendment passes its own), and the controller's launch settings include the result, so a
 changed override restarts an idle agent before the next turn, as a changed preference
@@ -349,7 +358,7 @@ Every message has `"v": 1` and `"type"`:
 
 | method | params | data on success |
 |---|---|---|
-| `start_session` | `session_dir`, `store_dir` (the chat's SDK transcript store or null, §14), `model`, `effort` (`low` \| `medium` \| `high`, default `high`, §15), `resume` (sdk session id or null), `fork` (bool), `resume_at` (message uuid or null: where a fork cuts the resumed conversation, §6), `settings` (`{self_check_rounds, poly_budget, style_notes, render_size}`, plus optional `max_turns`, `max_budget_usd` passed to the SDK) | `{}` — replaces any live SDK client; answered once the SDK client has connected |
+| `start_session` | `session_dir`, `store_dir` (the chat's SDK transcript store or null, §14), `model`, `effort` (`low` \| `medium` \| `high`, default `high`, §15), `resume` (sdk session id or null), `fork` (bool), `resume_at` (message uuid or null: where a fork cuts the resumed conversation, §6), `settings` (`{self_check_rounds, poly_budget, style_notes, palette, bevel_style, render_size}`; the three style values must be strings, the rest integers; plus optional `max_turns`, `max_budget_usd` passed to the SDK) | `{}` — replaces any live SDK client; answered once the SDK client has connected |
 | `submit` | `turn_id` (node id), `bundle_dir` (absolute), `prompt` (str), `context` ([str], optional, default []: lines from Whittle put before the prompt), `model` (str or null: the chat's model; a live session on another one is switched to it before the query, §15), `effort` (`low` \| `medium` \| `high` or null: the chat's effort, switched likewise) | `{"accepted": true}` immediately; the turn then streams events |
 | `amend` | `turn_id`, `amend` (int, the amendment number; optional for older callers), `text` (may be ""), `bundle_dir` (absolute amend bundle or null) | `{"queued": true}`; `no_session` before `start_session`, `not_found` when `turn_id` is not the running turn (it already finished) |
 | `interrupt` | `turn_id` | `{}` |
@@ -1249,7 +1258,7 @@ after the first render's shader compile.
 | `views` | [int] — view ids with a folder under `views/` |
 | `refs` | [str] — relative paths inside the bundle (absolute paths and `..` are refused) |
 | `units` | `{"system": str, "scale_length": float}` from `scene.unit_settings` |
-| `settings` | `{self_check_rounds, poly_budget, style_notes}` |
+| `settings` | `{self_check_rounds, poly_budget, style_notes, palette, bevel_style}` |
 | `target_collection` | str \| null, optional — the collection new objects go in (`scene.whittle.target_collection`); a missing key reads as null, so older bundles stay valid |
 
 **strokes.json**: `{"format": "whittle.strokes", "version": 1, "strokes": [Stroke]}`

@@ -9,7 +9,7 @@ from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 
 from .. import chats as chat_store
 from .. import formats
-from . import bundle, chats, compare, editors, history, sketch, targets, transcript, turn, views
+from . import bundle, chats, compare, editors, history, prefs, sketch, targets, transcript, turn, views
 
 log = logging.getLogger("whittle")
 
@@ -934,7 +934,7 @@ class WHITTLE_OT_file_setting_reset(bpy.types.Operator):
     bl_description = "Use the preferences' value in this file again"
     bl_options = {"REGISTER", "UNDO"}
 
-    key: EnumProperty(items=[("poly_budget", "Triangle Budget", ""), ("style_notes", "Style Notes", "")],
+    key: EnumProperty(items=[(k, prefs.LABELS[k], "") for k in prefs.SESSION_SETTINGS],
                       options={"SKIP_SAVE"})
 
     def execute(self, context):

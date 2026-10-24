@@ -30,7 +30,8 @@ SCENARIOS = {
     "long_session": "Thirteen finished turns, to check the panel does not grow without bound.",
     "history_popover": "The history popover over a 13-turn tree with two branches.",
     "turn_menu": "The menu of an earlier turn, opened from its ⋯ button.",
-    "agent_popover": "The agent popover: this file's style notes set, its triangle budget the default.",
+    "agent_popover": "The agent popover: this file's self-check rounds, palette, bevel style and style notes set, "
+                     "its triangle budget and render size the defaults.",
     "references": "Two reference images attached, one of them pinned.",
     "developer": "Developer Extras on, with the development tools shown after a turn.",
     "chat_menu": "The chat menu over three chats, the second-newest current.",

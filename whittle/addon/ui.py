@@ -472,25 +472,34 @@ def draw_indicator(layout, ctl) -> None:
     row.popover("WHITTLE_PT_agent", text="", icon=icon)
 
 
-FILE_SETTING_LABELS = (("poly_budget", "Triangle Budget"), ("style_notes", "Style Notes"))
+# The per-file text fields go under their label: a label beside them would
+# leave a list of colours or notes little room, and the three style fields
+# then line up with each other and with the number fields above.
+OWN_LINE_SETTINGS = ("palette", "bevel_style", "style_notes")
+# The style settings start after a gap, apart from the cost settings above.
+FIRST_STYLE_SETTING = "palette"
 
 
 def draw_file_settings(layout, scene) -> None:
-    """This file's triangle budget and style notes (props.FILE_SETTINGS). An
-    unset one shows the preference's value and says "(default)"; a set one
-    has its reset button enabled. The next turn's session runs with them."""
+    """This file's settings (props.FILE_SETTINGS): the triangle budget, the
+    self-check rounds and render size, then the palette, bevel style and
+    style notes. An unset one shows the preference's value and says
+    "(default)"; a set one has its reset button enabled. The next turn's
+    session runs with them."""
     if getattr(scene, "whittle", None) is None:
         return
     overrides = props.file_settings(scene)
     layout.separator()
     layout.label(text="For This File", icon="FILE_BLEND")
-    for key, label in FILE_SETTING_LABELS:
+    for key in props.FILE_SETTINGS:
+        label = prefs.LABELS[key]
         text = label if key in overrides else f"{label} (default)"
+        if key == FIRST_STYLE_SETTING:
+            layout.separator(factor=0.5)
         col = layout.column(align=True)
-        if key == "style_notes":
-            # A text field's own label would leave the notes little room, so
-            # it goes above, at the field's edge; the reset stays on the
-            # field's line, as the budget's does.
+        if key in OWN_LINE_SETTINGS:
+            # The label goes above, at the field's edge; the reset stays on
+            # the field's line, in one column with the other resets.
             col.label(text=text)
             row = col.row(align=True)
             row.prop(scene.whittle, key, text="")

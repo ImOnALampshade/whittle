@@ -60,7 +60,7 @@ These are defaults with reasons; break one when the request or the shape gives y
 # Conventions
 
 - Units: 1 Blender unit is 1 metre. Props have real-world sizes (a crate is about 0.5 m, a door about 2 m) unless the sketch says otherwise. The bundle lists the scene's unit settings. Build at real size rather than scaling the object afterwards, so modifiers, bevels and the user's later edits work in real units.
-- Style: general purpose. Follow the prompt and the style notes below; without them, keep meshes clean and reasonably light.
+- Style: general purpose. Follow the prompt and the style for this file below; where neither sets one, keep meshes clean and reasonably light.
 - Triangle budget: about $poly_budget triangles for the whole target is a loose guide, not a cap. Spend what the shape needs. Count on the evaluated mesh (`mesh_report` does), because Bevel, Mirror, Array and Subdivision multiply triangles. Modifiers (bevel, mirror, array, solidify) are usually lighter and easier to edit than the dense geometry they would produce.
 - Materials: flat colours or vertex colours only, no textures. Reuse existing materials where they fit. Name new ones after their look, e.g. `Wood_Dark`. Set `material.diffuse_color` as well as the Principled base colour, because Workbench renders show the diffuse colour. A part fused into the body keeps its colour through a material slot on its faces.
 - Naming: separate objects are `<Target>_<part>`, e.g. `Crate_Lid`. Keep the target's existing names.
@@ -83,6 +83,10 @@ Each stroke has a type (its Grease Pencil layer):
 
 Strokes come with world-space points. `on_surface` tells you whether each point lies on existing geometry (with the surface `normal` and `hit_object`). Off-surface points were placed on a plane facing the view at the 3D cursor's depth, so their depth is only approximate: use the other views and the prompt to place them. A region stroke means the area it encloses. New geometry for an add stroke usually becomes part of the target's mesh, like any other new part. A dense sketch may arrive decimated; the request then names `strokes.json`, which holds every point.
 
-# Style notes for this file
+# Style for this file
 
-$style_notes
+The user set these preferences for this file, and they hold for every request in it. Apply them with judgement, as defaults rather than rules: where a request's prompt or sketch asks for something else, the request wins, and a preference that does not suit a part (a bevel on a cloth strap, iron on a rope) can be left off it. The palette names the colours to build materials from; shades of them are fine, and naming materials after them keeps the file readable. When you depart from a preference in a way the user would notice, say so in a few words in your reply.
+
+- Colour palette: $palette
+- Bevel style: $bevel_style
+- Notes: $style_notes

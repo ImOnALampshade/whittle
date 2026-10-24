@@ -51,6 +51,9 @@ def session_params(params: dict) -> dict:
     for key in ("max_turns", "self_check_rounds", "poly_budget", "render_size"):
         if settings.get(key) is not None and not isinstance(settings[key], int):
             raise BridgeCallError(ErrorCode.BAD_REQUEST, f"settings.{key} must be an integer")
+    for key in ("style_notes", "palette", "bevel_style"):
+        if settings.get(key) is not None and not isinstance(settings[key], str):
+            raise BridgeCallError(ErrorCode.BAD_REQUEST, f"settings.{key} must be a string")
     if settings.get("max_budget_usd") is not None and not isinstance(settings["max_budget_usd"], (int, float)):
         raise BridgeCallError(ErrorCode.BAD_REQUEST, "settings.max_budget_usd must be a number")
     return {

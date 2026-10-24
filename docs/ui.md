@@ -121,24 +121,43 @@ repeated here: the attention box has them.
  ─────
  For This File                      (FILE_BLEND)
  [ Triangle Budget (default)  2000 ][⟲]   reset greyed while unset
- Style Notes                              set: no "(default)"
- [ chunky bevels                    ][⟲]   reset enabled, on the field's line
+ [ Self-check Rounds             2 ][⟲]   set: no "(default)", reset enabled
+ [ Render Size (default)       512 ][⟲]
+                                          (half a separator)
+ Palette                                  labels at the fields' left edge;
+ [ weathered oak, dark iron        ][⟲]   each reset on its field's line,
+ Bevel Style                              one column with those above
+ [ chunky                        ✕ ][⟲]   suggests none / subtle / chunky
+ Style Notes
+ [ worn painted wood               ][⟲]
  ─────
  [ Stop Agent ]                     (or [ Start Agent ])
  [ Preferences… ]
 ```
 
-**For This File** (`ui.draw_file_settings`) edits the file's triangle budget and style
-notes (`scene.whittle.poly_budget`, `style_notes`), which the next session runs with
-instead of the preferences' Defaults. They sit here rather than in the chat menu because
-they change how the agent runs, like the model and the session lines above them, and
-apply to every chat in the file. An unset one shows the preference's value with
-"(default)" after its name, so the field always says what Claude gets; typing a value
-sets it, even the same value. The reset button (`LOOP_BACK`, `whittle.file_setting_reset`)
-sits at the end of each row and is greyed out while the setting is unset. The style
-notes take their own line under their label, since a text field beside its label leaves
-the notes little room. Self-check rounds and render size stay preferences: they are cost
-levers for the person, not properties of the model being made.
+**For This File** (`ui.draw_file_settings`) edits the file's session settings, in the
+preferences' order (`prefs.SESSION_SETTINGS`): the triangle budget, self-check rounds and
+render size, then, after half a separator, the style: palette, bevel style and style
+notes (`scene.whittle.poly_budget`, `self_check_rounds`, `render_size`, `palette`,
+`bevel_style`, `style_notes`). The next session runs with them instead of the
+preferences' Defaults. They sit here rather than in the chat menu because they change how
+the agent runs, like the model and the session lines above them, and apply to every chat
+in the file. Self-check rounds and render size are cost levers as much as quality ones,
+so a file can raise them for a hero prop or lower them for quick blockouts. An unset one
+shows the preference's value with "(default)" after its name, so the field always says
+what Claude gets; typing a value sets it, even the same value (an empty palette, bevel
+style or notes is a value too: "none for this file"). The reset button (`LOOP_BACK`,
+`whittle.file_setting_reset`) sits at the end of each field's line, all in one column, and
+is greyed out while the setting is unset. The three style fields take their own line under
+their label, which sits at the fields' left edge: a text field beside its label leaves a
+list of colours or notes little room, and the three then line up.
+
+**Bevel Style** is free text that suggests `none`, `subtle` and `chunky` (a search field
+with `SUGGESTION`, like the model preference), rather than an enum. The three cover most
+props and `whittle/style.py` spells each out for the agent ("subtle: narrow bevels on hard
+edges, just wide enough to catch the light"), while an enum would have no room for a style
+of the user's own, such as "rounded corners only" or "2 mm", which reaches the agent as
+typed. An empty field leaves bevels to Claude, as an unset palette leaves the colours.
 
 The chats line names the file that stores the chats (§3.11); their working copy is a
 hidden cache in Whittle's user folder, never beside the file. For an unsaved file it
@@ -1287,11 +1306,13 @@ Added for per-file settings (§3.1):
 
 | Id | Label | Does |
 |---|---|---|
-| `whittle.file_setting_reset` | Use Default | `key` (`poly_budget`, `style_notes`): the file uses the preference again; undo step |
+| `whittle.file_setting_reset` | Use Default | `key` (`poly_budget`, `self_check_rounds`, `render_size`, `palette`, `bevel_style`, `style_notes`): the file uses the preference again; undo step |
 
-`scene.whittle.poly_budget` (IntProperty, min 10) and `scene.whittle.style_notes`
-(StringProperty) read the file's override, else the preference; setting one stores the
-override in the file.
+`scene.whittle.poly_budget` (IntProperty, min 10), `self_check_rounds` (IntProperty,
+0 to 10), `render_size` (IntProperty, 64 to 1024), `palette`, `bevel_style` (with the
+suggestions) and `style_notes` (StringProperty) read the file's override, else the
+preference; setting one stores the override in the file. Their names, tooltips and
+bounds are the preferences' (`prefs.LABELS`, `DESCRIPTIONS`, `LIMITS`).
 
 Changed:
 
@@ -1428,7 +1449,7 @@ Every feature of the old panels, and where it lives now.
 | Type a prompt, amendment or answer without the mouse | — (new) | Shift+Alt+C (§3.12) |
 | Continue a chat made on another machine | — (new) | The box above the sketch row → Continue (§3.11) |
 | Same file open in another Blender | — (new) | A dim line at the top of the panel (§3.11) |
-| Triangle budget and style notes for one file | — (new; the preferences only) | Agent popover → For This File (§3.1) |
+| Triangle budget, self-check rounds, render size, palette, bevel style and style notes for one file | — (new; the preferences only) | Agent popover → For This File (§3.1) |
 
 ## 10. Screenshot gate
 
@@ -1465,7 +1486,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `long_session` | 4.10; panel no taller than `conversation` + 8 rows |
 | `history_popover` | 13-turn tree, two branches: one indentation step per level, siblings at equal indentation, lines flat, each branch's first row marked ↳ (no disclosure triangles), branch points say "2 branches", titles whole including the current row, current row highlighted, one ⋯ per row |
 | `turn_menu` | the ⋯ menu opened on a turn, Edit & Resend first, then Go Back to This Turn |
-| `agent_popover` | §3.1; Agent and Model lines (no agent yet, so no Chats line); For This File with `Triangle Budget (default)` and its reset greyed, `Style Notes` without "(default)" at the fields' left edge, the notes whole on their own line with the enabled reset at its end, both resets in one column; Start Agent and Preferences…; nothing red |
+| `agent_popover` | §3.1; Agent and Model lines (no agent yet, so no Chats line); For This File with `Triangle Budget (default)` and `Render Size (default)`, their resets greyed; `Self-check Rounds`, `Palette`, `Bevel Style` and `Style Notes` without "(default)", their resets enabled; after a small gap, the three style fields each whole on their own line under its label, the labels at the fields' left edge; every reset on its field's line, all in one column; Start Agent and Preferences…; nothing red |
 | `developer` | Developer Extras on: Development panel shown; off (every other scenario): absent |
 | `chat_menu` | three chats, the second-newest current: New Chat first; Conversations; each entry's title whole, its dim `N turns · <age> · <size>` line; ✓ on the current entry (highlighted), 🗑 on the others; the footer total and three items; nothing red |
 | `chat_menu_many` | 25 chats of varied age and size: 20 entries then `Show 5 More`; long titles shortened with `…` at a word's end, the ✓/🗑 column aligned on every row; ages from `just now` to `over a year ago` |

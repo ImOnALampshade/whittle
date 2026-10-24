@@ -36,7 +36,7 @@ The agent environment is only built for that platform for now.
 
 | The chat menu | The agent popover |
 |---|---|
-| ![The chat menu: New Chat, three conversations with their turns, age and size, and the rename and delete items](docs/images/chat-menu.png) | ![The agent popover: the agent's state, model and effort, this file's triangle budget and style notes, each with its reset button, and Start Agent](docs/images/agent-popover.png) |
+| ![The chat menu: New Chat, three conversations with their turns, age and size, and the rename and delete items](docs/images/chat-menu.png) | ![The agent popover: the agent's state, model and effort, this file's triangle budget, self-check rounds, render size, palette, bevel style and style notes, each with its reset button, and Start Agent](docs/images/agent-popover.png) |
 
 ## Status and limitations
 
@@ -128,11 +128,15 @@ sends renders back to the model. Set spending limits in the Console.
 
 **Model for New Chats** is the model a new chat starts on, `claude-opus-5-5` by default;
 it offers the models your key can use and takes any other model id. The **Defaults** box
-sets the triangle budget, style notes, self-check rounds and render size every session
-starts with. A file can set its own triangle budget and style notes in the agent popover
-(the icon at the right of the panel's header) under **For This File**: an unset one shows
-the preference's value and says "(default)", and the reset button beside a set one goes
-back to it. They are saved with the .blend.
+sets what every session starts with: the triangle budget, self-check rounds and render
+size, and the style Claude works to: a **Palette** (a short list of colours, such as
+"weathered oak, dark iron"), a **Bevel Style** (none, subtle or chunky, or your own words)
+and free **Style Notes**. The palette and bevel style are empty by default, which leaves
+those choices to Claude. A file can set its own value for each of them in the agent
+popover (the icon at the right of the panel's header) under **For This File**: an unset
+one shows the preference's value and says "(default)", and the reset button beside a set
+one goes back to it. They are saved with the .blend. Claude reads the style as the
+preferences for that file, not as rules: a request's prompt or sketch still wins.
 
 ## Use
 

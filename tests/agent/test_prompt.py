@@ -2,6 +2,7 @@
 import json
 import unittest
 
+from whittle import style
 from whittle.agent import prompt
 
 
@@ -24,16 +25,33 @@ class PromptTest(unittest.TestCase):
         self.assertTrue(manifest["description"])
 
     def test_settings_are_substituted(self):
-        text = prompt.build({"poly_budget": 321, "self_check_rounds": 5, "style_notes": "Chunky bevels."})
+        text = prompt.build({"poly_budget": 321, "self_check_rounds": 5, "style_notes": "Chunky bevels.",
+                             "palette": "red", "bevel_style": "subtle", "render_size": 256})
         self.assertIn("321 triangles", text)
         self.assertIn("at most 5 fix rounds", text)
         self.assertIn("Chunky bevels.", text)
         self.assertNotIn("$", text.replace("$self", ""), "no placeholder left unfilled")
 
+    def test_style_for_the_file(self):
+        text = prompt.build({"palette": "weathered oak, dark iron", "bevel_style": "Chunky",
+                             "style_notes": "Worn edges."})
+        self.assertIn("- Colour palette: weathered oak, dark iron\n", text)
+        self.assertIn(f"- Bevel style: {style.BEVEL_STYLES['chunky']}\n", text, "a suggested style is spelled out")
+        self.assertIn("- Notes: Worn edges.\n", text)
+        self.assertIn("Apply them with judgement", text)
+        text = prompt.build({"bevel_style": "  rounded corners only, about 2 mm "})
+        self.assertIn("- Bevel style: rounded corners only, about 2 mm\n", text, "free text as typed")
+        for name in ("none", "subtle", "chunky"):
+            self.assertIn(style.BEVEL_STYLES[name], prompt.build({"bevel_style": name}))
+
     def test_defaults(self):
         text = prompt.build(None)
         self.assertIn(f"{prompt.DEFAULTS['poly_budget']} triangles", text)
-        self.assertIn("No extra style notes", text)
+        self.assertIn(f"- Colour palette: {style.NO_PALETTE}\n", text)
+        self.assertIn(f"- Bevel style: {style.NO_BEVEL_STYLE}\n", text)
+        self.assertIn(f"- Notes: {style.NO_STYLE_NOTES}\n", text)
+        self.assertEqual(prompt.build({"palette": "  ", "bevel_style": "", "style_notes": " "}), text,
+                         "blank is unset")
 
     def test_conventions_are_present(self):
         text = prompt.build({})
