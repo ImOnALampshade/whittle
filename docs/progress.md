@@ -412,26 +412,46 @@ simulated input and the fake agent, by script (opt-in: `./gui_checks.sh [check .
 `WHITTLE_GUI=1 ./run_tests.sh`; about four minutes, a minute of it Blender's autosave
 timer).
 
-- `tests/gui/run.py` (stdlib) runs each check of `tests/gui/catalog.py`, one GUI Blender
-  per phase, one at a time, with `--factory-startup --enable-event-simulate` in the
-  screenshot harness's hidden nested session (`WHITTLE_GUI_VISIBLE=1` shows it). Blender's
-  user folders are `build/gui-checks/blender-user/`; each check has its own work folder
-  with `TMPDIR` (so autosaves and `quit.blend` land there) and `WHITTLE_USER_DIR`. A phase
-  passes when it wrote `phase-<n>.ok` and its Blender exited 0 or was killed by design; an
-  agent process outliving its Blender fails it. Results: `build/gui-checks/report.json`.
+- `tests/gui/run.py` (stdlib) first makes factory preferences in the run's own config,
+  builds the zip with `build.sh` into `build/gui-checks/package/`, and installs it as a
+  user would: `blender --command extension repo-add --clear-all` makes a local repository
+  `gui_checks` in `build/gui-checks/gui_checks/` (the only one listed, so no online one),
+  and `extension install-file --enable` installs Whittle there. It then runs each check of
+  `tests/gui/catalog.py`, one GUI Blender per phase, one at a time, with
+  `--enable-event-simulate` (not `--factory-startup`: the run's saved preferences enable
+  the installed extension at startup) in the screenshot harness's hidden nested session
+  (`WHITTLE_GUI_VISIBLE=1` shows it). Blender's user folders are
+  `build/gui-checks/blender-user/`; each check has its own work folder with `TMPDIR` (so
+  autosaves and `quit.blend` land there) and `WHITTLE_USER_DIR`. `ANTHROPIC_API_KEY` and
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` are taken out of Blender's environment. A
+  phase passes when it wrote `phase-<n>.ok` and its Blender exited 0 or was killed by
+  design; an agent process outliving its Blender fails it. Results:
+  `build/gui-checks/report.json`.
 - `tests/gui/harness.py` runs inside Blender: refuses a config folder other than the
-  run's, registers the add-on, and steps the phase on a persistent timer, so a phase
-  carries on across the files it opens. A phase that returns `KILL` ends with a
-  `kill -9` of its own Blender (no exit handlers, no `quit.blend`).
+  run's, and a Whittle that is not `bl_ext.gui_checks.whittle` loaded from the run's
+  repository; turns off saving the preferences; makes `whittle` an alias of the installed
+  package (`tests/gui/alias.py`: stand-ins without `__file__`, so Blender does not list
+  the checks' imports as the extension's policy violations); and steps the phase on a
+  persistent timer, so a phase carries on across the files it opens. A phase that
+  returns `KILL` ends with a `kill -9` of its own Blender (no exit handlers, no
+  `quit.blend`).
+- `tests/gui/spy.py`: `Spy` wraps a panel's or the preferences' `draw` (Blender looks it
+  up on the class at each redraw), so a check reads what a real redraw of the sidebar,
+  the agent popover or the Preferences window drew, through `RecordingLayout`'s queries.
 - `tests/gui/checks.py`: `GuiStage` (the screenshot stage plus simulated keys, clicks,
   drags and typing, `button()` running an operator as a sidebar button does, in the
   sidebar region with an undo step, File-menu saves and opens, and the fake agent's log)
-  and 23 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
+  and 26 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
   `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `undo_compare`,
   `modal_wait`, `save_as`, `recover_autosave`, `recover_last_session`,
   `crash_keeps_chats`, `dirty_flag`, `send_key`, `shortcut`, `auto_targets`, `branch_undo`,
-  `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`. Each says what it
-  confirms in the catalog.
+  `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`, `preferences_key`,
+  `preferences_environment`, `preferences_defaults`. Each says what it confirms in the
+  catalog. The preference checks open the Preferences through Preferences… as the
+  sidebar runs it, use fake API keys only (Blender has no online access, and the
+  harness asserts so), stand in for agent environments with marker files, a dry run and
+  a setup whose one step is a sleep, and save screenshots of each state in the check's
+  work folder (`preferences-*.png`, `environment-*.png`, `sidebar-no-key.png`).
 - Bugs they found and fixed: a real Ctrl+Z during a turn left the controller with a freed
   Scene, so the turn never finished; Ctrl+Z while sketching did the same to the sketch
   session, so Stop Sketching left the user's stroke placement on Surface; Place Facing the
@@ -439,7 +459,15 @@ timer).
   `region_data`); entering sketch mode with an active-only target (after a click on empty
   space) emptied the target list; strokes drawn on a surface seen at a slant were sent as
   off it (the on-surface test now measures across the surface).
-- Tests: `test_gui_checks.py` (every catalog check has its phases).
+- Running the installed extension changed what `crash_keeps_chats` sees. Registered from
+  the repository after the file had loaded, the add-on found the chats without
+  `load_post`, so the history stayed on the unsaved turn while the scene was the saved
+  one. Enabled at startup as a user's is, `load_post` matches the history to the scene:
+  the unsaved turn is kept as a branch, the conversation shows the saved turn, and the
+  next turn forks from it with a context note. The check now expects that.
+- Tests: `test_gui_checks.py` (every catalog check has its phases; the alias gives the
+  target's modules and nothing under it has a `__file__`; the spy records and passes on
+  each call and wraps a class's draw until removed).
 
 **Chat-style sidebar** (`docs/ui.md` is the spec; every state in its §10 was shot and
 looked at). The Whittle tab reads like a chat app: what Claude is working on, the
@@ -733,10 +761,13 @@ them at each save. Nothing is written beside the `.blend`.
   added through the real file browser, a real Ctrl+Z during a turn (back to the turn's
   start, the agent told), during a comparison and while sketching, scene calls waiting out
   a real transform, Save As, File → Recover (last session and autosave), a crash of
-  Blender and of the agent, the title bar's `*`, Shift+Alt+C and Shift+Alt+Enter, Auto targets following
-  clicks, branch switching and Ctrl+Z, chats and the file carrying them. How the panel
-  looks in each state is covered by the screenshot harness. What still needs a person is
-  the checklist below.
+  Blender and of the agent, the title bar's `*`, Shift+Alt+C and Shift+Alt+Enter, Auto
+  targets following clicks, branch switching and Ctrl+Z, chats and the file carrying them, and, with
+  Whittle installed as an extension, its preferences: the API key's field and source line,
+  the sidebar's no-key box, Agent Environment's states, Model for New Chats, the usage
+  data setting reaching the agent's environment, and the Defaults as each file shows
+  them. How the panel looks in each state is covered by the screenshot harness. What
+  still needs a person is the checklist below.
   - Ctrl+Z during a turn lands exactly on the turn's own step (`Before Whittle turn`), even
     when something changed the scene after the user's last undo step without one of its
     own (a script, say): the `undo_turn` check makes such a change before the turn, and
@@ -877,19 +908,18 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
    (it appears once text is typed) straight after Send, before the turn starts: the turn
    notes that the amendment waits for the turn, then that it was delivered. (The queued
    amendment is tested headlessly, and Shift+Alt+C's amendment during a turn in the GUI.)
-4. **Preferences** (with Whittle installed as an extension: the checks register it from
-   the repository, so it has no preferences there): change Defaults → Triangle Budget and
-   send: the agent is started again ("Starting Claude…" in the turn) and the turn runs.
-   Change Development → Fake Script between turns (`stream.json`, then `ask.json`): the
-   new script plays. Pick another model with the button beside Send and send: the turn
-   runs on it without a restart. Pick Low under Effort in the same menu and send: the
-   turn runs at it, again without a restart, and the agent popover says `Effort: Low`.
-5. **API key** (the real API): with no key in the preferences and no `ANTHROPIC_API_KEY`
-   in Blender's environment, type a prompt and Send: nothing starts, the prompt stays in
-   the box and the box at the top asks for an API key, with Preferences and Get a Key
-   (which opens the Console). Paste a key in the preferences: the box goes, and Send runs
-   the turn. With a wrong key, Send: the turn fails and the box says the API key was
-   refused.
+4. **Fake Script, model and effort between turns**: change Development → Fake Script
+   between turns (`stream.json`, then `ask.json`): the new script plays. Pick another
+   model with the button beside Send and send: the turn runs on it without a restart.
+   Pick Low under Effort in the same menu and send: the turn runs at it, again without a
+   restart, and the agent popover says `Effort: Low`. (The Preferences themselves, a
+   changed default restarting the agent among them, run in `./gui_checks.sh`:
+   `preferences_defaults`.)
+5. **API key** (the real API; the box asking for a key, its Preferences… and the key's
+   source line under the field run in `./gui_checks.sh` with fake keys:
+   `preferences_key`): paste your key into the field in the preferences and Send: the
+   turn runs. With a wrong key, Send: the turn fails and the box says the API key was
+   refused. Get a Key opens the Console's keys page in your browser.
 6. **A real turn on a sketch** (the real agent): draw add and carve strokes on the crate
    from two views, send: Claude's edit follows the strokes, and its renders show them.
 7. **Several viewports**: with two 3D viewports, orbit one and draw in the other: the
@@ -913,10 +943,10 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     from two angles, orbit away: a camera marks each view; tap one with the pen: the
     viewport goes back there, and a stroke drawn now joins that view (its row's count
     goes up, no new view). Untick Markers While Sketching: they go.
-13. **Per-file settings** (`stream.json`): the agent popover's For This File shows the
-    preferences' six settings, each "(default)" with its reset button greyed out. Change
-    the budget: the "(default)" goes and the reset button wakes. Click into Bevel Style:
-    none, subtle and chunky are offered, and other text can be typed. Set a palette and
-    a bevel style, send: the agent is started again and the turn's `request.json` carries
-    the file's budget, palette and bevel style. Save, reopen: the values are still there;
-    another file still shows the defaults. Reset: "(default)" is back.
+13. **Per-file settings by hand** (`stream.json`): the agent popover's For This File shows
+    the preferences' six settings, each "(default)" with its reset button greyed out. Type
+    a budget into its field, then press its reset button: the "(default)" goes, then comes
+    back with the preferences' value (the checks set the field and run the button as it
+    would: `preferences_defaults`). Click into Bevel Style: none, subtle and chunky are
+    offered, and other text can be typed. Set a palette and a bevel style, send: the turn's
+    `request.json` carries them.

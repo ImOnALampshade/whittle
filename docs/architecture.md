@@ -1453,11 +1453,16 @@ timeout 900 blender -b --factory-startup --python-exit-code 1 --python tests/ble
 - **GUI checks** (`./gui_checks.sh`, or `WHITTLE_GUI=1 ./run_tests.sh`; `tests/gui/`,
   `docs/progress.md` has the details): what `-b` cannot do (a real Ctrl+Z, the draw tool,
   a transform's modal operator, file browsers, the Asset Browser, autosave and File →
-  Recover, the title bar's `*`) runs in GUI Blenders started with
-  `--enable-event-simulate` in the screenshot harness's hidden nested session, one per
-  phase of a check, with the fake agent and the run's own user and temporary folders.
-  Phases are generators on a persistent timer; input goes through
-  `Window.event_simulate`; a crash phase ends with a `kill -9` of its own Blender.
+  Recover, the title bar's `*`, the Preferences window) runs in GUI Blenders started
+  with `--enable-event-simulate` in the screenshot harness's hidden nested session, one
+  per phase of a check, with the fake agent and the run's own user and temporary
+  folders. Whittle runs there as an installed extension: the run builds it with
+  `build.sh` and installs it with `blender --command extension install-file` into a
+  local repository of its own under `build/gui-checks/`, and the harness imports it as
+  `whittle` through an alias. Phases are generators on a persistent timer; input goes
+  through `Window.event_simulate`; what the sidebar, a popover or the Preferences drew
+  is read by wrapping the class's `draw`; a crash phase ends with a `kill -9` of its own
+  Blender.
 - Every shell command in development and CI is wrapped in `timeout`.
 
 ---

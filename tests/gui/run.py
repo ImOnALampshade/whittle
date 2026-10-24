@@ -2,10 +2,14 @@
 """Runs the GUI checks in real GUI Blenders, one phase per Blender, one
 Blender at a time: `./gui_checks.sh [check ...]`.
 
-Each Blender runs in the hidden nested session (the screenshot harness's),
-with --enable-event-simulate, so the checks drive it with simulated input
-and real input cannot reach it; its user folders, temporary folder and
-Whittle user folder are the run's own. Exits non-zero when any check
+Whittle is built with build.sh and installed as a real extension, the way
+a user installs it, into a repository of the run's own: Blender's user
+folders are the run's, under build/gui-checks/, and the repository lives
+there too, so the user's own preferences and extensions are never read or
+written. Each Blender runs in the hidden nested session (the screenshot
+harness's), with --enable-event-simulate, so the checks drive it with
+simulated input and real input cannot reach it; its temporary folder and
+Whittle user folder are the check's own. Exits non-zero when any check
 failed. Stdlib only."""
 
 import argparse
@@ -25,6 +29,9 @@ from tests.gui import catalog  # noqa: E402
 from tests.screens.run import hidden_display  # noqa: E402
 
 WORK = REPO / "build" / "gui-checks"
+# The extension repository Whittle is installed into, and the zip build.sh makes.
+REPOSITORY = WORK / catalog.REPOSITORY
+PACKAGE = WORK / "package"
 HARNESS = REPO / "tests" / "gui" / "harness.py"
 AGENT_PYTHON = REPO / ".venv" / "bin" / "python"
 # Startup, loading the add-on and quitting, on top of the phase's own deadline.
@@ -35,9 +42,11 @@ def blender_env(work: Path) -> dict:
     """Blender's user folders point into the run's own folder (Blender
     falls back to the real one for a folder that does not exist, so each is
     made first), its temporary folder (autosave, quit.blend) into the
-    check's, and the agent is the fake one from the dev venv."""
+    check's, and the agent is the fake one from the dev venv. No API key
+    and no usage-data setting of the user's comes along: the preference
+    checks set their own."""
     env = dict(os.environ)
-    for name in ("WHITTLE_LIVE", "ANTHROPIC_API_KEY"):
+    for name in ("WHITTLE_LIVE", "ANTHROPIC_API_KEY", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"):
         env.pop(name, None)
     root = WORK / "blender-user"
     env["BLENDER_USER_RESOURCES"] = str(root)
@@ -71,6 +80,28 @@ def make_base_blend(path: Path) -> None:
                    env=blender_env(WORK / "base"), check=True, stdout=subprocess.DEVNULL)
 
 
+def install_extension() -> None:
+    """Builds the zip with build.sh and installs it as a user would, with
+    Blender's own extension commands, into a local repository in the run's
+    folder, the only one its preferences list (--clear-all drops the
+    defaults, the online one among them). Enabled there, Blender loads it
+    at startup from the saved preferences, so every check runs the
+    installed copy and the Preferences show its own."""
+    env = blender_env(WORK / "base")
+    shutil.rmtree(PACKAGE, ignore_errors=True)
+    shutil.rmtree(REPOSITORY, ignore_errors=True)
+    PACKAGE.mkdir(parents=True)
+    quiet = {"env": env, "check": True, "stdout": subprocess.DEVNULL, "cwd": REPO}
+    subprocess.run(["timeout", "600", str(REPO / "build.sh"), str(PACKAGE)], **quiet)
+    (archive,) = PACKAGE.glob("whittle-*.zip")
+    subprocess.run(["timeout", "120", "blender", "--command", "extension", "repo-add", "--clear-all",
+                    "--name", "GUI Checks", "--directory", str(REPOSITORY), catalog.REPOSITORY], **quiet)
+    subprocess.run(["timeout", "120", "blender", "--command", "extension", "install-file",
+                    "--repo", catalog.REPOSITORY, "--enable", str(archive)], **quiet)
+    if not (REPOSITORY / "whittle" / "blender_manifest.toml").is_file():
+        raise SystemExit(f"gui: Whittle was not installed into {REPOSITORY}")
+
+
 def run_phase(name: str, index: int, phase: catalog.Phase, work: Path) -> str | None:
     """Runs one phase; returns None when it passed, else why not."""
     blend = work / phase.open
@@ -79,7 +110,9 @@ def run_phase(name: str, index: int, phase: catalog.Phase, work: Path) -> str | 
     width, height = catalog.WINDOW
     ok = work / f"phase-{index}.ok"
     ok.unlink(missing_ok=True)
-    cmd = ["timeout", "-s", "KILL", str(int(phase.deadline + OVERHEAD)), "blender", "--factory-startup",
+    # Not --factory-startup: the run's own saved preferences enable the
+    # installed extension.
+    cmd = ["timeout", "-s", "KILL", str(int(phase.deadline + OVERHEAD)), "blender",
            "--enable-event-simulate", "--no-window-focus", "--window-geometry", "0", "0", str(width),
            str(height), str(blend), "--python", str(HARNESS), "--",
            "--check", name, "--phase", str(index), "--work", str(work), "--deadline", str(phase.deadline)]
@@ -153,6 +186,7 @@ def main(argv=None) -> int:
         parser.error(f"unknown check(s): {', '.join(unknown)}")
     names = args.checks or list(catalog.CHECKS)
     make_base_blend(WORK / "base" / "base.blend")
+    install_extension()
     results = [run_check(name) for name in names]
     (WORK / "report.json").write_text(json.dumps({"checks": results}, indent=1) + "\n")
     failed = [r["check"] for r in results if not r["passed"]]

@@ -49,8 +49,9 @@ Whittle is young (0.1.0); expect rough edges.
 - **Sign-in**: an Anthropic API key only (API key and cost). Every turn calls Claude
   and costs tokens.
 - **Checked in a real GUI Blender by script**: flows background tests cannot reach, such
-  as a real Ctrl+Z during a turn, strokes drawn with the real draw tool and File → Recover,
-  run in `./gui_checks.sh` (GUI checks, below). What still needs a person, such as
+  as a real Ctrl+Z during a turn, strokes drawn with the real draw tool, File → Recover
+  and Whittle's preferences as an installed extension, run in `./gui_checks.sh` (GUI
+  checks, below). What still needs a person, such as
   tablet pressure and clicking the sidebar's own buttons, is the manual checklist in
   [docs/progress.md](docs/progress.md).
 
@@ -385,19 +386,29 @@ WHITTLE_GUI=1 ./run_tests.sh            # the whole suite, then every check
 
 Some things only a GUI Blender does: a real Ctrl+Z (undo needs a window), the draw tool
 placing strokes on surfaces, a transform's modal operator, the Asset Browser's context
-menu, file browsers, Blender's autosave and File → Recover, the title bar's `*`.
-`gui_checks.sh` runs each check in `tests/gui/catalog.py` in a real GUI Blender started
-with `--enable-event-simulate`, in the same hidden nested session as `screens.sh`: the
-check builds a scene, drives the add-on with the fake agent, sends the input under test
-(a key, a drag of the draw tool, a right-click) as simulated events through Blender's own
-event handling, and asserts what came of it. A check that needs a restart, a crash or
-Blender's own recovery files runs one Blender per phase (a crash is a `kill -9` of
-Blender itself), sharing a work folder. Blender's user folders, its temporary folder and
-Whittle's user folder are the run's own, under `build/gui-checks/`, so nothing touches
-your preferences, recent files or autosaves. The script exits non-zero if any check
-failed; each phase's Blender log is in `build/gui-checks/<check>/phase-<n>.log`, and
-`build/gui-checks/report.json` lists the results. `WHITTLE_GUI_VISIBLE=1` shows the
-windows on your desktop instead (they ignore real input while they run).
+menu, file browsers, Blender's autosave and File → Recover, the title bar's `*`, the
+Preferences window.
+`gui_checks.sh` first builds the extension with `build.sh` and installs it the way you
+would, with `blender --command extension install-file`, into a local extension
+repository of the run's own (`build/gui-checks/gui_checks/`), so every check runs the
+installed copy and the Preferences show its preferences. It then runs each check in
+`tests/gui/catalog.py` in a real GUI Blender started with `--enable-event-simulate`, in
+the same hidden nested session as `screens.sh`: the check builds a scene, drives the
+add-on with the fake agent, sends the input under test (a key, a drag of the draw tool, a
+right-click) as simulated events through Blender's own event handling, and asserts what
+came of it. A check that needs a restart, a crash or Blender's own recovery files runs
+one Blender per phase (a crash is a `kill -9` of Blender itself), sharing a work folder.
+The preference checks (`preferences_key`, `preferences_environment`,
+`preferences_defaults`) read what Blender's own redraws of the Preferences, the sidebar
+and the agent popover drew; they use fake API keys and stand-in agent environments
+only, never download anything, and Blender runs them without online access. Blender's
+user folders, its temporary folder and Whittle's user folder are the run's own, under
+`build/gui-checks/`, so nothing touches your preferences, extensions, recent files or
+autosaves. The script exits non-zero if any check failed; each phase's Blender log is in
+`build/gui-checks/<check>/phase-<n>.log`, the preference checks leave screenshots of
+what they checked beside it, and `build/gui-checks/report.json` lists the results.
+`WHITTLE_GUI_VISIBLE=1` shows the windows on your desktop instead (they ignore real
+input while they run).
 
 ## Tests
 

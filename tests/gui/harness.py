@@ -11,7 +11,11 @@ to wait that many seconds, or an Until to wait for a condition; simulated
 input is sent by the stage's helpers in between. When it returns, the
 harness writes phase-N.ok in the work folder and quits (or, when the phase
 returned KILL, kills its own Blender as a crash would). Any exception
-prints the traceback and exits with code 1, without the marker."""
+prints the traceback and exits with code 1, without the marker.
+
+Whittle is the extension the run installed, which Blender enabled at
+startup from the run's preferences; `whittle` is an alias of it
+(tests/gui/alias.py), so the checks use the installed modules."""
 
 import argparse
 import os
@@ -27,7 +31,13 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from tests.gui import checks  # noqa: E402
+from tests.gui import catalog  # noqa: E402
+from tests.gui.alias import Alias  # noqa: E402
+
+# The installed extension's module.
+PACKAGE = f"bl_ext.{catalog.REPOSITORY}.whittle"
+# Imported once the alias is in place.
+checks = None
 
 TICK = 0.05
 # The window needs a moment to get its real size before anything is measured.
@@ -37,7 +47,7 @@ SETTLE = 1.0
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(prog="harness.py")
-    parser.add_argument("--check", required=True, choices=sorted(checks.PHASES))
+    parser.add_argument("--check", required=True, choices=sorted(catalog.CHECKS))
     parser.add_argument("--phase", required=True, type=int)
     parser.add_argument("--work", required=True)
     parser.add_argument("--deadline", type=float, default=90.0)
@@ -116,6 +126,29 @@ def _quit():
     return None
 
 
+def refuse(why: str) -> None:
+    print(f"gui: refusing to run: {why}", file=sys.stderr, flush=True)
+    os._exit(1)
+
+
+def use_installed() -> None:
+    """Checks that the add-on running is the one the run installed, from its
+    own repository, then imports it as `whittle` too."""
+    global checks
+    if bpy.context.preferences.addons.get(PACKAGE) is None or PACKAGE not in sys.modules:
+        refuse(f"{PACKAGE} is not enabled (tests/gui/run.py installs it)")
+    where = Path(sys.modules[PACKAGE].__file__).resolve()
+    own = (REPO / "build" / "gui-checks" / catalog.REPOSITORY).resolve()
+    if not where.is_relative_to(own):
+        refuse(f"Whittle was loaded from {where}, not the run's repository {own}")
+    try:
+        Alias("whittle", PACKAGE).install()
+        from tests.gui import checks as loaded
+    except Exception:
+        refuse("the checks cannot import the installed Whittle:\n" + traceback.format_exc())
+    checks = loaded
+
+
 def main() -> None:
     args = parse_args()
     # The GUI writes its recent-files list on load: it must go to the run's
@@ -123,13 +156,11 @@ def main() -> None:
     config = Path(bpy.utils.user_resource("CONFIG")).resolve()
     own = os.environ.get("BLENDER_USER_CONFIG")
     if not own or config != Path(own).resolve():
-        print(f"gui: refusing to run with Blender's config in {config}", file=sys.stderr, flush=True)
-        os._exit(1)
-    # Nothing a check changes may reach the preferences on disk.
+        refuse(f"Blender's config is in {config}")
+    # Nothing a check changes, a fake API key above all, may reach the
+    # preferences on disk.
     bpy.context.preferences.use_preferences_save = False
-    from whittle import addon
-
-    addon.register()
+    use_installed()
     run = Run(args)
     bpy.app.timers.register(run.tick, first_interval=TICK, persistent=True)
 

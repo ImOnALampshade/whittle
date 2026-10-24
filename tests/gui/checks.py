@@ -12,6 +12,7 @@ between them."""
 
 import json
 import math
+import os
 import time
 from pathlib import Path
 
@@ -400,11 +401,28 @@ def crash_turn(stage: GuiStage):
 
 @phase("crash_keeps_chats")
 def crash_reopen(stage: GuiStage):
-    # Started with the file, as after a crash: the add-on finds its chats on
-    # register, and the cache's newer work wins over the file.
+    # Started with the file, as after a crash: Blender enables the installed
+    # add-on, then opens the file, and load_post finds its chats. The cache's
+    # newer work stays, so the unsaved turn is still in the history; the
+    # crash lost its scene, so the conversation follows the file's, the
+    # saved turn, and the next turn branches from there, the agent told.
     yield from stage.settle()
-    expect_unsaved_turn(stage)
-    yield from expect_resumes(stage, "crash-after")
+    found = stage.history()
+    saved, unsaved = stage.recall("saved"), stage.recall("unsaved")
+    expect_equal(chats.file_id(), stage.recall("file_id"), "the file's id (so its cache)")
+    expect_equal(found.chat, stage.recall("chat"), "the current chat")
+    expect(unsaved in found.tree.nodes, f"the unsaved turn {unsaved} is gone: {sorted(found.tree.nodes)}")
+    expect_equal(found.tree.current, saved, "the current node (the file's scene)")
+    shown = [t.node for t in stage.conversation().path_turns]
+    expect_equal(shown[-1:], [saved], "the conversation's last turn")
+    node = stage.submit("And once more.", nudge_script(stage, "crash-after", 1))
+    yield stage.finished(node)
+    expect_equal(stage.history().tree.nodes[node].parent, saved, "the turn after the crash's parent")
+    starts = stage.ctl.session_starts
+    expect_equal([(s.get("resume"), s.get("fork")) for s in starts], [(stage.recall("session"), True)],
+                 "the session the turn forked")
+    expect(any(saved in line for line in stage.context_lines(node)),
+           f"the agent was not told where the turn continues from: {stage.context_lines(node)}")
 
 
 def tmp_files(stage: GuiStage, pattern: str) -> list[Path]:
@@ -1361,3 +1379,482 @@ def references_turn(stage: GuiStage):
     expect_equal([(Path(r.path).name, r.pinned) for r in stage.props.refs], [("side.png", True)],
                  "the references after a turn that succeeded")
 
+
+
+# the preferences -------------------------------------------------------------------------------
+#
+# Whittle runs installed as an extension (tests/gui/run.py), so the Preferences
+# window lists it with its own preferences. What a panel or the preferences
+# drew is read from a Spy (tests/gui/spy.py) on its draw method, at Blender's
+# own redraws. Any API key is a fake one, and Blender runs without online
+# access, so nothing can reach the API.
+
+NO_KEY_LINE = "Whittle needs an Anthropic API key to run Claude."
+ENVIRONMENT_KEY_LINE = "Using ANTHROPIC_API_KEY from Blender's environment."
+TYPED_KEY_LINE = "Usage is billed to the key's Anthropic Console account."
+KEY_LINES = (NO_KEY_LINE, ENVIRONMENT_KEY_LINE, TYPED_KEY_LINE)
+KEY_BOX_TITLE = "Add an API key to start"
+ENVIRONMENT_KEY = "sk-ant-gui-check-environment-not-a-real-key"
+TYPED_KEY = "sk-ant-gui-check-typed-not-a-real-key"
+
+
+def addon_preferences():
+    from whittle.addon import prefs
+
+    addon = bpy.context.preferences.addons.get(prefs.PACKAGE)
+    expect(addon is not None and addon.preferences is not None,
+           f"{prefs.PACKAGE} has no preferences: Whittle is not installed as an extension")
+    return addon.preferences
+
+
+def preferences_window():
+    """The Preferences window, once one is open."""
+    for win in bpy.context.window_manager.windows:
+        if any(a.type == "PREFERENCES" for a in win.screen.areas):
+            return win
+    return None
+
+
+def redraw_all() -> None:
+    for win in bpy.context.window_manager.windows:
+        for area in win.screen.areas:
+            area.tag_redraw()
+
+
+def drawn(spy, what: str, wanted=None, timeout: float = 10.0):
+    """The first draw of the spy's panel from now on that shows what is
+    wanted (any, without wanted), redrawing every window until then."""
+    count = spy.count
+
+    def check():
+        if spy.errors:
+            raise AssertionError(f"{what} failed to draw:\n{spy.errors[-1]}")
+        if spy.count > count and (wanted is None or wanted(spy.latest)):
+            return True
+        redraw_all()
+        return False
+
+    redraw_all()
+    yield Until(check, what, timeout)
+    return spy.latest
+
+
+def shoot(stage: GuiStage, name: str, win) -> None:
+    """A screenshot of a window into the work folder, for a person to look at."""
+    # The Preferences' screen is a temporary one, which an override cannot
+    # name: the window brings its own.
+    area = max(win.screen.areas, key=lambda a: a.width * a.height)
+    with bpy.context.temp_override(window=win, area=area):
+        bpy.ops.screen.screenshot(filepath=str(stage.work / f"{name}.png"))
+
+
+# How far down the Preferences window is scrolled for a screenshot of a box,
+# in steps of the mouse wheel: Blender opens it too small to show all of
+# Whittle's preferences at once.
+SCROLL = {"Claude": 0, "Agent Environment": 6, "Defaults": 60}
+
+
+def shoot_preferences(stage: GuiStage, name: str, box: str):
+    """A screenshot of the Preferences window scrolled to one of Whittle's
+    boxes (roughly: Blender's own lines above them vary)."""
+    override = preferences_override()
+    with bpy.context.temp_override(**override):
+        for _ in range(60):
+            bpy.ops.view2d.scroll_up()
+        for _ in range(SCROLL[box]):
+            bpy.ops.view2d.scroll_down()
+    override["area"].tag_redraw()
+    yield from stage.settle()
+    shoot(stage, name, override["window"])
+
+
+def show_sidebar(stage: GuiStage):
+    from whittle.addon import shortcut
+
+    area, ui = sidebar(stage)
+    shortcut.show_sidebar(area)
+    yield Until(lambda: ui.active_panel_category == shortcut.CATEGORY, "the sidebar's Whittle tab")
+
+
+def open_preferences(stage: GuiStage, spy):
+    """Preferences… as the sidebar's buttons run it: the Preferences window
+    opens on the add-ons, with Whittle's preferences. Returns their first
+    draw."""
+    from whittle.addon import prefs
+
+    expect_equal(stage.button("preferences.addon_show", module=prefs.PACKAGE), {"FINISHED"}, "Preferences…")
+    yield Until(lambda: preferences_window() is not None, "the Preferences window")
+    expect_equal(bpy.context.preferences.active_section, "ADDONS", "the Preferences' section")
+    return (yield from drawn(spy, "Whittle's preferences"))
+
+
+def preferences_override() -> dict:
+    """The Preferences window's main region, where its buttons run."""
+    win = preferences_window()
+    area = next(a for a in win.screen.areas if a.type == "PREFERENCES")
+    region = next(r for r in area.regions if r.type == "WINDOW")
+    return {"window": win, "area": area, "region": region}
+
+
+def in_box(layout, title: str) -> list:
+    """The records drawn inside the box whose first label is title, in order."""
+    for c in layout.of("box"):
+        child = c["child"]
+        mine = [r for r in layout.calls if r["layout"] is child]
+        if not (mine and mine[0]["kind"] == "label" and mine[0]["text"] == title):
+            continue
+        start = layout.calls.index(mine[0])
+        end = next((i for i in range(start + 1, len(layout.calls)) if layout.calls[i]["depth"] < child.depth),
+                   len(layout.calls))
+        return layout.calls[start:end]
+    raise AssertionError(f"no box titled {title!r} among {layout.labels()}")
+
+
+def key_line(layout) -> str:
+    """The line under the API Key field: where the key comes from."""
+    found = [t for t in layout.labels() if t in KEY_LINES]
+    expect_equal(len(found), 1, f"the key's source lines among {layout.labels()}")
+    return found[0]
+
+
+@phase("preferences_key")
+def preferences_key(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle.addon import prefs, ui
+    from whittle.addon.process import AgentState
+
+    # A fake key could only ever reach the API with online access.
+    expect(not bpy.app.online_access, "Blender has online access")
+    expect(prefs.ENV_KEY not in os.environ, "the run left ANTHROPIC_API_KEY in Blender's environment")
+    p = addon_preferences()
+    expect_equal(p.api_key, "", "the API key preference at the start")
+    expect_equal(p.bl_rna.properties["api_key"].subtype, "PASSWORD", "the API Key field's kind")
+    stage.crate()
+    yield from show_sidebar(stage)
+    panel = Spy(ui.WHITTLE_PT_main)
+
+    # Send without a key: nothing starts, and the sidebar asks for one.
+    bpy.context.window_manager.whittle_fake_script = ""
+    stage.props.prompt = "Add a lid."
+    try:
+        stage.run(operators.submit_sketch)
+    except RuntimeError:
+        pass
+    yield Until(lambda: stage.ctl is not None and stage.ctl.process.state == AgentState.NEEDS_KEY,
+                "Send to ask for a key")
+    expect_equal(stage.props.prompt, "Add a lid.", "the prompt box after Send without a key")
+    side = yield from drawn(panel, "the sidebar's key box", lambda d: KEY_BOX_TITLE in d.labels())
+    buttons = [(r["idname"], r.get("text")) for r in in_box(side, KEY_BOX_TITLE) if r["kind"] == "operator"]
+    expect_equal(buttons, [("wm.url_open", "Get a Key"), ("preferences.addon_show", "Preferences…")],
+                 "the key box's buttons")
+    expect_equal([o.url for o in side.operator_props("wm.url_open")], [prefs.KEYS_URL], "where Get a Key goes")
+    expect_equal([o.module for o in side.operator_props("preferences.addon_show")], [prefs.PACKAGE],
+                 "what Preferences… shows")
+    shoot(stage, "sidebar-no-key", stage.window)
+
+    # Preferences…, as the box's button runs it.
+    spy = Spy(prefs.WhittlePreferences)
+    page = yield from open_preferences(stage, spy)
+    # Blender's own lines above the preferences: an installed extension
+    # that puts its modules or folders where they do not belong is warned
+    # about there.
+    import addon_utils
+
+    expect_equal(addon_utils._extensions_warnings_get().get(prefs.PACKAGE, []), [],
+                 "the warnings the Preferences show for Whittle")
+    claude = in_box(page, "Claude")
+    expect_equal([r["prop"] for r in claude if r["kind"] == "prop"], ["api_key", "model", "usage_data"],
+                 "the Claude box's fields")
+    expect_equal(key_line(page), NO_KEY_LINE, "the key's source line with no key")
+    links = [(r.get("text"), r["props"].url) for r in claude if r["kind"] == "operator"]
+    expect_equal(links, [("Get an API Key", prefs.KEYS_URL)], "the Claude box's link")
+    yield from shoot_preferences(stage, "preferences-no-key", "Claude")
+
+    # A key in Blender's environment: the sidebar's box goes.
+    os.environ[prefs.ENV_KEY] = ENVIRONMENT_KEY
+    yield from drawn(spy, "the environment's key line", lambda d: key_line(d) == ENVIRONMENT_KEY_LINE)
+    expect_equal(prefs.api_key(), (ENVIRONMENT_KEY, "environment"), "the key from the environment")
+    yield from drawn(panel, "the sidebar without its key box", lambda d: KEY_BOX_TITLE not in d.labels())
+    yield from shoot_preferences(stage, "preferences-environment-key", "Claude")
+
+    # A key typed in the field wins over the environment's, and clears the ask.
+    p.api_key = TYPED_KEY
+    expect_equal(prefs.api_key(), (TYPED_KEY, "preferences"), "the key with both set")
+    expect_equal(stage.ctl.process.state, AgentState.STOPPED, "the agent's state once a key is typed")
+    yield from drawn(spy, "the typed key's line", lambda d: key_line(d) == TYPED_KEY_LINE)
+    yield from shoot_preferences(stage, "preferences-typed-key", "Claude")
+    del os.environ[prefs.ENV_KEY]
+    yield from drawn(spy, "the typed key's line alone", lambda d: key_line(d) == TYPED_KEY_LINE)
+    side = yield from drawn(panel, "the sidebar with a typed key")
+    expect(KEY_BOX_TITLE not in side.labels(), "the key box stayed once a key was typed")
+
+    # Cleared again: the line says so, and no agent ever ran.
+    p.api_key = ""
+    yield from drawn(spy, "the no-key line again", lambda d: key_line(d) == NO_KEY_LINE)
+    expect(stage.ctl.process.popen is None, "an agent was started with a fake key")
+
+
+def environment_status(layout) -> tuple[str, str]:
+    """The Agent Environment box's status line: the label after its folder."""
+    box = in_box(layout, "Agent Environment")
+    index = next(i for i, r in enumerate(box) if r["kind"] == "prop" and r["prop"] == "venv_dir")
+    label = next(r for r in box[index + 1:] if r["kind"] == "label")
+    return label["text"], label["icon"]
+
+
+def environment_buttons(layout) -> list:
+    return [(r["idname"], r.get("text"), getattr(r["props"], "reinstall", False))
+            for r in in_box(layout, "Agent Environment") if r["kind"] == "operator"]
+
+
+SET_UP_BUTTONS = [("whittle.venv_install", None, False), ("whittle.venv_install", "Reinstall", True)]
+
+
+@phase("preferences_environment")
+def preferences_environment(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle import venv
+    from whittle.addon import prefs, setup
+
+    expect(not bpy.app.online_access, "Blender has online access")
+    p = addon_preferences()
+    spy = Spy(prefs.WhittlePreferences)
+    yield from open_preferences(stage, spy)
+    agent = os.environ["WHITTLE_AGENT_PYTHON"]
+    uses = f" (the agent uses {agent})"
+    lock = setup.lock_path()
+    sdk = venv.read_pins(lock)[venv.SDK]
+    folders = stage.work / "venvs"
+    other_lock = stage.work / "other.lock"
+    other_lock.write_text(f"{venv.SDK}==0.0.1 --hash=sha256:{'0' * 64}\n")
+
+    def made_by_whittle(name: str, marker_lock: Path, complete: bool = True) -> Path:
+        """A folder as a setup leaves it, its python linking to the agent's."""
+        folder = folders / name
+        (folder / "bin").mkdir(parents=True)
+        (folder / "bin" / "python").symlink_to(agent)
+        venv.write_marker(folder, marker_lock, sdk=sdk, base_python=Path(agent), complete=complete)
+        return folder
+
+    foreign = folders / "foreign"
+    foreign.mkdir(parents=True)
+    (foreign / "notes.txt").write_text("not a venv\n")
+    states = [
+        ("missing", folders / "missing", ("Not set up yet" + uses, "ERROR")),
+        ("foreign", foreign, ("The folder holds something Whittle did not make" + uses, "ERROR")),
+        ("unfinished", made_by_whittle("unfinished", lock, complete=False),
+         ("Incomplete or its Python is gone: reinstall" + uses, "ERROR")),
+        ("other-lock", made_by_whittle("other-lock", other_lock),
+         ("Set up for an earlier version of Whittle: reinstall" + uses, "ERROR")),
+        # Ready: the agent override is no longer worth a mention.
+        ("ready", made_by_whittle("ready", lock), (f"Ready: {venv.SDK} {sdk}", "CHECKMARK")),
+    ]
+    for name, folder, wanted in states:
+        p.venv_dir = str(folder)
+        page = yield from drawn(spy, f"the {name} environment's status",
+                                lambda d, w=wanted: environment_status(d) == w)
+        expect_equal(environment_buttons(page), SET_UP_BUTTONS, f"the {name} environment's buttons")
+        yield from shoot_preferences(stage, f"environment-{name}", "Agent Environment")
+
+    # A dry run, as Set Up runs with dry_run: the commands are logged under
+    # the box; nothing is made and nothing downloaded.
+    target = folders / "dry-run"
+    p.venv_dir = str(target)
+    with bpy.context.temp_override(**preferences_override()):
+        result = bpy.ops.whittle.venv_install("INVOKE_DEFAULT", dry_run=True)
+    expect_equal(result, {"FINISHED"}, "the dry run")
+    dry = setup.current()
+    expect(dry.dry_run and dry.state == "done", f"the dry run ended {dry.state}")
+    page = yield from drawn(spy, "the dry run's log", lambda d: "dry run: nothing was run" in d.labels())
+    expect(any(t.startswith("$ ") for t in page.labels()), f"the dry run's log has no command: {page.labels()}")
+    expect_equal(environment_status(page), ("Not set up yet" + uses, "ERROR"), "the status after a dry run")
+    expect("--require-hashes" in dry.log_path.read_text(), "the dry run's install is not hash-checked")
+    expect(not target.exists(), "the dry run made the environment folder")
+    yield from shoot_preferences(stage, "environment-dry-run", "Agent Environment")
+
+    # A setup running: a stand-in whose one step is a sleep, never pip.
+    target = folders / "stand-in"
+    p.venv_dir = str(target)
+    stand_in = venv.VenvSetup([venv.Step("create", [agent, "-c", "import time; time.sleep(60)"], 90.0)],
+                              venv=target, lock=lock, log_path=stage.work / "stand-in.log",
+                              base_python=Path(agent), on_finish=setup._finished)
+    setup._current = stand_in
+    stand_in.start()
+    setup._start_timer()
+    sleeper = stand_in._proc
+    page = yield from drawn(spy, "the running setup",
+                            lambda d: environment_status(d) == ("Setting up: create…", "SORTTIME"))
+    expect_equal(environment_buttons(page), [("whittle.venv_cancel", None, False)], "the running setup's buttons")
+    yield from shoot_preferences(stage, "environment-running", "Agent Environment")
+    with bpy.context.temp_override(**preferences_override()):
+        result = bpy.ops.whittle.venv_cancel()
+    expect_equal(result, {"FINISHED"}, "Cancel Setup")
+    yield Until(lambda: sleeper.poll() is not None, "the stand-in's step to stop")
+    page = yield from drawn(spy, "the cancelled setup",
+                            lambda d: environment_status(d) == ("Setup cancelled: cancelled during create", "CANCEL"))
+    expect_equal(environment_buttons(page), SET_UP_BUTTONS, "the cancelled setup's buttons")
+    expect_equal(venv.status(target, lock), venv.VenvStatus.BROKEN, "the cancelled setup's folder")
+    yield from shoot_preferences(stage, "environment-cancelled", "Agent Environment")
+
+
+def agent_popover(stage: GuiStage, spy):
+    """The header's agent popover, opened over the sidebar and closed again.
+    Returns what it drew."""
+    count = spy.count
+    area, ui = sidebar(stage)
+    with bpy.context.temp_override(window=stage.window, screen=stage.window.screen, area=area, region=ui):
+        bpy.ops.wm.call_panel(name="WHITTLE_PT_agent", keep_open=False)
+    yield Until(lambda: spy.count > count, "the agent popover to draw")
+    if spy.errors:
+        raise AssertionError(f"the agent popover failed to draw:\n{spy.errors[-1]}")
+    layout = spy.latest
+    yield from stage.key("ESC")
+    yield 0.2
+    return layout
+
+
+def file_setting(layout, key: str) -> tuple[str, bool]:
+    """For This File's line for a setting: its label, and whether its reset
+    button is enabled."""
+    label = {"poly_budget": "Triangle Budget", "style_notes": "Style Notes"}[key]
+    if key == "style_notes":
+        texts = [t for t in layout.labels() if t.startswith(label)]
+    else:
+        texts = [r.get("text") for r in layout.of("prop") if r["prop"] == key]
+    expect_equal(len(texts), 1, f"For This File's {label} lines")
+    resets = [r for r in layout.operators("whittle.file_setting_reset") if r["props"].key == key]
+    expect_equal(len(resets), 1, f"{label}'s reset buttons")
+    return texts[0], layout.is_enabled(resets[0])
+
+
+def agent_environ(stage: GuiStage) -> dict:
+    """The environment the running agent's process was started with."""
+    raw = Path(f"/proc/{stage.ctl.process.popen.pid}/environ").read_bytes()
+    return dict(item.split("=", 1) for item in raw.decode(errors="replace").split("\0") if "=" in item)
+
+
+def defaults_turn(stage: GuiStage, prompt: str):
+    """A turn; returns its session's start and the agent's process id. The
+    request the turn sent carries the session's budget and notes too."""
+    script = stage.script("defaults", [{"steps": [say("Looked.")], "finish": done("Looked.")}] * 8)
+    node = stage.submit(prompt, script)
+    yield stage.finished(node)
+    started = stage.ctl.session_starts[-1]
+    request = json.loads((stage.ctl.session.request_dir(node) / "request.json").read_text())
+    expect_equal(budget_and_notes(request), budget_and_notes(started), "the budget and notes the request carries")
+    return started, stage.ctl.process.popen.pid
+
+
+def budget_and_notes(sent: dict) -> tuple:
+    return sent["settings"]["poly_budget"], sent["settings"]["style_notes"]
+
+
+@phase("preferences_defaults")
+def preferences_defaults(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle.addon import models, prefs, ui
+    from whittle.addon.process import NONESSENTIAL
+
+    p = addon_preferences()
+    stage.crate()
+    yield from show_sidebar(stage)
+    spy = Spy(prefs.WhittlePreferences)
+    page = yield from open_preferences(stage, spy)
+    expect_equal([r.get("text") for r in in_box(page, "Claude") if r["kind"] == "prop" and r["prop"] == "model"],
+                 ["Model for New Chats"], "the model field's label")
+    expect_equal([r["prop"] for r in in_box(page, "Defaults") if r["kind"] == "prop"],
+                 ["poly_budget", "self_check_rounds", "render_size", "style_notes"], "the Defaults box's fields")
+    expect_equal([r["prop"] for r in in_box(page, "Files") if r["kind"] == "prop"], ["store_chats"],
+                 "the Files box's fields")
+    expect(not p.usage_data, "Send Claude Code usage data is on by default")
+    yield from shoot_preferences(stage, "preferences-defaults", "Defaults")
+    popover = Spy(ui.WHITTLE_PT_agent)
+
+    # The first turn runs with the preferences as they are.
+    started, pid = yield from defaults_turn(stage, "Look at it.")
+    first_chat, first_model = chats.get().current, started["model"]
+    expect_equal(first_model, p.model, "the first chat's model")
+    expect_equal(budget_and_notes(started), (p.poly_budget, p.style_notes), "the first session's budget and notes")
+    expect_equal(agent_environ(stage).get(NONESSENTIAL), "1", f"{NONESSENTIAL} with usage data off")
+    layout = yield from agent_popover(stage, popover)
+    expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget (default)", False), "For This File's budget")
+    expect_equal(file_setting(layout, "style_notes"), ("Style Notes (default)", False), "For This File's notes")
+
+    # New defaults: the file shows them, and the next turn restarts the agent with them.
+    p.poly_budget, p.style_notes = 1500, "chunky bevels"
+    layout = yield from agent_popover(stage, popover)
+    expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget (default)", False),
+                 "For This File's budget after the preference changed")
+    expect_equal((stage.props.poly_budget, stage.props.style_notes), (1500, "chunky bevels"),
+                 "what For This File's fields show")
+    started, pid2 = yield from defaults_turn(stage, "Look again.")
+    expect(pid2 != pid, "the agent was not restarted for the new defaults")
+    expect_equal(budget_and_notes(started), (1500, "chunky bevels"), "the session's budget and notes")
+
+    # Usage data on: the restarted agent's CLI may send it.
+    p.usage_data = True
+    _started, pid3 = yield from defaults_turn(stage, "And again.")
+    expect(pid3 != pid2, "the agent was not restarted when usage data was turned on")
+    expect(NONESSENTIAL not in agent_environ(stage), f"{NONESSENTIAL} with usage data on")
+
+    # Model for New Chats: the next new chat starts on it; the first keeps its own.
+    offered = prefs._model_search(None, None, "")
+    expect(first_model in offered, f"the model field does not offer {first_model}: {offered}")
+    other = next((m for m in offered if m != first_model), None)
+    expect(other is not None, f"the model field offers nothing else: {offered}")
+    p.model = other
+    stage.run(operators.new_chat)
+    second_chat = chats.get().current
+    started, _pid = yield from defaults_turn(stage, "Look from the new chat.")
+    expect_equal(started["model"], other, "the new chat's model")
+    expect_equal(chats.get().model(second_chat), other, "the model the new chat keeps")
+    stage.run(operators.switch_chat, first_chat)
+    expect_equal(models.chat_model(), first_model, "the first chat's model after the default changed")
+
+    # This file's own budget wins over the preference.
+    stage.props.poly_budget = 800
+    layout = yield from agent_popover(stage, popover)
+    expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget", True), "For This File's own budget")
+    expect_equal(file_setting(layout, "style_notes"), ("Style Notes (default)", False),
+                 "For This File's notes beside the file's own budget")
+    started, pid5 = yield from defaults_turn(stage, "Look with the file's budget.")
+    expect(pid5 != pid3, "the agent was not restarted for the file's budget")
+    expect_equal(budget_and_notes(started), (800, "chunky bevels"), "the session's budget and notes")
+    stage.save_as(stage.work / "scene.blend")
+    yield from stage.settle()
+
+
+@phase("preferences_defaults")
+def preferences_defaults_reopen(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle.addon import prefs, props, ui
+
+    # A fresh Blender: the preferences are the run's again, since checks never save them.
+    p = addon_preferences()
+    expect_equal((p.poly_budget, p.style_notes, p.model, p.usage_data),
+                 (prefs.DEFAULTS["poly_budget"], "", prefs.DEFAULTS["model"], False),
+                 "the preferences in a fresh Blender")
+    yield from show_sidebar(stage)
+    popover = Spy(ui.WHITTLE_PT_agent)
+    expect_equal(props.file_settings(bpy.context.scene), {"poly_budget": 800}, "the reopened file's settings")
+    layout = yield from agent_popover(stage, popover)
+    expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget", True), "the reopened file's budget")
+    expect_equal(stage.props.poly_budget, 800, "the budget the reopened file shows")
+
+    # Another file shows the preference.
+    stage.open(stage.work / "base.blend")
+    yield from stage.settle()
+    yield from show_sidebar(stage)
+    layout = yield from agent_popover(stage, popover)
+    expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget (default)", False), "another file's budget")
+    expect_equal(stage.props.poly_budget, p.poly_budget, "the budget another file shows")
+
+    # The reset button gives the file the preference back.
+    stage.open(stage.work / "scene.blend")
+    yield from stage.settle()
+    yield from show_sidebar(stage)
+    expect_equal(stage.button("whittle.file_setting_reset", key="poly_budget"), {"FINISHED"}, "the reset button")
+    layout = yield from agent_popover(stage, popover)
+    expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget (default)", False),
+                 "the budget after its reset")
+    expect_equal(props.file_settings(bpy.context.scene), {}, "the file's settings after the reset")
