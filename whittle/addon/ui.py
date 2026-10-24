@@ -513,7 +513,9 @@ def draw_file_settings(layout, scene) -> None:
 
 def draw_agent(layout, ctl, scene=None) -> None:
     state = agent_state(ctl)
-    layout.label(text=f"Agent: {state}", icon="SORTTIME" if state in BUSY_STATES else "NONE")
+    # Every line here has an icon or a blank one, so the text lines up in one
+    # column with Model, Effort and For This File.
+    layout.label(text=f"Agent: {state}", icon="SORTTIME" if state in BUSY_STATES else "BLANK1")
     reason = ctl.process.reason if ctl is not None and state in (AgentState.CRASHED, AgentState.FAILED) \
         else None
     if reason:

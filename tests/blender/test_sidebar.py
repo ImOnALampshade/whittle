@@ -290,6 +290,19 @@ class DrawTest(AddonTestCase):
         self.assertIn("Agent: stopped", layout.labels())
         self.assertEqual(len(layout.operators("whittle.agent_start")), 1)
 
+    def test_agent_popover_lines_share_one_column(self):
+        for ctl in (None, fake_controller(), fake_controller(AgentState.STARTING),
+                    fake_controller(AgentState.CRASHED, reason="the agent exited with code 3", alive=False)):
+            with self.subTest(state=ui.agent_state(ctl)):
+                layout = RecordingLayout()
+                ui.draw_agent(layout, ctl, self.scene)
+                heads = ("Agent: ", "Model: ", "Effort: ", "Chats: ", "For This File")
+                lines = [c for c in layout.of("label") if c["text"].startswith(heads)]
+                self.assertGreaterEqual(len(lines), 4)
+                for call in lines:
+                    self.assertNotEqual(call["icon"], "NONE",
+                                        f"{call['text']!r} has no icon, so it sits left of the others")
+
     def test_target_line(self):
         self.props.target_auto = True
         self.props.targets.add().object = self.crate

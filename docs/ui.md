@@ -113,8 +113,8 @@ repeated here: the attention box has them.
 `WHITTLE_PT_agent` shows:
 
 ```
- Agent: ready
-   ·the agent exited with code 3·    (dim, only when crashed or failed)
+ Agent: ready                       (blank icon; SORTTIME while busy)
+ ·the agent exited with code 3·     (dim, only when crashed or failed)
  Model: Opus 5.5 (claude-opus-5-5)   the current chat's (§3.13)
  Effort: High                       the current chat's (§3.13)
  Chats: in crate.blend              (FILE_BLEND)
@@ -134,6 +134,10 @@ repeated here: the attention box has them.
  [ Stop Agent ]                     (or [ Start Agent ])
  [ Preferences… ]
 ```
+
+The lines above the fields (Agent, the reason, Model, Effort, Chats and For This File)
+each draw an icon, `BLANK1` where there is nothing to show, so their text starts in one
+column.
 
 **For This File** (`ui.draw_file_settings`) edits the file's session settings, in the
 preferences' order (`prefs.SESSION_SETTINGS`): the triangle budget, self-check rounds and
