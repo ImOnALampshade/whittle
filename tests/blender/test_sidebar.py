@@ -545,8 +545,11 @@ class ConversationDrawTest(HistoryCase):
         self.assertIn("1 later turn", layout.labels())
         (back,) = [c for c in layout.operators("whittle.branch_switch") if c["text"] == "Return to Latest"]
         self.assertEqual(back["props"].node, "n0002")
-        self.assertEqual(layout.operators("whittle.submit")[0]["text"], "Send as Branch")
+        self.assertEqual(layout.operators("whittle.submit")[0]["text"], "Branch",
+                         "the default sidebar's Send has no room for Send as Branch")
         self.assertNotIn("Add handles.", layout.labels(), "the conversation ends at the current turn")
+        layout = self.draw(fake_controller(), self.hist, width=400)
+        self.assertEqual(layout.operators("whittle.submit")[0]["text"], "Send as Branch", "a wide sidebar")
 
     def test_a_long_session_folds(self):
         self.chain(13)

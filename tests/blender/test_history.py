@@ -51,7 +51,7 @@ class NodesTest(HistoryTurnCase):
             self.assertEqual(self.props.history_node, node)
             steps = [c.args[0] for c in self.undo.call_args_list]
             self.assertEqual(len(steps), 2 * i, "one undo step before and one after each turn")
-            self.assertEqual(steps[-2:], [f"Whittle: before {node}", f"Whittle: {node} {prompt}"])
+            self.assertEqual(steps[-2:], [turn.TURN_START_UNDO, f"Whittle: {node} {prompt}"])
         lid = ctl.history.node("n0002")
         self.assertEqual(lid.created_uids, [bpy.data.objects["Crate_Lid"]["whittle_uid"]])
         self.assertEqual(len({ctl.history.node(n).agent_session_id for n in ("n0001", "n0002", "n0003")}), 1,
@@ -140,7 +140,7 @@ class OutcomeTest(HistoryTurnCase):
         self.assertEqual([n.id for n, _d in hist.tree.walk()], ["n0000"])
         self.assertFalse(ctl.session.thumb_path(node).exists())
         self.assertTrue(ctl.session.transcript_path(node).is_file(), "the transcript is kept")
-        self.assertEqual([c.args[0] for c in self.undo.call_args_list], [f"Whittle: before {node}"],
+        self.assertEqual([c.args[0] for c in self.undo.call_args_list], [turn.TURN_START_UNDO],
                          "nothing changed, so no undo step after it")
         self.assertFalse(operators.can_restore(hist, ctl, node))
         self.assertTrue(operators.can_branch(hist, ctl, node), "editing it only brings its prompt back")

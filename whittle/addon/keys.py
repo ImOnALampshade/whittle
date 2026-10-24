@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Default keys for sketching: toggle Sketch mode, the next stroke type,
-Capture View and Send, so a tablet's express keys can be mapped to them.
+Capture View and Send (Amend while Claude works), so a tablet's express
+keys can be mapped to them.
 
 They are add-on items in the 3D View keymap, which applies in every mode
 over the viewport, Grease Pencil Draw Mode included, and they are listed and
@@ -16,7 +17,7 @@ KEYS = (
     ("whittle.sketch_toggle", "D"),       # D for draw
     ("whittle.next_stroke_type", "N"),    # N for next
     ("whittle.capture_view", "V"),        # V for view
-    ("whittle.submit", "RET"),            # Enter sends, as in the prompt box
+    ("whittle.send_key", "RET"),          # Enter sends or amends, as in the prompt box
 )
 
 _keymaps: list = []

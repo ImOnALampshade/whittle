@@ -30,6 +30,10 @@ _KEY_REFUSED = re.compile(r"not logged in|invalid.{0,12}api.?key|x-api-key|authe
 KEY_REFUSED = "The API key was refused"
 
 
+# The undo step pushed as a turn starts, before the agent's first edit:
+# Ctrl+Z during the turn lands on it (TurnController.before_undo).
+TURN_START_UNDO = "Before Whittle turn"
+
 UNDO_NOTE = ("The user pressed undo during this turn: the scene went back to how it was when the "
              "turn began, or earlier, so your edits so far may be gone and objects you hold in "
              "variables may no longer exist. Inspect the target before you go on.")
@@ -118,6 +122,10 @@ class TurnController:
         # The prompt box's text, taken by Send: (scene, text). It goes back if
         # the run never starts or its turn folds away.
         self._sent_prompt: tuple[object, str] | None = None
+        # Whether the running turn's start has its undo step yet, and how
+        # many of its edits the latest undo step holds.
+        self._start_pushed = False
+        self._undo_edits = 0
         # The latest turn of this Blender session if it failed without
         # changing anything: not in the tree, but shown once with Retry.
         self.last_folded: str | None = None
@@ -137,7 +145,8 @@ class TurnController:
             session=self.session, turn_id=lambda: self.turn_id, bundle=lambda: self.bundle,
             settings=prefs.session_settings(), on_ask=self._on_ask,
             amend_bundles=self._amend_bundles, turn_number=self._turn_number,
-            turn_objects=self._turn_objects, on_restored=self._on_checkpoint_restored)
+            turn_objects=self._turn_objects, on_restored=self._on_checkpoint_restored,
+            before_edit=self._push_turn_start)
         self.process = AgentProcess(handlers=commands.build_handlers(self.commands),
                                     on_event=self.on_event, fake_script=fake_script, python=python,
                                     agent_token=agent_token, use_timer=use_timer)
@@ -486,10 +495,9 @@ class TurnController:
         self._preexisting = {o.session_uid for o in bpy.data.objects}
         # In Edit Mode the target's live mesh is not in its data yet.
         snapshot.leave_edit_mode(turn_targets)
-        # An undo during the turn goes back to here, not past the user's
-        # last change. Not in the middle of a modal operation.
-        if not modal_running():
-            history.undo_push(f"{history.UNDO_PREFIX}: before {node}")
+        self._start_pushed = False
+        self._undo_edits = 0
+        self._push_turn_start()
         blend, _manifest = self.session.checkpoint_paths(node, "start")
         try:
             self._start = snapshot.write(blend, turn_targets)
@@ -497,6 +505,20 @@ class TurnController:
             log.exception("turn-start snapshot failed")
             self.stream.note(f"No turn-start snapshot, so this turn cannot be restored: {exc}",
                              kind="warning", turn_id=node)
+
+    def _push_turn_start(self) -> None:
+        """The turn's start as an undo step, which Ctrl+Z during the turn
+        lands on. Not in the middle of a modal operation (a transform, a
+        stroke): then it waits for the agent's first edit, which waits for
+        the modal to end. The sent prompt leaves the box first, so an undo
+        to the step does not bring it back."""
+        if self._start_pushed or not self.running or modal_running():
+            return
+        scene = self._turn_scene()
+        if scene is not None and self._sent_prompt is not None and scene.whittle.prompt == self._sent_prompt[1]:
+            scene.whittle.prompt = ""
+        history.undo_push(TURN_START_UNDO)
+        self._start_pushed = True
 
     def interrupt(self, *, restore: bool = False) -> None:
         """Stops the turn after the call that is running. With restore, the
@@ -693,12 +715,25 @@ class TurnController:
                 self._finish(self._failed_turn("session_ended", data.get("detail")
                                                or "the agent session ended"))
 
+    def before_undo(self) -> None:
+        """Ctrl+Z while a turn runs. Blender undoes to the step before the
+        active one, and the agent's edits since have no step of their own,
+        so undo would skip the turn's start and land on the user's last
+        step before it. A step holding those edits makes it land on the
+        turn's start (or on a step the user made during the turn), and
+        Redo brings them back. With no edits since, undo goes on past it."""
+        if not self.running or self.commands.edits <= self._undo_edits or modal_running():
+            return
+        self._undo_edits = self.commands.edits
+        history.undo_push(f"{history.UNDO_PREFIX}: {self.turn_id} so far")
+
     def after_undo(self) -> None:
         """The user pressed undo while a turn runs: the scene went back to
-        before the turn, or earlier, under the agent's feet. It hears so with
-        its next call's result."""
+        the turn's start, or earlier, under the agent's feet. It hears so
+        with its next call's result."""
         if not self.running:
             return
+        self._undo_edits = self.commands.edits
         self.commands.notes.append(UNDO_NOTE)
         self._local("undo", {})
         self.stream.note("Undo during a turn takes back what Claude did so far; Claude is told.",

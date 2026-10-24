@@ -83,6 +83,9 @@ CHECKS = {
         "Shift+Alt+C over the viewport opens the sidebar on Whittle's tab and a field under the "
         "pointer: typed text and Enter send a prompt when idle, amend the running turn, and answer "
         "Claude's question."),
+    "send_key": Check(
+        "Shift+Alt+Enter over the viewport: with nothing typed it sends nothing; a typed prompt is "
+        "sent between turns; while a turn runs it amends the turn once there is text to amend with."),
     "auto_targets": Check(
         "With Auto on, clicking another object in the viewport makes it the target; clicking empty "
         "space keeps the active one; sketching keeps it; with Auto off a click leaves the list."),

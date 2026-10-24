@@ -81,6 +81,26 @@ def amend(context) -> int:
     return number
 
 
+def send_key_action(context) -> str | None:
+    """What Shift+Alt+Enter runs now, as Enter in the prompt box would:
+    "submit" between turns, "amend" while a turn runs (with typed text or
+    new strokes), "answer" while Claude asks and an answer is typed; None
+    when there is nothing to send."""
+    props = context.scene.whittle
+    pending = sketch.pending_count(sketch.find_sketch_object())
+    ctl = turn.current()
+    if busy(ctl):
+        asking = getattr(ctl, "question", None) is not None
+        if asking and props.ask_answer.strip():
+            return "answer"
+        if (props.amend_text.strip() and not asking) or pending:
+            return "amend"
+        return None
+    if props.prompt.strip() or len(props.refs) or pending:
+        return "submit"
+    return None
+
+
 def interrupt(mode: str) -> None:
     ctl = turn.current()
     if ctl is not None:
@@ -584,6 +604,25 @@ class WHITTLE_OT_submit(bpy.types.Operator):
             return {"CANCELLED"}
         self.report({"INFO"}, f"Submitted turn {node}")
         return {"FINISHED"}
+
+
+class WHITTLE_OT_send_key(bpy.types.Operator):
+    bl_idname = "whittle.send_key"
+    bl_label = "Send or Amend"
+    bl_description = ("Send the prompt, the sketch and the references; while Claude works, amend the running "
+                      "turn with the typed text and new strokes, or answer its question")
+
+    def execute(self, context):
+        action = send_key_action(context)
+        if action is None:
+            # Nothing to send: the key does nothing, as Enter in a blank box.
+            return {"CANCELLED"}
+        op = getattr(bpy.ops.whittle, action)
+        if not op.poll():
+            # Sending is not possible right now (a comparison, say); the
+            # sidebar's disabled button says why.
+            return {"CANCELLED"}
+        return op("EXEC_DEFAULT")
 
 
 class WHITTLE_OT_clear_sketch(bpy.types.Operator):
@@ -1245,7 +1284,7 @@ class WHITTLE_OT_chat_delete_many(bpy.types.Operator):
 
 
 CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_toggle, WHITTLE_OT_sketch_stop, WHITTLE_OT_stroke_type,
-           WHITTLE_OT_next_stroke_type, WHITTLE_OT_capture_view, WHITTLE_OT_submit,
+           WHITTLE_OT_next_stroke_type, WHITTLE_OT_capture_view, WHITTLE_OT_submit, WHITTLE_OT_send_key,
            WHITTLE_OT_clear_sketch, WHITTLE_OT_ref_add, WHITTLE_OT_ref_remove,
            WHITTLE_OT_run_bundle, WHITTLE_OT_agent_start, WHITTLE_OT_agent_stop,
            WHITTLE_OT_interrupt, WHITTLE_OT_amend, WHITTLE_OT_answer, WHITTLE_OT_open_image,

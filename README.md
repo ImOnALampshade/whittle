@@ -26,13 +26,17 @@ The agent environment is only built for that platform for now.
 
 ## Screenshots
 
-| A conversation | Sketching | A reply in Markdown |
-|---|---|---|
-| ![The sidebar after three finished turns: each prompt, Claude's replies, the tools it used and a render of the result](docs/images/conversation.png) | ![The sidebar in sketch mode: the stroke types, three strokes from two captured views and the prompt](docs/images/sketching.png) | ![A reply rendered from Markdown: a heading, bold and italic text, nested lists, a quote and a code block with a copy button](docs/images/markdown.png) |
-
-| The chat menu | The model menu |
+| A conversation | Sketching |
 |---|---|
-| ![The chat menu: New Chat, three conversations with their turns, age and size, and the rename and delete items](docs/images/chat-menu.png) | ![The model menu: Opus, Sonnet, Haiku and Fable, Older Models, Other Model, and the Effort choices Low, Medium and High](docs/images/model-menu.png) |
+| ![The sidebar after three finished turns: each prompt, Claude's replies, the tools it used and a render of the result](docs/images/conversation.png) | ![The sidebar in sketch mode: the stroke types, three strokes from two captured views and the prompt](docs/images/sketching.png) |
+
+| A reply in Markdown | The model menu |
+|---|---|
+| ![A reply rendered from Markdown: a heading, bold and italic text, nested lists, a quote and a code block with a copy button](docs/images/markdown.png) | ![The model menu: Opus, Sonnet, Haiku and Fable, Older Models, Other Model, and the Effort choices Low, Medium and High](docs/images/model-menu.png) |
+
+| The chat menu | The agent popover |
+|---|---|
+| ![The chat menu: New Chat, three conversations with their turns, age and size, and the rename and delete items](docs/images/chat-menu.png) | ![The agent popover: the agent's state, model and effort, this file's triangle budget and style notes, each with its reset button, and Start Agent](docs/images/agent-popover.png) |
 
 ## Status and limitations
 
@@ -154,7 +158,8 @@ agent's state: click it for the model, the session folder and Start/Stop.
    marker (or the view's row under the stroke count) to go back to that view.
    Keys for a tablet's express keys, over the viewport in any mode: **Shift+Alt+D**
    toggles Sketch mode, **Shift+Alt+N** picks the next stroke type, **Shift+Alt+V**
-   captures a view and **Shift+Alt+Enter** sends. Rebind them in Preferences → Keymap
+   captures a view and **Shift+Alt+Enter** sends (and, while Claude works, amends the turn
+   with what you typed or drew since). Rebind them in Preferences → Keymap
    (3D View → 3D View (Global)).
 4. **Describe**: type a prompt (Shift+Enter adds a line); 📎 adds reference images. Pin a reference to send it with
    every request; its ⋯ menu places it in the scene as a half-transparent image empty.
@@ -170,7 +175,7 @@ agent's state: click it for the model, the session folder and Start/Stop.
    how much Claude thinks: High by default, Low or Medium for quicker, cheaper turns on
    small edits.
 6. **Send** (Enter, or the Send button), then watch the turn. While it works, type into the
-   field and press Enter or **Amend**,
+   field or draw more strokes and press Enter, Shift+Alt+Enter or **Amend**,
    answer Claude's questions, or **Stop ▾** (keep the changes or undo the turn).
 7. **History** lives on the turns: ✎ edits and resends a turn as a new branch, ‹ 1/2 ›
    switches between branches, and ⋯ goes back to a turn, compares it, shows a ghost or opens

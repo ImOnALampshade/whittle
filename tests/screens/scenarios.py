@@ -33,6 +33,110 @@ LID = ("mesh = bpy.data.meshes.new('Crate_Lid')\nbm = bmesh.new()\nbmesh.ops.cre
        "lid.scale = (0.54, 0.54, 0.04)\nlid.location = (0, 0, 0.52)\n"
        "bpy.context.scene.collection.objects.link(lid)\nprint('lid', lid.name)")
 
+# What the fake turns build, so each render shows what its reply says.
+
+# A handle slot carved into the crate's front, below the lid: still one
+# closed mesh of quads.
+SLOT = """crate = bpy.data.objects['Crate']
+bm = bmesh.new()
+bm.from_mesh(crate.data)
+# Cut the faces into a grid whose middle cell on the front is the slot,
+# then push that cell in.
+for co, no in (((-0.13, 0, 0), (1, 0, 0)), ((0.13, 0, 0), (1, 0, 0)),
+               ((0, 0, 0.065), (0, 0, 1)), ((0, 0, 0.155), (0, 0, 1))):
+    bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], plane_co=co, plane_no=no)
+bm.normal_update()
+front = [f for f in bm.faces if f.normal.y < -0.9]
+cell = min(front, key=lambda f: (f.calc_center_median() - Vector((0, -0.25, 0.11))).length)
+slot = bmesh.ops.extrude_discrete_faces(bm, faces=[cell])['faces'][0]
+bmesh.ops.translate(bm, verts=slot.verts, vec=(0, 0.12, 0))
+bm.normal_update()
+bm.to_mesh(crate.data)
+bm.free()
+print(whittle.mesh_report(crate))"""
+
+DARKER_WOOD_LIGHTER_LID = """bpy.data.materials['Wood'].diffuse_color = (0.3, 0.18, 0.08, 1)
+paint = bpy.data.materials.new('Lid')
+paint.diffuse_color = (0.85, 0.7, 0.5, 1)
+bpy.data.objects['Crate_Lid'].data.materials.append(paint)"""
+
+# Two horns grown out of the crate's top, so it stays one closed mesh: a
+# square of a 3 x 3 grid on each side of the top, extruded into 5 rings
+# that taper and lean outwards, then merged to a point.
+HORNS = """crate = bpy.data.objects['Crate']
+bm = bmesh.new()
+bm.from_mesh(crate.data)
+top = max(bm.faces, key=lambda f: f.calc_center_median().z)
+bmesh.ops.subdivide_edges(bm, edges=top.edges[:], cuts=2, use_grid_fill=True)
+for side in (-1, 1):
+    face = min((f for f in bm.faces if f.normal.z > 0.9),
+               key=lambda f: (f.calc_center_median() - Vector((side * 0.17, 0, 0.25))).length)
+    for ring in range(1, 6):
+        lean = side * math.radians(14 * ring)
+        face = bmesh.ops.extrude_discrete_faces(bm, faces=[face])['faces'][0]
+        centre = face.calc_center_median()
+        moved = centre + Vector((math.sin(lean), 0, math.cos(lean))) * 0.07
+        tilt = Matrix.Rotation(side * math.radians(14), 3, 'Y')
+        for v in face.verts:
+            v.co = moved + tilt @ (v.co - centre) * 0.78
+    tip = face.calc_center_median() + Vector((math.sin(lean), 0, math.cos(lean))) * 0.05
+    bmesh.ops.pointmerge(bm, verts=face.verts[:], merge_co=tip)
+bm.normal_update()
+bm.to_mesh(crate.data)
+bm.free()
+print(whittle.mesh_report(crate))"""
+
+ROPE_HANDLES = """import math
+rope = bpy.data.materials.new('Rope')
+rope.diffuse_color = (0.78, 0.66, 0.42, 1)
+for side in (-1, 1):
+    ring, tube, rings, sides = 0.08, 0.014, 32, 10
+    verts, faces = [], []
+    for i in range(rings):
+        a = 2 * math.pi * i / rings
+        for j in range(sides):
+            b = 2 * math.pi * j / sides
+            r = ring + tube * math.cos(b)
+            verts.append((side * (0.25 + tube * math.sin(b)), r * math.cos(a), 0.3 + r * math.sin(a)))
+            n = (i + 1) % rings
+            faces.append((i * sides + j, i * sides + (j + 1) % sides,
+                          n * sides + (j + 1) % sides, n * sides + j))
+    mesh = bpy.data.meshes.new('Handle')
+    mesh.from_pydata(verts, [], faces)
+    mesh.shade_smooth()
+    mesh.materials.append(rope)
+    handle = bpy.data.objects.new('Handle', mesh)
+    bpy.context.scene.collection.objects.link(handle)"""
+
+# Boxes, each (size, centre), joined into one object.
+_BOXES = """def boxes(name, parts, material):
+    bm = bmesh.new()
+    for size, centre in parts:
+        verts = bmesh.ops.create_cube(bm, size=1.0)['verts']
+        bmesh.ops.scale(bm, vec=size, verts=verts)
+        bmesh.ops.translate(bm, vec=centre, verts=verts)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(material)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+metal = bpy.data.materials.new('Metal')
+metal.diffuse_color = (0.5, 0.52, 0.55, 1)
+metal.metallic = 1.0
+"""
+
+# A bar standing off each side on two posts.
+METAL_HANDLES = _BOXES + """for side in (-1, 1):
+    boxes('Handle', [((0.03, 0.2, 0.03), (side * 0.3, 0, 0.32)),
+                     ((0.07, 0.03, 0.03), (side * 0.27, -0.085, 0.32)),
+                     ((0.07, 0.03, 0.03), (side * 0.27, 0.085, 0.32))], metal)"""
+
+# A band around the crate near each end.
+METAL_BANDS = _BOXES + """for x in (-0.17, 0.17):
+    boxes('Band', [((0.04, 0.52, 0.52), (x, 0, 0.25))], metal)"""
+
 
 class Until:
     def __init__(self, check, what: str):
@@ -295,12 +399,12 @@ def conversation(stage: Stage):
                    exec_("add lid", LID), render((1.5, -1.5, 1.2)),
                    say("Done: the crate has a lid.")], "finish": done("Added a lid.")},
         {"steps": [say("Carving a handle slot into the front face."),
-                   exec_("handle slot", "bpy.data.objects['Crate'].scale.z = 1.05"),
-                   render((0.0, -2.0, 0.6)), say("The front has a handle slot now.")],
+                   exec_("handle slot", SLOT),
+                   render((0.8, -1.6, 0.2), look_at=(0.0, 0.0, 0.28)), say("The front has a handle slot now.")],
          "finish": done("Carved a handle slot.")},
         {"steps": [say("Darkening the wood and lightening the lid for contrast."),
-                   exec_("recolour", "bpy.data.materials['Wood'].diffuse_color = (0.3, 0.18, 0.08, 1)"),
-                   render((-1.5, -1.5, 1.2), mode="matcap"), say("Recoloured.")],
+                   exec_("recolour", DARKER_WOOD_LIGHTER_LID),
+                   render((-1.5, -1.5, 1.2)), say("Recoloured.")],
          "finish": done("Recoloured the crate.")},
     ])
     yield from stage.turns(["Add a lid to the crate.", "Carve a handle slot in the front.",
@@ -320,7 +424,7 @@ I grew **two horns** out of the crate's top, so it is still *one closed mesh*:
 > The horns are a little long; say if you want them shorter.
 
 ```
-shells 1 · watertight · 1,248 tris
+shells 1 · watertight · 104 tris
 ```"""
 
 
@@ -329,7 +433,7 @@ def markdown(stage: Stage):
     stage.crate()
     script = stage.script("markdown", [
         {"steps": [say("Growing two horns from the top of the crate."),
-                   exec_("horns", "bpy.data.objects['Crate'].scale.z = 1.05"),
+                   exec_("horns", HORNS),
                    render((1.5, -1.5, 1.2)), say(MARKDOWN_REPLY)],
          "finish": done("Added two horns.")},
     ])
@@ -411,12 +515,12 @@ def branched(stage: Stage):
         {"steps": [say("Adding a lid."), exec_("add lid", LID), render((1.5, -1.5, 1.2)),
                    say("Done.")], "finish": done("Added a lid.")},
         {"steps": [say("Adding metal handles on both sides."),
-                   exec_("metal handles", "bpy.data.objects['Crate'].scale.x = 1.05"),
-                   render((0.0, -2.0, 0.6)), say("Metal handles added.")],
+                   exec_("metal handles", METAL_HANDLES),
+                   render((1.6, -1.2, 0.9)), say("Metal handles added.")],
          "finish": done("Added metal handles.")},
         {"steps": [say("Adding rope handles instead."),
-                   exec_("rope handles", "bpy.data.objects['Crate'].scale.y = 1.05"),
-                   render((0.0, -2.0, 0.6)), say("Rope handles added.")],
+                   exec_("rope handles", ROPE_HANDLES),
+                   render((1.6, -1.2, 0.9)), say("Rope handles added.")],
          "finish": done("Added rope handles.")},
     ])
     first, second = yield from stage.turns(["Add a lid.", "Add metal handles on both sides."], script)
@@ -432,9 +536,8 @@ def branch_edit(stage: Stage):
     script = stage.script("branch_edit", [
         {"steps": [say("Lid added."), exec_("add lid", LID), render((1.5, -1.5, 1.2))],
          "finish": done("Added a lid.")},
-        {"steps": [say("Rope handles added."),
-                   exec_("rope handles", "bpy.data.objects['Crate'].scale.y = 1.05"),
-                   render((0.0, -2.0, 0.6))], "finish": done("Added rope handles.")},
+        {"steps": [say("Rope handles added."), exec_("rope handles", ROPE_HANDLES),
+                   render((1.6, -1.2, 0.9))], "finish": done("Added rope handles.")},
     ])
     _first, second = yield from stage.turns(["Add a lid.", "Add rope handles on both sides."], script)
     stage.run(operators.branch_node, second)
@@ -742,7 +845,7 @@ def switched_chat(stage: Stage):
         {"steps": [say("Adding a lid."), exec_("add lid", LID), render((1.5, -1.5, 1.2)), say("Done.")],
          "finish": done("Added a lid.")},
         {"steps": [say("Adding metal bands near both ends."),
-                   exec_("bands", "bpy.data.objects['Crate'].scale.x = 1.05"),
+                   exec_("bands", METAL_BANDS),
                    render((0.0, -2.0, 0.6)), say("Two bands added.")], "finish": done("Added bands.")},
     ])
     # A first prompt long enough that the header shortens the title.
@@ -838,28 +941,6 @@ lid.modifiers['Bevel'].width = 0.012
 paint = bpy.data.materials.new('Lid')
 paint.diffuse_color = (0.62, 0.45, 0.26, 1)
 mesh.materials.append(paint)"""
-
-ROPE_HANDLES = """import math
-rope = bpy.data.materials.new('Rope')
-rope.diffuse_color = (0.78, 0.66, 0.42, 1)
-for side in (-1, 1):
-    ring, tube, rings, sides = 0.08, 0.014, 32, 10
-    verts, faces = [], []
-    for i in range(rings):
-        a = 2 * math.pi * i / rings
-        for j in range(sides):
-            b = 2 * math.pi * j / sides
-            r = ring + tube * math.cos(b)
-            verts.append((side * (0.25 + tube * math.sin(b)), r * math.cos(a), 0.3 + r * math.sin(a)))
-            n = (i + 1) % rings
-            faces.append((i * sides + j, i * sides + (j + 1) % sides,
-                          n * sides + (j + 1) % sides, n * sides + j))
-    mesh = bpy.data.meshes.new('Handle')
-    mesh.from_pydata(verts, [], faces)
-    mesh.shade_smooth()
-    mesh.materials.append(rope)
-    handle = bpy.data.objects.new('Handle', mesh)
-    bpy.context.scene.collection.objects.link(handle)"""
 
 DARKEN = "bpy.data.materials['Wood'].diffuse_color = (0.32, 0.19, 0.09, 1)"
 

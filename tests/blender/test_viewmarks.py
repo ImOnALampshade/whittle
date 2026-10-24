@@ -283,6 +283,21 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(len(group.made), 1, "the removed view's marker is gone")
         self.assertEqual(first.color, viewmarks.CURRENT_COLOUR)
 
+    def test_the_current_marker_takes_the_colour_given(self):
+        group = FakeGroup()
+        viewmarks.sync(group, [self.front, self.side], 2, None, 3.0, (0.1, 0.9, 0.2))
+        self.assertEqual(group.marks[2].color, (0.1, 0.9, 0.2))
+        self.assertEqual(group.marks[1].color, viewmarks.COLOUR)
+
+    def test_the_colour_is_the_themes_active_item(self):
+        theme = bpy.context.preferences.themes[0].user_interface.wcol_list_item
+        old = tuple(theme.inner_sel)
+        self.addCleanup(setattr, theme, "inner_sel", old)
+        assert_close(self, viewmarks.current_colour(bpy.context), viewmarks.CURRENT_COLOUR, tol=0.01)
+        theme.inner_sel = (0.9, 0.1, 0.5, 1.0)
+        assert_close(self, viewmarks.current_colour(bpy.context), (0.9, 0.1, 0.5), tol=0.01)
+        self.assertEqual(viewmarks.current_colour(SimpleNamespace(preferences=None)), viewmarks.CURRENT_COLOUR)
+
     def test_the_marker_the_viewport_is_at_hides(self):
         group = FakeGroup()
         here = look_at_view(0, (0, -3, 0.3), (0, 0, 0.3))

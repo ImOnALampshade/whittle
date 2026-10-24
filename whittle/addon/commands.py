@@ -47,6 +47,8 @@ class CommandContext:
     # This turn's calls that can change the scene (exec, restore_checkpoint),
     # failed ones included: a turn without any changed nothing.
     edits: int = 0
+    # Called before each of them changes anything (the turn start's undo step).
+    before_edit: Callable[[], None] = lambda: None
 
     def __post_init__(self):
         if self.namespace is None:
@@ -116,6 +118,7 @@ def build_handlers(ctx: CommandContext) -> dict:
 
 def handle_exec(ctx: CommandContext, params: dict) -> dict:
     code = require(params, "code", str)
+    ctx.before_edit()
     ctx.edits += 1
     # In Edit Mode the live mesh is the edit mesh, not obj.data: the code
     # would read stale data, and what it wrote would be lost on leaving.
@@ -375,6 +378,7 @@ def handle_restore_checkpoint(ctx: CommandContext, params: dict) -> dict:
         known = ", ".join(ctx.checkpoint_state) or "none"
         raise BridgeError(ErrorCode.NOT_FOUND, f"no checkpoint {checkpoint!r} this turn (checkpoints: {known})")
     snap = state["snapshot"]
+    ctx.before_edit()
     ctx.edits += 1
     # Only what the agent made after the checkpoint goes; the user's objects
     # and anything older stay.

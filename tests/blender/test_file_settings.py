@@ -88,6 +88,17 @@ class FileSettingsTest(AddonTestCase):
         self.assertNotIn("Style Notes (default)", layout.labels())
         self.assertEqual(self.resets(layout), {"poly_budget": False, "style_notes": True})
 
+    def test_each_reset_is_on_its_field_line(self):
+        self.props.style_notes = "chunky"
+        layout = self.popover()
+        parents = {id(c["child"]): c["layout"] for c in layout.calls if "child" in c}
+        for key in ("poly_budget", "style_notes"):
+            (field,) = [c for c in layout.of("prop") if c["prop"] == key]
+            (reset,) = [c for c in layout.operators("whittle.file_setting_reset") if c["props"].key == key]
+            self.assertIs(parents[id(reset["layout"])], field["layout"], key)
+        (label,) = [c for c in layout.of("label") if c["text"] == "Style Notes"]
+        self.assertEqual(label["icon"], "NONE", "at the fields' edge, not indented past it")
+
     def test_popover_without_a_scene(self):
         layout = RecordingLayout()
         ui.draw_agent(layout, None)

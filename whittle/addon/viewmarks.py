@@ -20,7 +20,9 @@ SHOW_PROP = "whittle_show_view_markers"
 SCALE = 0.6
 LINE_WIDTH = 2.0
 COLOUR = (0.85, 0.85, 0.85)
-CURRENT_COLOUR = (1.0, 0.6, 0.15)
+# The current view's marker is in the theme's colour for the active item
+# (current_colour); this is the factory theme's, for when there is none.
+CURRENT_COLOUR = (0.278, 0.447, 0.702)
 HIGHLIGHT_COLOUR = (1.0, 1.0, 1.0)
 ALPHA = 0.7
 # A perspective frustum's depth for its long side of 1, kept in bounds so a
@@ -32,6 +34,16 @@ ORTHO_DEPTH = 0.7
 def shown(context) -> bool:
     return (sketch.current_session() is not None
             and bool(getattr(context.window_manager, SHOW_PROP, False)))
+
+
+def current_colour(context) -> tuple:
+    """The theme's colour for the active item, a list's selected row (blue
+    in the factory theme), read as the viewport draws so a theme change
+    shows at once."""
+    try:
+        return tuple(context.preferences.themes[0].user_interface.wcol_list_item.inner_sel)[:3]
+    except (AttributeError, IndexError, TypeError):
+        return CURRENT_COLOUR
 
 
 def marker_shape(view) -> tuple[list, list]:
@@ -127,12 +139,12 @@ class WHITTLE_GGT_views(bpy.types.GizmoGroup):
         current = views.current_view(obj.data) if obj is not None else None
         sync(self, stored, current.id if current is not None else None,
              viewport_view(context.region, context.region_data),
-             getattr(context.region_data, "view_distance", 1.0))
+             getattr(context.region_data, "view_distance", 1.0), current_colour(context))
 
 
-def sync(group, stored, current_id, here, view_distance) -> None:
+def sync(group, stored, current_id, here, view_distance, colour=CURRENT_COLOUR) -> None:
     """Makes the group's markers match the stored views: one per view, the
-    current one coloured, and the one the viewport is at hidden."""
+    current one in colour, and the one the viewport is at hidden."""
     marks = group.marks
     wanted = {v.id: v for v in stored}
     for view_id in [i for i in marks if i not in wanted]:
@@ -146,14 +158,16 @@ def sync(group, stored, current_id, here, view_distance) -> None:
             gz.use_draw_scale = True
             gz.scale_basis = SCALE
             gz.line_width = LINE_WIDTH
-            gz.alpha = ALPHA
             gz.color_highlight = HIGHLIGHT_COLOUR
             gz.alpha_highlight = 1.0
             marks[view_id] = gz
         if gz.key != key:
             gz.set_shape(view, key)
             gz.matrix_basis = marker_matrix(view)
-        gz.color = CURRENT_COLOUR if view_id == current_id else COLOUR
+        current = view_id == current_id
+        gz.color = colour if current else COLOUR
+        # The theme's active colour is darker than the others' grey.
+        gz.alpha = 1.0 if current else ALPHA
         gz.hide = here is not None and views.same_place(view, here, view_distance)
 
 

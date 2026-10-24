@@ -542,23 +542,38 @@ def crate_x() -> float:
     return round(bpy.data.objects["Crate"].location.x, 6)
 
 
+def crate_y() -> float:
+    return round(bpy.data.objects["Crate"].location.y, 6)
+
+
 @phase("undo_turn")
 def undo_turn(stage: GuiStage):
     script = stage.script("undo_turn", [{"steps": [
         say("Moving the crate."),
         exec_("move", "bpy.data.objects['Crate'].location.x += 0.5"),
-        {"sleep": 2},
+        {"sleep": 4},
         exec_("look", "print(round(bpy.data.objects['Crate'].location.x, 3))"),
         say("Done.")], "finish": done("Moved.")}])
     yield from select_crate(stage)
-    before = crate_x()
+    # A change after the user's last undo step that has none of its own (a
+    # script's, say): only the turn's own step holds it.
+    bpy.data.objects["Crate"].location.y = 0.2
+    start = (crate_x(), crate_y())
     node = stage.submit("Move the crate.", script)
     yield Until(lambda: stage.tools("ok"), "the agent's first call")
-    expect_equal(crate_x(), round(before + 0.5, 6), "the crate after the agent's call")
+    moved = (round(start[0] + 0.5, 6), start[1])
+    expect_equal((crate_x(), crate_y()), moved, "the crate after the agent's call")
     # Ctrl+Z with the pointer over the viewport, while the turn runs.
     yield from stage.press("Z", ctrl=True)
     yield from stage.settle()
-    expect_equal(crate_x(), before, "the crate after Ctrl+Z (back to the turn's start)")
+    expect_equal((crate_x(), crate_y()), start, "the crate after Ctrl+Z (exactly the turn's start)")
+    # Redo brings the agent's edit back, and Ctrl+Z takes it away again.
+    yield from stage.press("Z", ctrl=True, shift=True)
+    yield from stage.settle()
+    expect_equal((crate_x(), crate_y()), moved, "the crate after Ctrl+Shift+Z")
+    yield from stage.press("Z", ctrl=True)
+    yield from stage.settle()
+    expect_equal((crate_x(), crate_y()), start, "the crate after Ctrl+Z again")
     expect(any("Undo during a turn" in t for t in stage.entries("warning", node)),
            f"the conversation does not say the turn was undone: {stage.entries('warning', node)}")
     yield stage.finished(node)
@@ -995,6 +1010,52 @@ def asset_browser(stage: GuiStage):
     expect(path.is_file(), "the library file went away")
 
 
+# the Shift+Alt+Enter key -----------------------------------------------------------
+
+def send_key(stage: GuiStage):
+    """Shift+Alt+Enter with the pointer over the viewport."""
+    yield from stage.press("RET", shift=True, alt=True)
+    yield from stage.settle()
+
+
+@phase("send_key")
+def send_key_check(stage: GuiStage):
+    stage.crate()
+    script = stage.script("send_key", [
+        {"steps": [say("Nudging."), exec_("nudge", "bpy.data.objects['Crate'].location.x += 0.1")],
+         "finish": done("Nudged.")},
+        {"steps": [say("Working on it."), exec_("nudge", "bpy.data.objects['Crate'].location.x += 0.1"),
+                   {"wait_amend": 15}, exec_("after", "print('after the amendment')")],
+         "finish": done("Amended.")}])
+    bpy.context.window_manager.whittle_fake_script = str(script)
+
+    # Between turns: nothing to send, nothing sent; a typed prompt is sent.
+    yield from send_key(stage)
+    expect(stage.ctl is None or stage.ctl.turn_id is None, "the key sent with nothing to send")
+    stage.props.prompt = "Nudge it."
+    yield from send_key(stage)
+    # The fake agent's turn may well be over before the key's event is.
+    yield Until(lambda: stage.ctl is not None and (stage.ctl.last_finished or {}).get("turn_id"),
+                "the turn the key sent to finish")
+    first = stage.ctl.last_finished["turn_id"]
+    expect_equal(stage.history().tree.nodes[first].prompt, "Nudge it.", "the prompt the key sent")
+
+    # During a turn: nothing typed, nothing sent; typed text amends the turn.
+    second = stage.submit("Nudge it again.", script)
+    yield Until(lambda: stage.tools("ok"), "the second turn's first call")
+    yield from send_key(stage)
+    expect_equal(stage.entries("amend", second), [], "the amendments with nothing typed")
+    expect_equal(stage.ctl.turn_id, second, "the running turn")
+    stage.props.amend_text = "Make it red"
+    yield from send_key(stage)
+    yield stage.finished(second)
+    delivered = [e for e in stage.ctl.events if e["name"] == "amend_delivered"]
+    expect(delivered, "the amendment the key sent was not delivered")
+    expect(any("Make it red" in t for t in stage.entries("amend", second)),
+           f"the conversation does not show the amendment: {stage.entries('amend', second)}")
+    expect_equal(stage.props.amend_text, "", "the amend box after amending")
+
+
 # the Shift+Alt+C shortcut ----------------------------------------------------------
 
 def shortcut(stage: GuiStage, text: str):
@@ -1093,10 +1154,6 @@ def auto_targets(stage: GuiStage):
 
 
 # branches and undo -------------------------------------------------------------------
-
-def crate_y() -> float:
-    return round(bpy.data.objects["Crate"].location.y, 6)
-
 
 @phase("branch_undo")
 def branch_undo(stage: GuiStage):

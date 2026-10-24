@@ -24,7 +24,7 @@ class KeymapTest(unittest.TestCase):
                 ("whittle.sketch_toggle", "D", "PRESS", {"shift": True, "alt": True}),
                 ("whittle.next_stroke_type", "N", "PRESS", {"shift": True, "alt": True}),
                 ("whittle.capture_view", "V", "PRESS", {"shift": True, "alt": True}),
-                ("whittle.submit", "RET", "PRESS", {"shift": True, "alt": True}),
+                ("whittle.send_key", "RET", "PRESS", {"shift": True, "alt": True}),
             ])
             keys.unregister_keymap()
         self.assertEqual(items, [])
@@ -64,6 +64,45 @@ class KeymapTest(unittest.TestCase):
         self.assertEqual(mods, keys.MODS, "one modifier pair for every Whittle key")
         self.assertNotIn(key, [k for _i, k in keys.KEYS])
         self.assertEqual(len({k for _i, k in keys.KEYS}), len(keys.KEYS))
+
+
+class SendKeyTest(unittest.TestCase):
+    """Shift+Alt+Enter does what Enter in the prompt box would."""
+
+    def action(self, *, busy=False, question=None, prompt="", amend="", answer="", refs=0, pending=0):
+        props = SimpleNamespace(prompt=prompt, amend_text=amend, ask_answer=answer, refs=[None] * refs)
+        context = SimpleNamespace(scene=SimpleNamespace(whittle=props))
+        ctl = SimpleNamespace(question=question)
+        with mock.patch.object(operators.turn, "current", return_value=ctl), \
+                mock.patch.object(operators, "busy", return_value=busy), \
+                mock.patch.object(operators.sketch, "find_sketch_object", return_value=None), \
+                mock.patch.object(operators.sketch, "pending_count", return_value=pending):
+            return operators.send_key_action(context)
+
+    def test_between_turns_it_sends(self):
+        self.assertEqual(self.action(prompt="Add a lid."), "submit")
+        self.assertEqual(self.action(refs=1), "submit", "a reference alone")
+        self.assertEqual(self.action(pending=2), "submit", "strokes alone")
+        self.assertIsNone(self.action(prompt="  "), "nothing to send")
+        self.assertIsNone(self.action(amend="Make it red"), "the amend box is not sent between turns")
+
+    def test_during_a_turn_it_amends(self):
+        self.assertEqual(self.action(busy=True, amend="Make it red"), "amend")
+        self.assertEqual(self.action(busy=True, pending=1), "amend", "new strokes alone")
+        self.assertIsNone(self.action(busy=True), "nothing to amend with")
+        self.assertIsNone(self.action(busy=True, prompt="Next request."), "the prompt waits for the turn's end")
+
+    def test_while_claude_asks_it_answers(self):
+        asking = {"question": "Overhang or flush?", "choices": []}
+        self.assertEqual(self.action(busy=True, question=asking, answer="Flush"), "answer")
+        self.assertIsNone(self.action(busy=True, question=asking, amend="Make it red"),
+                          "the box is the answer while Claude asks")
+        self.assertEqual(self.action(busy=True, question=asking, pending=1), "amend")
+
+    def test_nothing_to_send_runs_nothing(self):
+        op = SimpleNamespace()
+        with mock.patch.object(operators, "send_key_action", return_value=None):
+            self.assertEqual(operators.WHITTLE_OT_send_key.execute(op, SimpleNamespace()), {"CANCELLED"})
 
 
 class ToggleTest(unittest.TestCase):

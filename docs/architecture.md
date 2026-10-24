@@ -500,10 +500,16 @@ the sketch being drawn on, is left alone.
 - There is no execution timeout: Python on the main thread cannot be pre-empted. The
   `exec` tool description says so, and the system prompt's turn shape asks for small
   steps for that reason.
-- Undo: at the turn's start `Whittle: before <node>` (not while a modal operator runs),
-  so Ctrl+Z during the turn goes back to the turn's start rather than past the user's
-  last change; after `turn_finished`, `Whittle: <node> <label>`. Both only when a window
-  exists. Ctrl+Z during a turn tells the agent with `UNDO_NOTE` on its next result.
+- Undo: at the turn's start `Before Whittle turn` (`turn.TURN_START_UNDO`), before the
+  agent's first edit; while a modal operator runs it waits for that edit
+  (`CommandContext.before_edit`, called by `exec` and `restore_checkpoint`), which waits
+  for the modal. After `turn_finished`, `Whittle: <node> <label>`. All only when a window
+  exists. Ctrl+Z goes to the step before the active one, so an `undo_pre` handler
+  (`TurnController.before_undo`) first pushes `Whittle: <node> so far` when the agent has
+  edited since the last step: Ctrl+Z during a turn then lands exactly on its start (or
+  on a step the user made during it), and Ctrl+Shift+Z brings the edits back. With no
+  edit since, nothing is pushed, so a second Ctrl+Z goes on past the start. Ctrl+Z
+  during a turn tells the agent with `UNDO_NOTE` on its next result.
 
 ### Render (`addon/render.py`)
 
@@ -1056,7 +1062,8 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
   and `target_set_operator("whittle.view_snap")` makes a click snap. `draw_prepare`
   keeps the gizmos in step with the stored views (`viewmarks.sync`): it adds and
   removes gizmos, rebuilds a shape only when its view changed, colours the current
-  view, and hides the marker of the view the viewport is at (`views.same_place`:
+  view in the theme's active-item colour (`viewmarks.current_colour`: the list item's
+  Inner Selected, read at each draw, opaque), and hides the marker of the view the viewport is at (`views.same_place`:
   within 1° and 1 % of the view distance). The gizmo map handles events before the
   Draw tool's keymap, so a click on a marker snaps instead of starting a stroke.
 - **Active viewport**: a timer has no context, so the watcher picks the 3D viewport
@@ -1550,12 +1557,14 @@ never writes Blender data.
 - **Sketch keys** (`addon/keys.py`): add-on items in the 3D View keymap (the viewport's
   keymap in every mode, Draw Mode included): Shift+Alt+D `whittle.sketch_toggle`,
   Shift+Alt+N `whittle.next_stroke_type`, Shift+Alt+V `whittle.capture_view`,
-  Shift+Alt+Enter `whittle.submit`. See `decisions.md`, Sketch keys.
+  Shift+Alt+Enter `whittle.send_key`, which runs what Enter in the prompt box would
+  (`operators.send_key_action`: Send between turns, Amend during one, Answer while Claude
+  asks, nothing when there is nothing to send). See `decisions.md`, Sketch keys.
 - **Composer**: reference chips packed into rows (a chip is `whittle.ref_menu` with the
   name and preview icon; a pinned one has a pressed `whittle.ref_pin` beside it); the
   prompt field (placeholder `shortcut.PLACEHOLDER`, `Ask Claude…`, in every state) with
   📎 (`whittle.ref_add`); **Send** (`whittle.submit`, "Send as Branch" off the end of a
-  branch, disabled with a tooltip while comparing or in a chat from another machine) and the history popover (`WHITTLE_PT_history`, `RECOVER_LAST`). During a turn the field is `amend_text` and the buttons are
+  branch, or "Branch" when the button is too narrow for it, disabled with a tooltip while comparing or in a chat from another machine) and the history popover (`WHITTLE_PT_history`, `RECOVER_LAST`). During a turn the field is `amend_text` and the buttons are
   **Amend** and **Stop ▾** (`WHITTLE_MT_stop`: keep or undo); while Claude asks, the
   field is `ask_answer` and the button **Answer**. Send takes the prompt out of the box
   once the run is under way (`TurnController.hold_prompt`); a run that never starts,
@@ -1565,7 +1574,7 @@ never writes Blender data.
   (`Region.active_panel_category`, retried on a timer until a hidden sidebar has
   listed its tabs) and `wm.call_panel` of `WHITTLE_PT_type_prompt` under the pointer: a
   one-line copy of the composer's field with `activate_init`, picked when the key is
-  pressed, over a dim hint (`shortcut.HINT`, as many of its parts as fit the popup's
+  pressed, under the one title `Ask Claude` whichever field it is, over a dim hint (`shortcut.HINT`, as many of its parts as fit the popup's
   width, `shortcut.hint`). Enter confirms and closes the popup on its press; `addon/enter.py` sends on
   the release. See `ui.md` §3.12.
 - **History popover** (`WHITTLE_PT_history`, a `HEADER` panel opened only as a
@@ -2300,7 +2309,7 @@ read from the installed `claude_agent_sdk` 0.2.167 (bundled CLI 2.1.300).
   `unregister(fn)`, `is_registered(fn)`; `fn()` returns seconds or `None`.
   **Timers do not run during `blender -b --python script`.**
 - `bpy.app.handlers`: `depsgraph_update_post`, `load_pre`, `load_post`, `save_post`,
-  `exit_pre`, `undo_post`, `redo_post`, `render_pre/post`; decorate with
+  `exit_pre`, `undo_pre`, `undo_post`, `redo_post`, `render_pre/post`; decorate with
   `@bpy.app.handlers.persistent` to survive file loads.
 - `bpy.app.online_access` (False under `--factory-startup -b`), `bpy.app.background`.
 - `bpy.utils.extension_path_user(package, *, path="", create=False)`;
@@ -2328,7 +2337,10 @@ read from the installed `claude_agent_sdk` 0.2.167 (bundled CLI 2.1.300).
   controller and the sketch session keep the scene's name and look it up again
   (`TurnController._turn_scene`, `SketchSession.scene`).
 - Ctrl+Z goes to the state of the undo step before the active one. Changes made since
-  the last push without one of their own (a script, the agent's `exec`) go with it.
+  the last push without one of their own (a script, the agent's `exec`) go with it, and
+  redo cannot bring them back. An `ed.undo_push` from an `undo_pre` handler runs before
+  the undo picks its step, so the undo lands on the step that was active and redo
+  returns to the pushed one (checked in a hidden GUI Blender, 5.2.2).
 - GUI (5.2.2, `--enable-event-simulate`): `Window.event_simulate(type, value, x, y,
   unicode=…)` events go through the keymaps and handlers like real ones, and real input
   is ignored. A text field in edit mode takes keys with `unicode`. Sending an event to a

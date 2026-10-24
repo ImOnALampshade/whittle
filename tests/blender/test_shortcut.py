@@ -137,11 +137,13 @@ class PopupTest(unittest.TestCase):
         self.assertNotIn("textbox", field, "the multi-line box never takes the keyboard in a popup")
         self.assertEqual(layout.labels(), ["Ask Claude", shortcut.HINT])
 
-    def test_every_field_has_the_one_placeholder(self):
+    def test_every_field_has_the_one_title_and_placeholder(self):
         for name in shortcut.FIELDS:
             shortcut._field = name
-            (field,) = self.draw().of("prop")
+            layout = self.draw()
+            (field,) = layout.of("prop")
             self.assertEqual((field["prop"], field["placeholder"]), (name, "Ask Claude…"))
+            self.assertEqual(layout.labels()[0], "Ask Claude", name)
 
     def test_the_hint_fits_the_popup(self):
         self.assertEqual(shortcut.HINT, "Enter sends · End keeps your draft · long prompts: use the sidebar box")
@@ -156,7 +158,7 @@ class PopupTest(unittest.TestCase):
         shortcut._field = "amend_text"
         layout = self.draw()
         self.assertEqual(layout.props(), ["amend_text"])
-        self.assertEqual(layout.labels()[0], "Amend the Running Turn")
+        self.assertEqual(layout.labels()[0], "Ask Claude", "one title, whatever the field")
 
     def test_invoke_opens_the_sidebar_and_the_popup(self):
         ctl = controller(busy=True, question={"question": "Bevel?", "choices": []})

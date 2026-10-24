@@ -414,6 +414,80 @@ class AskTest(SteeringTestCase):
         self.assertIn("interrupted", result["summary"])
 
 
+# An edit, then a question that keeps the turn running.
+EDIT_THEN_ASK = {"turns": [{"steps": [
+    {"call": "exec", "params": {"label": "nudge", "code": "bpy.data.objects['Crate'].location.x += 0.1"},
+     "expect": "ok"},
+    {"ask": "Keep going?", "choices": ["yes"], "expect": "ok"},
+    {"say": "Done."}], "finish": {"subtype": "success", "is_error": False, "result": "Nudged."}}]}
+
+
+class TurnUndoTest(SteeringTestCase):
+    """The undo steps around a turn (a real Ctrl+Z is tests/gui's undo_turn):
+    background Blender cannot push or undo, so the pushes are recorded with
+    the turn's edits and the prompt box at the time."""
+
+    def setUp(self):
+        super().setUp()
+        from whittle.addon import history
+
+        self.pushes = []
+        self.ctl = None
+        patcher = mock.patch.object(history, "undo_push", side_effect=lambda message: self.pushes.append(
+            (message, self.ctl.commands.edits, self.props.prompt)))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def start_turn(self):
+        script = self.user_dir / "edit_then_ask.json"
+        script.write_text(json.dumps(EDIT_THEN_ASK))
+        self.ctl = ctl = self.make_controller(script)
+        ctl.commands.attended = lambda: True
+        turn.set_current(ctl)
+        self.addCleanup(turn.set_current, None)
+        self.props.prompt = "Nudge it."
+        ctl.hold_prompt(self.scene, "Nudge it.")
+        ctl.run_sketch("Nudge it.", targets=[self.crate], scene=self.scene)
+        pump(ctl, lambda: ctl.question is not None or ctl.errors, 15, "the question")
+        self.assertEqual(ctl.errors, [])
+        return ctl
+
+    def test_the_turn_start_is_a_step_before_any_edit(self):
+        ctl = self.start_turn()
+        self.assertEqual(self.pushes, [(turn.TURN_START_UNDO, 0, "")],
+                         "pushed before the agent's edit, with the sent prompt out of the box")
+        ctl.answer("yes")
+        self.finish(ctl)
+        self.assertEqual(len(self.pushes), 2)
+        self.assertTrue(self.pushes[1][0].startswith("Whittle: n0001"), "the turn's end is a step too")
+
+    def test_a_modal_operation_puts_it_off_to_the_first_edit(self):
+        modal = iter([True])
+        with mock.patch.object(turn, "modal_running", side_effect=lambda: next(modal, False)):
+            self.start_turn()
+        self.assertEqual(self.pushes, [(turn.TURN_START_UNDO, 0, "")], "still before the edit")
+
+    def test_undo_during_a_turn_lands_on_its_start(self):
+        from whittle import addon
+
+        self.assertIn(addon._before_undo, bpy.app.handlers.undo_pre)
+        ctl = self.start_turn()
+        del self.pushes[:]
+        # Blender undoes to the step before the active one: the agent's edit
+        # gets a step, so that is the turn's start.
+        addon._before_undo()
+        self.assertEqual(self.pushes, [("Whittle: n0001 so far", 1, "")])
+        addon._after_undo()
+        self.assertEqual(ctl.commands.notes, [turn.UNDO_NOTE])
+        addon._before_undo()
+        self.assertEqual(len(self.pushes), 1, "with no edit since, a second Ctrl+Z goes on past the start")
+        ctl.answer("yes")
+        self.finish(ctl)
+        del self.pushes[:]
+        ctl.before_undo()
+        self.assertEqual(self.pushes, [], "no turn, no step")
+
+
 class UserEditTest(SteeringTestCase):
     def test_user_edits_during_a_turn_are_not_reported(self):
         """Like Claude Code: the user may touch the scene while Claude works;

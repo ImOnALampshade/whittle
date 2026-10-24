@@ -87,16 +87,18 @@ Whittle writes a request bundle from the live sketch and runs it.
   interrupted turn keeps its strokes for the next run.
 - Operators: `whittle.sketch`, `whittle.sketch_stop`, `whittle.sketch_toggle`,
   `whittle.stroke_type`, `whittle.next_stroke_type`, `whittle.capture_view`,
-  `whittle.view_snap`, `whittle.submit` (Send), `whittle.clear_sketch`,
+  `whittle.view_snap`, `whittle.submit` (Send), `whittle.send_key` (Shift+Alt+Enter),
+  `whittle.clear_sketch`,
   `whittle.ref_add`, `whittle.ref_remove`; the sidebar's sketch strip and composer hold
   them.
 - Default keys (`addon/keys.py`), in the 3D View keymap so they work in Draw Mode:
   Shift+Alt+D toggles Sketch mode, Shift+Alt+N the next stroke type, Shift+Alt+V
-  captures a view, Shift+Alt+Enter sends. Free in Blender 5.2's default keymap (a test
-  checks), rebindable in Preferences → Keymap, meant for a tablet's express keys.
+  captures a view, Shift+Alt+Enter sends between turns and amends during one, as Enter in
+  the prompt box does (nothing when there is nothing to send). Free in Blender 5.2's
+  default keymap (a test checks), rebindable in Preferences → Keymap, meant for a tablet's express keys.
 - View markers and Snap to View (`addon/viewmarks.py`, `views.snap_viewport`): while
   sketching, a small camera marks each view's eye in the viewport (a gizmo group, the
-  current view orange); clicking it, or the view's row in the view list, puts the
+  current view in the theme's active-item colour, read as it draws); clicking it, or the view's row in the view list, puts the
   viewport back at that view's eye, direction and field of view, with the pivot at the
   view's strokes, and makes it the view new strokes go to. The view list's **Markers
   While Sketching** turns them off.
@@ -403,10 +405,10 @@ timer).
 - `tests/gui/checks.py`: `GuiStage` (the screenshot stage plus simulated keys, clicks,
   drags and typing, `button()` running an operator as a sidebar button does, in the
   sidebar region with an undo step, File-menu saves and opens, and the fake agent's log)
-  and 22 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
+  and 23 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
   `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `undo_compare`,
   `modal_wait`, `save_as`, `recover_autosave`, `recover_last_session`,
-  `crash_keeps_chats`, `dirty_flag`, `shortcut`, `auto_targets`, `branch_undo`,
+  `crash_keeps_chats`, `dirty_flag`, `send_key`, `shortcut`, `auto_targets`, `branch_undo`,
   `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`. Each says what it
   confirms in the catalog.
 - Bugs they found and fixed: a real Ctrl+Z during a turn left the controller with a freed
@@ -468,7 +470,7 @@ it serves, and red is kept for real failures.
   nothing shows once, after its parent, with the prompt box left empty (Retry or ⋯ →
   Edit & Resend bring the prompt back). The interrupt record no longer repeats the end
   line. "N later turns" with **Return to Latest** appears off the end of a branch, and
-  Send reads **Send as Branch**.
+  Send reads **Send as Branch** (**Branch** when the sidebar is too narrow for it).
 - **Sketch**: a Sketch button; while sketching it stays pressed with **Capture View**
   beside it, and the six stroke types (Region and Note have clearer icons; tooltips name
   each, and the active one is named beside them) get a row of their own. The stroke
@@ -699,14 +701,14 @@ them at each save. Nothing is written beside the `.blend`.
   added through the real file browser, a real Ctrl+Z during a turn (back to the turn's
   start, the agent told), during a comparison and while sketching, scene calls waiting out
   a real transform, Save As, File → Recover (last session and autosave), a crash of
-  Blender and of the agent, the title bar's `*`, Shift+Alt+C, Auto targets following
+  Blender and of the agent, the title bar's `*`, Shift+Alt+C and Shift+Alt+Enter, Auto targets following
   clicks, branch switching and Ctrl+Z, chats and the file carrying them. How the panel
   looks in each state is covered by the screenshot harness. What still needs a person is
   the checklist below.
-  - Ctrl+Z during a turn goes to the undo step before the turn's own (`Whittle: before
-    <node>`): the user's last action, which is the turn's start unless something changed
-    the scene since without an undo step (a script, say). The checks start each turn
-    after a real click, as a person would.
+  - Ctrl+Z during a turn lands exactly on the turn's own step (`Before Whittle turn`), even
+    when something changed the scene after the user's last undo step without one of its
+    own (a script, say): the `undo_turn` check makes such a change before the turn, and
+    checks that Ctrl+Shift+Z brings the agent's edit back and Ctrl+Z takes it away again.
   - The draw tool places points short of a surface seen at a slant, along the line of
     sight (exact head-on; about 1 cm above a cube's top seen at 11° from 2.5 m, growing
     with distance and obliquity); the on-surface flag allows for it.
