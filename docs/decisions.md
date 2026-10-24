@@ -6,8 +6,9 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
 - Blender 5.2.2 LTS, bundled Python 3.14 (a distribution-packaged Blender may use the system `/usr/bin/python3.14`). Grease Pencil is the v3 API (`bpy.types.GreasePencil` with layers, drawings and attributes) — the 4.2-era GP API does not apply.
 - Extension format: `blender_manifest.toml`, minimum Blender 5.2: the Grease Pencil v3 API, and the lock's wheels are built for its Python 3.14, so an older Blender would install the extension and then fail.
 
-- **Platforms** (2026-10-23): `linux-x64`, `windows-x64` and `macos-arm64`, in one
-  extension zip. Linux is the only one tested; the others are marked untested in the README.
+- **Platforms** (2026-10-23; `linux-arm64` added 2026-10-23): `linux-x64`, `linux-arm64`,
+  `windows-x64` and `macos-arm64`, in one extension zip. Linux x64 is the only one tested;
+  the others are marked untested in the README.
   - The lock stays as it is. It was compiled for manylinux x86_64, but uv's
     `--generate-hashes` wrote the hash of every file of each pin, so the Windows x64
     and macOS arm64 wheels of all 30 pins at their pinned versions already verify under
@@ -17,7 +18,11 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
     are in-process SDK servers.
   - No Intel Macs: `cryptography` 50.0.2 has no macOS x86_64 wheel (upstream dropped them
     in 49), and Blender 5.2 has no Intel Mac build. No Windows on Arm: the SDK has no
-    `win_arm64` wheel. Linux arm64 has every wheel but is unchecked.
+    `win_arm64` wheel.
+  - Linux arm64: PyPI's JSON API, asked for each of the 30 pins at its exact version,
+    lists the CPython 3.14 manylinux/musllinux aarch64, abi3 and pure-Python wheels, and
+    every one's sha256 is already in the lock (the SDK's `manylinux_2_17_aarch64` wheel
+    with its `claude` among them), so the lock installs there unchanged. Listed, untested.
   - One zip, not `extension build --split-platforms`. Splitting only filters the
     manifest's `wheels` entries per platform, to shrink uploads that bundle binaries;
     Whittle bundles none (pip downloads the platform's own wheels at setup), so it would

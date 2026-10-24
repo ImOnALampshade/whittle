@@ -116,8 +116,9 @@ def lock_digest(lock: Path) -> str:
 # silicon install from it too. Intel Macs are left out: cryptography 50 has
 # no x86_64 macOS wheel (and Blender 5.2 no Intel build). Windows on Arm is
 # left out: the SDK has no win_arm64 wheel.
-SUPPORTED = {"linux": ("x86_64", "amd64"), "win32": ("amd64", "x86_64"), "darwin": ("arm64", "aarch64")}
-SUPPORTED_TEXT = "Linux x64, Windows x64 and macOS on Apple silicon"
+SUPPORTED = {"linux": ("x86_64", "amd64", "aarch64", "arm64"), "win32": ("amd64", "x86_64"),
+             "darwin": ("arm64", "aarch64")}
+SUPPORTED_TEXT = "Linux x64 and arm64, Windows x64 and macOS on Apple silicon"
 _OS_NAMES = {"linux": "Linux", "win32": "Windows", "darwin": "macOS"}
 
 

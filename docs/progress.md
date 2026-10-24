@@ -255,7 +255,7 @@ session can start from the scene, from nothing, from a primitive or from an asse
   environment, and `VenvSetup`, which runs them as subprocesses with a timeout each,
   cancel, a log, and a dry run. Tested under `.venv/bin/python` with a fake process and
   clock plus one real-subprocess run that installs nothing (`tests/agent/test_venv.py`).
-  It accepts Linux x64, Windows x64 and Apple silicon macOS (`venv.compatible()`), checks
+  It accepts Linux x64 and arm64, Windows x64 and Apple silicon macOS (`venv.compatible()`), checks
   for `claude.exe` on Windows, and on Windows also reads a venv whose base Python's
   `pyvenv.cfg` home is gone as `broken`.
 - `whittle/platforms.py` (stdlib): what differs on Windows and macOS. Spawn flags (no
@@ -725,8 +725,8 @@ them at each save. Nothing is written beside the `.blend`.
   portrait viewport snapped into a landscape one keeps its field of view across the
   long side, not the short one.
 - **Not built yet**:
-  - Windows and macOS have never run. The manifest lists `windows-x64` and `macos-arm64`
-    and the code handles them (`whittle/platforms.py`, `venv.compatible()`), but every
+  - Linux arm64, Windows and macOS have never run. The manifest lists `linux-arm64`,
+    `windows-x64` and `macos-arm64` and the code handles them (`whittle/platforms.py`, `venv.compatible()`), but every
     platform branch is only unit-tested on Linux with the platform passed in and kernel32
     faked. Unchecked there: a real venv setup (Blender's bundled `ensurepip`, pip finding
     the platform's wheels in the lock, `claude.exe` passing verify), the Job Object
@@ -737,8 +737,7 @@ them at each save. Nothing is written beside the `.blend`.
     when there is one) is left behind when a Windows agent is killed instead of shut
     down; the next agent start removes Whittle's that are a day stale and that no live
     agent can own (architecture §2), so one stays for up to a day.
-  - Intel Macs and Windows on Arm (no wheels for the pinned `cryptography` / SDK), and
-    Linux arm64 (wheels exist; unchecked).
+  - Intel Macs and Windows on Arm (no wheels for the pinned `cryptography` / SDK).
 - **The venv install** ran for real once from the GUI (and a real Haiku turn ran from
   it). Tests check the commands, the state machine with a fake process, a dry run and a
   real-subprocess run that installs nothing. A cancelled setup leaves its folder marked

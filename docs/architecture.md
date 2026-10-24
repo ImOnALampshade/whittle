@@ -1342,7 +1342,7 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
   `tagline`, `maintainer`, `type = "add-on"`, `blender_version_min = "5.2.0"` (Grease
   Pencil v3, and the lock's wheels are for Python 3.14),
   `license = ["SPDX:GPL-3.0-or-later"]`,
-  `platforms = ["linux-x64", "windows-x64", "macos-arm64"]` (no `wheels`: the venv is
+  `platforms = ["linux-x64", "linux-arm64", "windows-x64", "macos-arm64"]` (no `wheels`: the venv is
   downloaded at setup, so the zip holds no binaries and one zip serves every platform;
   `--split-platforms` would only make identical copies; decisions, Environment), and
   ```toml

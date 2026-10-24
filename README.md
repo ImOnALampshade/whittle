@@ -21,9 +21,9 @@ for how it is built, [docs/decisions.md](docs/decisions.md) for the choices behi
 [docs/ui.md](docs/ui.md) for the sidebar, and [docs/progress.md](docs/progress.md) for what
 works today and what is still rough.
 
-Requirements: Blender 5.2 (its Python 3.14) on Linux x64, Windows x64 or an Apple
-silicon Mac, and an Anthropic API key. Windows and macOS are untested: reports welcome
-(see [Platforms](#platforms)).
+Requirements: Blender 5.2 (its Python 3.14) on Linux x64 or arm64, Windows x64 or an
+Apple silicon Mac, and an Anthropic API key. Linux arm64, Windows and macOS are untested:
+reports welcome (see [Platforms](#platforms)).
 
 ## Screenshots
 
@@ -43,9 +43,9 @@ silicon Mac, and an Anthropic API key. Windows and macOS are untested: reports w
 
 Whittle is young (0.1.0); expect rough edges.
 
-- **Platforms**: developed and tested on Linux x64 only. Windows x64 and macOS on Apple
-  silicon are supported in the code but untested: reports welcome. Intel Macs are not
-  supported. See [Platforms](#platforms).
+- **Platforms**: developed and tested on Linux x64 only. Linux arm64, Windows x64 and
+  macOS on Apple silicon are supported in the code but untested: reports welcome. Intel
+  Macs are not supported. See [Platforms](#platforms).
 - **Sign-in**: an Anthropic API key only (API key and cost). Every turn calls Claude
   and costs tokens.
 - **Checked in a real GUI Blender by script**: flows background tests cannot reach, such
@@ -60,17 +60,19 @@ Whittle is young (0.1.0); expect rough edges.
 | Platform | Blender name | Status |
 |---|---|---|
 | Linux x64 | `linux-x64` | Developed and tested here. |
+| Linux arm64 | `linux-arm64` | Untested: reports welcome. |
 | Windows x64 | `windows-x64` | Untested: reports welcome. |
 | macOS on Apple silicon | `macos-arm64` | Untested: reports welcome. |
 | macOS on Intel | `macos-x64` | Not supported. |
 
-One zip serves all three. It carries no wheels: the agent environment is downloaded at
+One zip serves all four. It carries no wheels: the agent environment is downloaded at
 setup from the same hash-pinned `requirements.lock`, which holds the hashes of every wheel
 of each pinned version, so pip picks the files for your platform (the
 `claude-agent-sdk` wheel brings `claude` there, `claude.exe` on Windows). Intel Macs are
 left out because `cryptography` 50, which the lock pins, has no Intel macOS wheel, and
-Blender 5.2 has no Intel Mac build. Windows and Linux on Arm are left out too: the pinned
-SDK has no Windows Arm wheel, and Linux Arm is not checked yet.
+Blender 5.2 has no Intel Mac build. Windows on Arm is left out too: the pinned SDK has
+no Windows Arm wheel. On Linux arm64 every pin has an aarch64 or pure-Python wheel for
+Python 3.14 whose hash is in the lock (checked against PyPI), but no one has run it yet.
 
 What differs on Windows: setup steps and the agent run without a console window; the
 agent and the Claude Code CLI it starts share a Job Object, so stopping the agent (or

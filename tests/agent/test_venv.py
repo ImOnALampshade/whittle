@@ -102,13 +102,15 @@ class CommandTest(unittest.TestCase):
                                "SSL_CERT_FILE": "/etc/ca.pem"})
 
     def test_compatible(self):
-        # platform.machine() says AMD64 on Windows, arm64 on Apple silicon.
-        for machine, platform in (("x86_64", "linux"), ("AMD64", "win32"), ("arm64", "darwin")):
+        # platform.machine() says AMD64 on Windows, arm64 on Apple silicon,
+        # aarch64 on Linux arm64 (arm64 on some distributions).
+        for machine, platform in (("x86_64", "linux"), ("aarch64", "linux"), ("arm64", "linux"),
+                                  ("AMD64", "win32"), ("arm64", "darwin")):
             with self.subTest(platform=platform):
                 self.assertIsNone(venv.compatible((3, 14, 8), machine, platform))
         self.assertIn("3.14", venv.compatible((3, 13, 1), "x86_64", "linux"))
         self.assertIn("3.14", venv.compatible((3, 15, 0), "arm64", "darwin"))
-        for machine, platform in (("aarch64", "linux"), ("ARM64", "win32")):
+        for machine, platform in (("armv7l", "linux"), ("riscv64", "linux"), ("ARM64", "win32")):
             with self.subTest(platform=platform, machine=machine):
                 reason = venv.compatible((3, 14, 0), machine, platform)
                 self.assertIn(machine, reason)

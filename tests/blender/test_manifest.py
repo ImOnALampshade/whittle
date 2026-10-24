@@ -55,6 +55,18 @@ class ManifestTest(unittest.TestCase):
                 head = path.read_text().splitlines()[:2]
                 self.assertIn("# SPDX-License-Identifier: GPL-3.0-or-later", head)
 
+    def test_platforms_match_what_the_setup_accepts(self):
+        from whittle import venv
+
+        manifest = tomllib.loads((PACKAGE / "blender_manifest.toml").read_text())
+        self.assertEqual(manifest["platforms"], ["linux-x64", "linux-arm64", "windows-x64", "macos-arm64"])
+        # Each listed platform as platform.machine() and sys.platform name it.
+        named = {"linux-x64": ("x86_64", "linux"), "linux-arm64": ("aarch64", "linux"),
+                 "windows-x64": ("AMD64", "win32"), "macos-arm64": ("arm64", "darwin")}
+        for name in manifest["platforms"]:
+            with self.subTest(platform=name):
+                self.assertIsNone(venv.compatible((3, 14, 0), *named[name]))
+
     def test_permissions(self):
         manifest = tomllib.loads((PACKAGE / "blender_manifest.toml").read_text())
         self.assertEqual(set(manifest["permissions"]), {"network", "files"})

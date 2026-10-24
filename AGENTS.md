@@ -11,9 +11,9 @@ writes a prompt, and the agent edits the open scene by running Python in Blender
 turn is a node in a branching history; a file can hold several chats, stored in the
 `.blend`. Licensed GPL-3.0-or-later.
 
-Platforms (README, Platforms): developed and tested on Linux x64; Windows x64 and macOS
-on Apple silicon are in the manifest and the code but untested; Intel Macs are not
-supported. One zip serves all three: it carries no wheels, and the setup installs the
+Platforms (README, Platforms): developed and tested on Linux x64; Linux arm64, Windows
+x64 and macOS on Apple silicon are in the manifest and the code but untested; Intel Macs
+are not supported. One zip serves all four: it carries no wheels, and the setup installs the
 platform's own from the hash-pinned lock. What differs per platform lives in
 `whittle/platforms.py` and takes the platform as an argument, so the Linux suite covers
 the Windows branches with kernel32 faked; route new process spawning, killing, liveness
