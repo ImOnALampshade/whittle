@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import json
 import os
+import sys
 import time
+import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -71,10 +73,13 @@ class LifecycleTest(AgentTestCase):
         ctl = self.make_controller()
         self.start_ready(ctl)
         popen = ctl.process.popen
+        self.assertIs(ctl.process.tree.popen, popen)
         ctl.stop()
         pump(ctl, lambda: ctl.process.state == AgentState.STOPPED, 8, "the agent to stop")
         self.assertEqual(popen.poll(), 0)
+        self.assertIsNone(ctl.process.tree, "the process tree is let go with the process")
 
+    @unittest.skipIf(sys.platform == "win32", "Windows uses a Job Object (tests/agent/test_platforms.py)")
     def test_the_agent_runs_in_its_own_process_group_and_stops_on_terminate(self):
         import os
         import signal

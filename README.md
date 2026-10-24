@@ -21,8 +21,9 @@ for how it is built, [docs/decisions.md](docs/decisions.md) for the choices behi
 [docs/ui.md](docs/ui.md) for the sidebar, and [docs/progress.md](docs/progress.md) for what
 works today and what is still rough.
 
-Requirements: Blender 5.2 on Linux x86_64 (its Python 3.14), and an Anthropic API key.
-The agent environment is only built for that platform for now.
+Requirements: Blender 5.2 (its Python 3.14) on Linux x64, Windows x64 or an Apple
+silicon Mac, and an Anthropic API key. Windows and macOS are untested: reports welcome
+(see [Platforms](#platforms)).
 
 ## Screenshots
 
@@ -42,8 +43,9 @@ The agent environment is only built for that platform for now.
 
 Whittle is young (0.1.0); expect rough edges.
 
-- **Platforms**: Linux x86_64 and Blender 5.2 only. The pinned agent environment holds
-  wheels for that platform and Python 3.14; Windows and macOS are not built yet.
+- **Platforms**: developed and tested on Linux x64 only. Windows x64 and macOS on Apple
+  silicon are supported in the code but untested: reports welcome. Intel Macs are not
+  supported. See [Platforms](#platforms).
 - **Sign-in**: an Anthropic API key only (API key and cost). Every turn calls Claude
   and costs tokens.
 - **Checked in a real GUI Blender by script**: flows background tests cannot reach, such
@@ -51,6 +53,33 @@ Whittle is young (0.1.0); expect rough edges.
   run in `./gui_checks.sh` (GUI checks, below). What still needs a person, such as
   tablet pressure and clicking the sidebar's own buttons, is the manual checklist in
   [docs/progress.md](docs/progress.md).
+
+### Platforms
+
+| Platform | Blender name | Status |
+|---|---|---|
+| Linux x64 | `linux-x64` | Developed and tested here. |
+| Windows x64 | `windows-x64` | Untested: reports welcome. |
+| macOS on Apple silicon | `macos-arm64` | Untested: reports welcome. |
+| macOS on Intel | `macos-x64` | Not supported. |
+
+One zip serves all three. It carries no wheels: the agent environment is downloaded at
+setup from the same hash-pinned `requirements.lock`, which holds the hashes of every wheel
+of each pinned version, so pip picks the files for your platform (the
+`claude-agent-sdk` wheel brings `claude` there, `claude.exe` on Windows). Intel Macs are
+left out because `cryptography` 50, which the lock pins, has no Intel macOS wheel, and
+Blender 5.2 has no Intel Mac build. Windows and Linux on Arm are left out too: the pinned
+SDK has no Windows Arm wheel, and Linux Arm is not checked yet.
+
+What differs on Windows: setup steps and the agent run without a console window; the
+agent and the Claude Code CLI it starts share a Job Object, so stopping the agent (or
+Blender crashing) ends the CLI too; and a stop is graceful only through Whittle's own
+shutdown message, since Windows has no terminate signal. The lock leaves out `pywin32`,
+which `mcp` lists for Windows: `mcp` only needs it for MCP servers it starts as
+processes, and Whittle's tools run inside the agent. Windows paths can get long (the
+user folder is under `%APPDATA%\Blender Foundation\Blender\5.2\extensions\.user\…`):
+if a turn fails on a path over 260 characters, turn on Windows' long path support, or
+pick a shorter **Environment Folder**.
 
 ## Install
 
@@ -88,8 +117,10 @@ Whittle is young (0.1.0); expect rough edges.
    - **Slow connections**: the `claude-agent-sdk` wheel is about 114 MB. The status line shows
      its download progress, and the install is only stopped if no data arrives for 5 minutes
      (or after 3 hours in all), so a slow but working connection gets there.
-   - **Where**: the extension's user folder, `~/.config/blender/5.2/extensions/.user/user_default/whittle/venv`,
-     unless you pick another **Environment Folder** first. The log of each setup is in
+   - **Where**: the extension's user folder, `~/.config/blender/5.2/extensions/.user/user_default/whittle/venv`
+     on Linux (under `%APPDATA%\Blender Foundation\Blender\5.2\` on Windows and
+     `~/Library/Application Support/Blender/5.2/` on macOS), unless you pick another
+     **Environment Folder** first. The log of each setup is in
      `…/whittle/logs/venv-<time>.log`.
    - **Updates**: Whittle never upgrades anything by itself. After an extension update that
      ships a different lock, the preferences (and the sidebar) say the environment was set up
@@ -260,7 +291,10 @@ also kept locally, in the chat cache and in the `.blend` when you save it, so a 
 ## Development
 
 You need Blender 5.2 as `blender` on your `PATH`: `run_tests.sh`, `build.sh`,
-`screens.sh` and `gui_checks.sh` run it from there.
+`screens.sh` and `gui_checks.sh` run it from there. They are POSIX shell scripts that use
+`timeout` (GNU coreutils; on a Mac, `brew install coreutils` provides it), and `screens.sh`
+and `gui_checks.sh` need Linux with KDE's `kwin_wayland`. On Windows, run the commands
+they contain by hand (the dev venv's Python is `.venv\Scripts\python.exe` there).
 
 - Make the dev venv `.venv/` at the repo root once, from Blender 5.2's own Python 3.14 (in
   Blender's folder, `5.2/python/bin/python3.14`, or a system Python 3.14 when your

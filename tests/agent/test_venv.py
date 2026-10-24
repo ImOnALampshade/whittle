@@ -6,8 +6,12 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 from whittle import venv
 from whittle.venv import Step, VenvSetup, VenvStatus
@@ -48,7 +52,7 @@ class CommandTest(unittest.TestCase):
     def test_install_command_is_exact(self):
         python = venv.venv_python(self.target, "linux")
         self.assertEqual(venv.install_command(python, LOCK), [
-            "/tmp/whittle-venv/bin/python", "-I", "-u", "-m", "pip", "install", "--isolated",
+            str(python), "-I", "-u", "-m", "pip", "install", "--isolated",
             "--disable-pip-version-check", "--no-input", "--progress-bar", "raw", "--require-hashes",
             "--only-binary", ":all:", "--no-deps", "-r", str(LOCK)])
 
@@ -60,14 +64,15 @@ class CommandTest(unittest.TestCase):
         self.assertFalse([a for a in argv if "git+" in a or "github:" in a])
 
     def test_create_command(self):
+        base, target = str(self.base), str(self.target)
         self.assertEqual(venv.create_command(self.base, self.target),
-                         ["/usr/bin/python3.14", "-I", "-m", "venv", "/tmp/whittle-venv"])
+                         [base, "-I", "-m", "venv", target])
         self.assertEqual(venv.create_command(self.base, self.target, clear=True),
-                         ["/usr/bin/python3.14", "-I", "-m", "venv", "--clear", "/tmp/whittle-venv"])
+                         [base, "-I", "-m", "venv", "--clear", target])
 
     def test_verify_command_is_isolated(self):
         argv = venv.verify_command(Path("/v/bin/python"))
-        self.assertEqual(argv[:3], ["/v/bin/python", "-I", "-c"])
+        self.assertEqual(argv[:3], [str(Path("/v/bin/python")), "-I", "-c"])
         self.assertIn("claude-agent-sdk", argv[3])
 
     def test_venv_python(self):
@@ -97,10 +102,48 @@ class CommandTest(unittest.TestCase):
                                "SSL_CERT_FILE": "/etc/ca.pem"})
 
     def test_compatible(self):
-        self.assertIsNone(venv.compatible((3, 14, 8), "x86_64", "linux"))
+        # platform.machine() says AMD64 on Windows, arm64 on Apple silicon.
+        for machine, platform in (("x86_64", "linux"), ("AMD64", "win32"), ("arm64", "darwin")):
+            with self.subTest(platform=platform):
+                self.assertIsNone(venv.compatible((3, 14, 8), machine, platform))
         self.assertIn("3.14", venv.compatible((3, 13, 1), "x86_64", "linux"))
-        self.assertIn("aarch64", venv.compatible((3, 14, 0), "aarch64", "linux"))
-        self.assertIn("win32", venv.compatible((3, 14, 0), "AMD64", "win32"))
+        self.assertIn("3.14", venv.compatible((3, 15, 0), "arm64", "darwin"))
+        for machine, platform in (("aarch64", "linux"), ("ARM64", "win32")):
+            with self.subTest(platform=platform, machine=machine):
+                reason = venv.compatible((3, 14, 0), machine, platform)
+                self.assertIn(machine, reason)
+                self.assertIn(venv.SUPPORTED_TEXT, reason)
+        self.assertIn("freebsd14", venv.compatible((3, 14, 0), "amd64", "freebsd14"))
+
+    def test_intel_macs_are_refused_with_the_reason(self):
+        reason = venv.compatible((3, 14, 0), "x86_64", "darwin")
+        self.assertIn("Apple silicon", reason)
+        self.assertIn("cryptography", reason)
+
+    def test_bundled_cli_name(self):
+        self.assertEqual(venv.bundled_cli_name("linux"), "claude")
+        self.assertEqual(venv.bundled_cli_name("darwin"), "claude")
+        self.assertEqual(venv.bundled_cli_name("win32"), "claude.exe")
+
+    def test_verify_script_looks_for_the_platform_cli(self):
+        tmp = Path(tempfile.mkdtemp(prefix="whittle-verify-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        (tmp / "_bundled").mkdir()
+        (tmp / "_bundled" / "claude.exe").write_bytes(b"MZ")
+        sdk = types.ModuleType("claude_agent_sdk")
+        sdk.__file__ = str(tmp / "__init__.py")
+        for platform, cli in (("win32", True), ("linux", False)):
+            with self.subTest(platform=platform):
+                out = StringIO()
+                with mock.patch.dict(sys.modules, {"claude_agent_sdk": sdk}), \
+                        mock.patch.object(sys, "platform", platform), \
+                        mock.patch("importlib.metadata.version", return_value=PINNED_SDK), \
+                        redirect_stdout(out):
+                    exec(venv.VERIFY_SCRIPT, {})
+                line = out.getvalue().strip()
+                self.assertTrue(line.startswith(venv.VERIFY_PREFIX))
+                self.assertEqual(json.loads(line[len(venv.VERIFY_PREFIX):]),
+                                 {"sdk": PINNED_SDK, "cli": cli})
 
 
 class StatusTest(unittest.TestCase):
@@ -137,6 +180,39 @@ class StatusTest(unittest.TestCase):
         python.symlink_to(self.tmp / "gone" / "python3.14")
         venv.write_marker(self.venv, LOCK, sdk=PINNED_SDK, base_python=Path(sys.executable))
         self.assertEqual(venv.status(self.venv, LOCK), VenvStatus.BROKEN)
+
+    def windows_venv(self, home: Path):
+        python = venv.venv_python(self.venv, "win32")
+        python.parent.mkdir(parents=True)
+        python.write_bytes(b"MZ")
+        python.chmod(0o755)
+        (self.venv / "pyvenv.cfg").write_text(f"home = {home}\ninclude-system-site-packages = false\n"
+                                              "version = 3.14.0\n")
+        venv.write_marker(self.venv, LOCK, sdk=PINNED_SDK, base_python=home / "python.exe")
+
+    def test_windows_venv_whose_base_python_is_gone_is_broken(self):
+        # A Windows venv's python.exe is a copy that stays behind.
+        base = self.tmp / "Blender" / "5.2" / "python" / "bin"
+        base.mkdir(parents=True)
+        self.windows_venv(base)
+        self.assertEqual(venv.base_home(self.venv), base)
+        self.assertEqual(venv.status(self.venv, LOCK, "win32"), VenvStatus.READY)
+        shutil.rmtree(self.tmp / "Blender")
+        self.assertEqual(venv.status(self.venv, LOCK, "win32"), VenvStatus.BROKEN)
+
+    def test_pyvenv_home_is_only_read_on_windows(self):
+        python = self.make_python()
+        (self.venv / "pyvenv.cfg").write_text(f"home = {self.tmp / 'gone'}\n")
+        venv.write_marker(self.venv, LOCK, sdk=PINNED_SDK, base_python=python)
+        self.assertEqual(venv.status(self.venv, LOCK, "linux"), VenvStatus.READY)
+
+    def test_base_home(self):
+        self.venv.mkdir()
+        self.assertIsNone(venv.base_home(self.venv))
+        (self.venv / "pyvenv.cfg").write_text("version = 3.14.0\n")
+        self.assertIsNone(venv.base_home(self.venv))
+        (self.venv / "pyvenv.cfg").write_text("Home=C:\\Program Files\\Blender\\python\\bin \n")
+        self.assertEqual(venv.base_home(self.venv), Path("C:\\Program Files\\Blender\\python\\bin"))
 
     def test_marker_is_written_atomically(self):
         self.venv.mkdir()
@@ -223,11 +299,11 @@ class SetupTest(unittest.TestCase):
         self.procs.append(proc)
         return proc
 
-    def setup(self, *, dry_run=False, env=None):
+    def setup(self, *, dry_run=False, env=None, platform="linux"):
         steps = venv.plan(Path(sys.executable), self.venv, LOCK)
         return VenvSetup(steps, venv=self.venv, lock=LOCK, log_path=self.log, dry_run=dry_run,
                          popen=self.popen, clock=self.clock, env=env or {"PATH": "/usr/bin"},
-                         on_finish=self.finished.append)
+                         on_finish=self.finished.append, platform=platform)
 
     def until_step(self, setup, name):
         for _ in range(10):
@@ -264,11 +340,21 @@ class SetupTest(unittest.TestCase):
         for proc in self.procs:
             self.assertEqual(proc.kwargs["env"], {"PATH": "/usr/bin"})
             self.assertIs(proc.kwargs["stdin"], subprocess.DEVNULL)
+            self.assertNotIn("creationflags", proc.kwargs)
         marker = venv.read_marker(self.venv)
         self.assertEqual(marker["lock_sha256"], venv.lock_digest(LOCK))
         self.assertTrue(marker["complete"])
         self.assertEqual(marker["sdk"], PINNED_SDK)
         self.assertEqual(self.finished, [setup])
+
+    def test_windows_steps_open_no_console_window(self):
+        setup = self.setup(platform="win32")
+        setup.start()
+        self.run_out(setup)
+        self.assertEqual(setup.state, "done", setup.reason)
+        self.assertEqual(len(self.procs), 3)
+        for proc in self.procs:
+            self.assertEqual(proc.kwargs["creationflags"], 0x08000000)
 
     def test_verify_mismatch_fails(self):
         for output in (verify_output(sdk="0.2.166"), verify_output(cli=False), "nothing\n"):

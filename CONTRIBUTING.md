@@ -9,7 +9,11 @@ problem or idea before a large change saves everyone time.
   [docs/architecture.md](docs/architecture.md), the blueprint the code follows. The sidebar's
   spec is [docs/ui.md](docs/ui.md); agent-facing text (the system prompt, the skills, tool
   descriptions) follows [docs/prompting.md](docs/prompting.md).
-- You need Blender 5.2 on Linux x86_64 and the development venv described in the README.
+- You need Blender 5.2 and the development venv described in the README. Whittle is
+  developed on Linux x64; the scripts (`run_tests.sh`, `build.sh`, `screens.sh`) are POSIX
+  shell, and `screens.sh` needs Linux with KDE's `kwin_wayland`. Windows and Apple silicon
+  Macs are supported but untested: a report of what works there is a welcome
+  contribution.
   You do not need an API key: the offline suite and the screenshots use a scripted fake
   agent.
 

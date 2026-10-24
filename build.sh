@@ -6,6 +6,10 @@
 # The packaged lock must be a byte-identical copy of agent_env's. This script
 # never copies it: a difference is something to look at, not to paper over.
 # The packaged LICENSE is a copy of the repo's, so the zip carries the GPL.
+#
+# One zip serves every platform in the manifest. --split-platforms is for
+# extensions that bundle wheels; Whittle bundles none (pip downloads the
+# platform's own wheels at setup), so it would only make identical zips.
 set -eu
 cd "$(dirname "$0")"
 out="${1:-build}"

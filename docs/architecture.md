@@ -26,6 +26,7 @@ whittle/                          repo root
 │   ├── models.py                 stdlib only: model ids by family and version, the model list's cache (§15)
 │   ├── style.py                  stdlib only: the bevel style suggestions and how the prompt words the style
 │   ├── venv.py                   stdlib only: venv status, setup commands, the VenvSetup state machine
+│   ├── platforms.py              stdlib only: what differs on Windows and macOS (spawn flags, process trees, pid probe, replace)
 │   ├── requirements.lock         byte-identical copy of agent_env/requirements.lock (packaging step)
 │   ├── addon/                    Blender side; may import bpy everywhere
 │   │   ├── __init__.py           register()/unregister() for every class, handler and timer
@@ -98,7 +99,7 @@ Rules:
 
 - Every source file starts with `# SPDX-License-Identifier: GPL-3.0-or-later` (after a
   shebang), and the manifest says `license = ["SPDX:GPL-3.0-or-later"]`.
-- `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `models.py`, `style.py`, `venv.py` and everything under `agent/`
+- `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `models.py`, `style.py`, `venv.py`, `platforms.py` and everything under `agent/`
   import only the stdlib at module level. `agent/runner.py` imports `claude_agent_sdk`;
   nothing else does, so the fake agent and the formats code run under any Python 3.14,
   including Blender's.
@@ -205,7 +206,8 @@ run on main thread  ── result ───────────────�
    backlog 1. Read the port back with `getsockname()[1]`.
 5. Generate `token = secrets.token_hex(32)`.
 6. `subprocess.Popen([python, "-s", "-P", "-m", "whittle.agent", "--port", str(port)] + extra,
-   cwd=session_dir, env=env, stdin=DEVNULL, stdout=log, stderr=STDOUT)` where
+   cwd=session_dir, env=env, stdin=DEVNULL, stdout=log, stderr=STDOUT, **platforms.own_group())`,
+   then `platforms.ProcessTree(popen)` (see **Shutdown**), where
    - `env` = `process.agent_environment(os.environ, api_key=…, config_dir=…)` plus
      `PYTHONPATH=<parent dir of the whittle package>` and `WHITTLE_TOKEN=<token>`: see
      **Authentication**. The token and the key travel in the environment, not argv, so
@@ -301,6 +303,25 @@ or kill goes to the whole group (`os.killpg`), so the Claude Code CLI the SDK ru
 with it, also when the bridge fails or the handshake times out. The agent handles
 SIGTERM like `shutdown`: it still closes its session, so the SDK's temporary config
 folder (which holds a copy of the credentials) is removed.
+
+`AgentProcess.tree` (`platforms.ProcessTree`) does the terminating and killing, and is
+closed when the process is gone. On macOS it works as on Linux. On Windows (untested):
+
+- the agent starts with `CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW` instead of
+  `start_new_session` (which Windows ignores), so neither it nor the CLI shows a console;
+- right after the spawn the agent is assigned to a Job Object with
+  `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` (ctypes: `CreateJobObjectW`,
+  `SetInformationJobObject`, `OpenProcess`, `AssignProcessToJobObject`), long before it
+  starts the CLI, so the CLI joins the job too. Terminate and kill are both
+  `TerminateJobObject`, then `popen.kill()`: Windows has no SIGTERM for a process with
+  a console of its own, and `TerminateProcess` would leave the CLI running. Closing the
+  job's handle (when the agent is gone, or when Blender itself dies) ends anything left
+  in it. If the job cannot be made, a kill runs `taskkill /T /F /PID`;
+- so a terminate is a hard kill there, and the `shutdown` call is the only graceful stop;
+  a killed agent leaves the SDK's `claude-resume-*` folder in the temp folder.
+  `agent/__main__.py` `watch_signals` falls back to `signal.signal` for SIGTERM and
+  SIGBREAK when the event loop takes no signal handlers (Windows' proactor loop), which
+  covers a console Ctrl+Break but not Blender's stop.
 
 ---
 
@@ -567,7 +588,8 @@ never left changed.
 ### Entry point (`agent/__main__.py`)
 
 `python -m whittle.agent --port PORT [--fake SCRIPT]`: read `WHITTLE_TOKEN`, configure
-`logging` to stderr (which is the log file), `asyncio.run(main())`. `main` opens the
+`logging` to stderr (which is the log file), `asyncio.run(main())`. `main` watches
+SIGTERM (`watch_signals`, §2 Shutdown), opens the
 `Connection`, sends `hello`, waits for `welcome` (10 s), then serves until `shutdown` or
 EOF. Exit code 0 on both; 2 on handshake failure.
 
@@ -635,8 +657,8 @@ reads it the same way, and `map_message` turns a non-empty narration block into 
 thinking block, including an older model's full thinking, stays a `thinking` event
 inside the tool group.
 
-`cli_path` is left unset: the SDK finds `claude_agent_sdk/_bundled/claude`. The API key,
-when set, is already in the process environment, which the CLI inherits.
+`cli_path` is left unset: the SDK finds `claude_agent_sdk/_bundled/claude` (`claude.exe` on
+Windows). The API key, when set, is already in the process environment, which the CLI inherits.
 
 Because a `ClaudeSDKClient` must be used inside the task group it connected in, the
 runner owns one long-lived **session task** per SDK client. That task connects, then runs
@@ -1129,7 +1151,9 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
 
 ## 8. On-disk formats
 
-All JSON is UTF-8, written atomically (temp file + `os.replace`), with `"format"` and
+All JSON is UTF-8, written atomically (temp file + `os.replace`, through `platforms.replace`,
+which on Windows retries for about a second while another program holds the file open),
+with `"format"` and
 `"version"` keys. Matrices are 4×4 row-major lists of floats. Paths inside JSON are
 relative to the file's own folder. `formats.py` defines dataclasses plus
 `to_json()/from_json()` and a `validate()` that checks required keys and types (no
@@ -1303,7 +1327,10 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
   `version` (equal to `whittle.__version__`, checked by a test), `name = "Whittle"`,
   `tagline`, `maintainer`, `type = "add-on"`, `blender_version_min = "5.2.0"` (Grease
   Pencil v3, and the lock's wheels are for Python 3.14),
-  `license = ["SPDX:GPL-3.0-or-later"]`, `platforms = ["linux-x64"]`, and
+  `license = ["SPDX:GPL-3.0-or-later"]`,
+  `platforms = ["linux-x64", "windows-x64", "macos-arm64"]` (no `wheels`: the venv is
+  downloaded at setup, so the zip holds no binaries and one zip serves every platform;
+  `--split-platforms` would only make identical copies; decisions, Environment), and
   ```toml
   [permissions]
   network = "Runs a Claude agent that calls the Anthropic API"
@@ -1334,7 +1361,8 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
 - **Status** (`venv.status(venv, lock)`): `missing` (no folder or an empty one),
   `foreign` (a folder without the marker: never touched), `broken` (marker incomplete, or
   `bin/python` not an executable file — a dangling symlink after the base Python went
-  away), `stale` (complete, but `lock_sha256` differs from the shipped lock: an extension
+  away; on Windows, where `Scripts\python.exe` is a copy that stays, also the `home`
+  folder in `pyvenv.cfg` gone: `venv.base_home()`), `stale` (complete, but `lock_sha256` differs from the shipped lock: an extension
   update), `ready`. Only `ready` counts for `paths.agent_python()`; a stale venv is never
   upgraded on its own, the user presses Reinstall.
 - **Steps** (`venv.plan(base, venv, lock, reinstall=)`), each with its own timeout:
@@ -1344,12 +1372,15 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
      "--disable-pip-version-check", "--no-input", "--require-hashes", "--only-binary",
      ":all:", "--no-deps", "-r", lock]`.
   3. `verify` (60 s): `[venv python, "-I", "-c", …]` imports `claude_agent_sdk` and prints
-     `whittle-verify:{"sdk": <installed version>, "cli": <_bundled/claude is a file>}`;
+     `whittle-verify:{"sdk": <installed version>, "cli": <_bundled/claude is a file>}`
+     (`claude.exe` on Windows, as the SDK looks for it: `venv.bundled_cli_name()`);
      the setup requires the lock's pinned version and `cli: true`.
 - **Environment**: `venv.subprocess_env` drops every variable starting with `PIP_`,
   `PYTHON`, `UV_`, `VIRTUAL_ENV` or `CONDA_` (no index or path redirection), and keeps the
   rest (`PATH`, `HOME`, proxies, `SSL_CERT_*`). stdin is `/dev/null`; stdout and stderr
-  go to `<user dir>/logs/venv-<time>.log`, never a pipe.
+  go to `<user dir>/logs/venv-<time>.log`, never a pipe. On Windows each step starts with
+  `CREATE_NO_WINDOW` (`platforms.hidden_window()`), so no console flashes; each step is
+  one process, so `terminate()` and `kill()` reach all of it.
 - **`VenvSetup`**: `start()` then `tick()` every 0.25 s from a `bpy.app.timers` timer
   (tests call `tick()` themselves; `popen` and `clock` are injectable). State `idle` →
   `running` → `done` | `failed` | `cancelled`. A step past its deadline gets
@@ -1359,7 +1390,9 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
   folder, no marker. `on_finish` runs once at the end.
 - **Guard** (`setup.begin`): refuses, with a message for the user, when a setup is
   already running, a turn is running or waiting (`TurnController.busy`), `venv.compatible()`
-  objects (Python 3.14, Linux, x86_64 only — the lock is manylinux x86_64), Blender's Python
+  objects (Python 3.14 on Linux x86_64, Windows AMD64 or macOS arm64, `venv.SUPPORTED`: the
+  lock has every pin's wheel for those; an Intel Mac gets its own message naming
+  `cryptography`), Blender's Python
   has no `ensurepip`, the folder is `foreign`, the venv is `ready` and this is not a
   reinstall, there is no online access, or Blender runs in the background. The last two
   do not apply to a dry run. When a real setup finishes, a controller in `needs_setup`
@@ -1741,6 +1774,8 @@ aside, below). Nothing is ever written beside a `.blend`.
                                             "used": seconds since the epoch,
                                             "base": state_stamp of what the .blend stores, or null}
   in-use.json                              {"pid", "host"}: the Blender that has the file open
+                                            (liveness: platforms.pid_alive, os.kill(pid, 0) on
+                                            POSIX, OpenProcess + GetExitCodeProcess on Windows)
   chats.json                               the index
   chats/<chat id>/                         one chat; also the agent's cwd for it
     chat.json                              {"format": "whittle.chat", "version": 1, "id", "title",

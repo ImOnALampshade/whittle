@@ -33,7 +33,7 @@ import time
 from pathlib import Path
 
 from . import chats as store
-from . import formats
+from . import formats, platforms
 
 log = logging.getLogger("whittle")
 
@@ -122,15 +122,7 @@ def _host() -> str:
 
 
 def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except (OverflowError, ValueError):
-        return False
-    return True
+    return platforms.pid_alive(pid)
 
 
 def _lock(root: Path) -> dict | None:
