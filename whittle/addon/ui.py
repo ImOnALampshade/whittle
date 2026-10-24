@@ -49,6 +49,11 @@ THUMBNAIL_PER_UNIT = 0.36
 NODE_THUMBNAIL_SCALE = 1.5
 # The link button at the end of a Markdown line, in UI units.
 LINK_UNITS = 1.0
+# A code block's copy button, and the room its first row leaves for it when
+# the block has no language row: the button and a gap before it, so a wrapped
+# code line does not run up against it.
+COPY_UNITS = 1.2
+COPY_ROOM_UNITS = 2.0
 # Drawn in the margin once per quote level, dim.
 QUOTE_BAR = "\u258f"
 # Prompt lines in a user bubble.
@@ -241,7 +246,7 @@ def markdown_lines(text: str, ctx: Ctx, width: float) -> list[markdown.Line]:
     if found is None:
         slack = ctx.px(0.6)
         found = markdown.layout(text, width - slack, ctx.measure, code_width=width - BOX_PAD - slack,
-                                link_room=ctx.px(LINK_UNITS))
+                                link_room=ctx.px(LINK_UNITS), copy_room=ctx.px(COPY_ROOM_UNITS))
         if len(_wrap_cache) > WRAP_CACHE:
             _wrap_cache.clear()
         _wrap_cache[key] = found
@@ -342,7 +347,8 @@ def _indented(layout, indent: float, width: float):
 def _draw_code_head(layout, text: str, copy: str, ctx: Ctx, width: float, *, dim: bool = True) -> None:
     """A row of a code block with a button copying the code at its end: the
     language, dim, or with no language the code's first line."""
-    left, right = _split_end(layout.row(align=True), ctx, ctx.px(1.2), int(width))
+    # The row is inside the code box, so its split is of the box's width.
+    left, right = _split_end(layout.row(align=True), ctx, ctx.px(COPY_UNITS), int(width - BOX_PAD))
     left.active = not dim
     left.label(text=text)
     right.emboss = "NONE"

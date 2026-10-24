@@ -225,6 +225,11 @@ class LayoutTest(unittest.TestCase):
         self.assertEqual(md.layout("~~~ {.js}\nf()\n~~~", 1000, measure)[0].text, "js")
         long = md.layout("```\n" + "x" * 30 + "\n```", 1000, measure, code_width=60)
         self.assertEqual(texts(long), ["", *[code_line("x" * 10)] * 3], "a long code line is broken where its box ends")
+        roomy = md.layout("```\n" + "x" * 30 + "\n```", 1000, measure, code_width=60, link_room=6, copy_room=12)
+        self.assertEqual(texts(roomy)[1], code_line("x" * 8),
+                         "without a language row, the code leaves copy_room for the copy button on its row")
+        named = md.layout("```sh\n" + "x" * 30 + "\n```", 1000, measure, code_width=60, copy_room=12)
+        self.assertEqual(texts(named)[1], code_line("x" * 10), "the button is on the language row")
 
     def test_indented_code_blocks(self):
         lines = md.layout("Run:\n\n    x = 1\n\n      y = *2*\nafter", 1000, measure)

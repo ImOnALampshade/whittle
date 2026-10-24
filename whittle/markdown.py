@@ -778,11 +778,12 @@ def _footnotes(source: list[str]) -> tuple[list[str], dict[str, str]]:
 
 
 class _Layout:
-    def __init__(self, width: float, measure: Measure, box_pad: float, link_room: float):
+    def __init__(self, width: float, measure: Measure, box_pad: float, link_room: float, copy_room: float):
         self.width = width
         self.measure = measure
         self.box_pad = box_pad
         self.link_room = link_room
+        self.copy_room = copy_room
         self.em = measure("M") or 8.0
         self.step = indent_step(measure)
         self.notes = Notes()
@@ -805,7 +806,7 @@ class _Layout:
         out.append(Line(language, "codehead", indent, quote=quote, copy="\n".join(code)))
         # Without a language there is no head row: the copy button shares the
         # code's rows (the first), so they leave room for it.
-        reserve = 0.0 if language else self.link_room
+        reserve = 0.0 if language else self.copy_room
         for text in code:
             self.code(out, text, indent, quote, reserve)
 
@@ -1026,15 +1027,16 @@ def _hard_break(line: str) -> str:
 
 
 def layout(text: str, width: float, measure: Measure, code_width: float | None = None,
-           link_room: float = 0.0) -> list[Line]:
+           link_room: float = 0.0, copy_room: float | None = None) -> list[Line]:
     """Markdown text as the lines to draw in width pixels (code lines and
     tables in code_width, inside their box; a line with a link leaves
-    link_room for its button). A source line break stays a line break
+    link_room for its button, and the code of a block without a language
+    copy_room, link_room unless given, for its copy button). A source line break stays a line break
     (Claude writes "Done:" on a line of its own); a blank line between
     blocks is a gap."""
     box_pad = width - (width if code_width is None else code_width)
     source, notes = _footnotes(text.replace("\r\n", "\n").split("\n"))
-    doc = _Layout(width, measure, box_pad, link_room)
+    doc = _Layout(width, measure, box_pad, link_room, link_room if copy_room is None else copy_room)
     doc.notes.texts = notes
     out = doc.blocks(source)
     doc.footnotes(out)
