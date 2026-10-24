@@ -139,10 +139,9 @@ def screenshot_window(path: Path) -> np.ndarray:
     return pixels.reshape(height, width, 4)
 
 
-def crop_to_change(before: np.ndarray, after: np.ndarray, margin: int = 8, status: int = 0) -> np.ndarray:
-    """The part of after that differs from before: the popup that opened,
-    with a little of what it covers around it. The bottom status rows are
-    not looked at."""
+def change_bounds(before: np.ndarray, after: np.ndarray, status: int = 0) -> tuple[int, int, int, int]:
+    """(x0, y0, x1, y1) of the part of after that differs from before: the
+    popup that opened. The bottom status rows are not looked at."""
     if before.shape != after.shape:
         raise RuntimeError("the window changed size while the popup opened")
     changed = np.abs(after[..., :3] - before[..., :3]).max(axis=2) > 1e-3
@@ -150,8 +149,14 @@ def crop_to_change(before: np.ndarray, after: np.ndarray, margin: int = 8, statu
     rows, cols = np.nonzero(changed.any(axis=1))[0], np.nonzero(changed.any(axis=0))[0]
     if len(rows) == 0:
         raise RuntimeError("nothing opened: the window looks the same")
-    y0, y1 = max(0, rows[0] - margin), min(after.shape[0], rows[-1] + 1 + margin)
-    x0, x1 = max(0, cols[0] - margin), min(after.shape[1], cols[-1] + 1 + margin)
+    return int(cols[0]), int(rows[0]), int(cols[-1]) + 1, int(rows[-1]) + 1
+
+
+def crop_to_change(before: np.ndarray, after: np.ndarray, margin: int = 8, status: int = 0) -> np.ndarray:
+    """The popup that opened, with a little of what it covers around it."""
+    x0, y0, x1, y1 = change_bounds(before, after, status)
+    y0, y1 = max(0, y0 - margin), min(after.shape[0], y1 + margin)
+    x0, x1 = max(0, x0 - margin), min(after.shape[1], x1 + margin)
     return after[y0:y1, x0:x1].copy()
 
 
@@ -366,8 +371,23 @@ class Run:
                 module, name = self.popup.name.split(".")
                 getattr(getattr(bpy.ops, module), name)("INVOKE_DEFAULT", **self.popup.props)
         redraw_all()
-        self.state = "popup_shoot"
+        self.state = "popup_unhover"
         self.wait_until = time.monotonic() + HOLD
+        return TICK
+
+    def _popup_unhover(self):
+        """The popup opened under the pointer, so its first item shows as
+        hovered: moves the pointer into the popup's top left corner, where
+        nothing is drawn, so the popup stays open with no item hovered."""
+        if time.monotonic() < self.wait_until:
+            return TICK
+        after = screenshot_window(self.work / "window-after.png")
+        x0, _y0, _x1, y1 = change_bounds(self.before_popup, after, status=STATUS_BAR)
+        win, _area, _main, _ui = view3d()
+        win.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x0 + 12, y=y1 - 8)
+        redraw_all()
+        self.state = "popup_shoot"
+        self.wait_until = time.monotonic() + 0.5
         return TICK
 
     def _popup_shoot(self):

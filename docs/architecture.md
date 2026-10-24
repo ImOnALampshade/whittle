@@ -631,7 +631,7 @@ ClaudeAgentOptions(
     permission_mode="dontAsk",                     # deny anything not pre-approved
     mcp_servers={"blender": blender_server, "whittle": whittle_server},
     strict_mcp_config=True,                        # ignore user/project MCP config
-    setting_sources=[],                            # no user/project settings or CLAUDE.md
+    setting_sources=[],                            # no user/project settings or memory files
     plugins=[{"type": "local", "path": str(PLUGIN_DIR)}],
     skills=[f"whittle:{name}" for name in SKILLS],
     resume=params["resume"],

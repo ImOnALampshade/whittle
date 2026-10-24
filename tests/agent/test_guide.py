@@ -36,8 +36,9 @@ class GuideTest(unittest.TestCase):
             self.assertTrue((REPO / script).is_file(), script)
 
     def test_it_is_the_only_guide(self):
-        # Claude Code reads AGENTS.md itself; a CLAUDE.md would be a second copy to keep in step.
-        self.assertFalse((REPO / "CLAUDE.md").exists())
+        # A second guide at the root would be one more copy to keep in step.
+        guides = {p.name for p in REPO.glob("*.md")} - {"README.md", "CONTRIBUTING.md"}
+        self.assertEqual(guides, {"AGENTS.md"})
 
 
 if __name__ == "__main__":
