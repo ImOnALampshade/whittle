@@ -122,7 +122,8 @@ CHECKS = {
     "preferences_key": Check(
         "With no API key, Send asks for one: the sidebar's box has Get a Key (the Console's keys "
         "page) and Preferences…, which opens the Preferences on Whittle. There the API Key field "
-        "hides what is typed, and the line under it says where the key comes from: nowhere, "
+        "hides what is typed, and the line under it, on a row of its own and whole at the window's "
+        "opening size, says where the key comes from: nowhere, "
         "ANTHROPIC_API_KEY in Blender's environment, then a key typed in the field, which wins; "
         "with a key the sidebar's box goes. Fake keys only, and Blender has no online access."),
     "preferences_environment": Check(

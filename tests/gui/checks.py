@@ -1517,6 +1517,31 @@ def key_line(layout) -> str:
     return found[0]
 
 
+# What the Preferences' main region keeps from its width for a line in one
+# of Whittle's boxes: the region's margins, the box's border and the icon.
+PREFERENCES_LINE_MARGIN = 96
+
+
+def expect_key_line_whole(layout) -> None:
+    """The key's source line has a row of its own (nothing else drawn in its
+    layout) and its text fits the Preferences window as Blender opens it,
+    so it is never cut off."""
+    import blf
+
+    text = key_line(layout)
+    (record,) = [r for r in layout.of("label") if r["text"] == text]
+    (parent,) = [r for r in layout.calls if r.get("child") is record["layout"]]
+    expect(parent["kind"] in ("box", "column"),
+           f"the key's source line {text!r} shares a {parent['kind']} with other items")
+    region = preferences_override()["region"]
+    scale = bpy.context.preferences.system.ui_scale
+    blf.size(0, bpy.context.preferences.ui_styles[0].widget.points * scale)
+    width = blf.dimensions(0, text)[0]
+    room = region.width - PREFERENCES_LINE_MARGIN * scale
+    expect(width <= room, f"the key's source line {text!r} is {width:.0f} px, wider than the {room:.0f} px "
+                          f"the Preferences window has for it")
+
+
 @phase("preferences_key")
 def preferences_key(stage: GuiStage):
     from tests.gui.spy import Spy
@@ -1566,13 +1591,15 @@ def preferences_key(stage: GuiStage):
     expect_equal([r["prop"] for r in claude if r["kind"] == "prop"], ["api_key", "model", "usage_data"],
                  "the Claude box's fields")
     expect_equal(key_line(page), NO_KEY_LINE, "the key's source line with no key")
+    expect_key_line_whole(page)
     links = [(r.get("text"), r["props"].url) for r in claude if r["kind"] == "operator"]
     expect_equal(links, [("Get an API Key", prefs.KEYS_URL)], "the Claude box's link")
     yield from shoot_preferences(stage, "preferences-no-key", "Claude")
 
     # A key in Blender's environment: the sidebar's box goes.
     os.environ[prefs.ENV_KEY] = ENVIRONMENT_KEY
-    yield from drawn(spy, "the environment's key line", lambda d: key_line(d) == ENVIRONMENT_KEY_LINE)
+    page = yield from drawn(spy, "the environment's key line", lambda d: key_line(d) == ENVIRONMENT_KEY_LINE)
+    expect_key_line_whole(page)
     expect_equal(prefs.api_key(), (ENVIRONMENT_KEY, "environment"), "the key from the environment")
     yield from drawn(panel, "the sidebar without its key box", lambda d: KEY_BOX_TITLE not in d.labels())
     yield from shoot_preferences(stage, "preferences-environment-key", "Claude")
@@ -1581,7 +1608,8 @@ def preferences_key(stage: GuiStage):
     p.api_key = TYPED_KEY
     expect_equal(prefs.api_key(), (TYPED_KEY, "preferences"), "the key with both set")
     expect_equal(stage.ctl.process.state, AgentState.STOPPED, "the agent's state once a key is typed")
-    yield from drawn(spy, "the typed key's line", lambda d: key_line(d) == TYPED_KEY_LINE)
+    page = yield from drawn(spy, "the typed key's line", lambda d: key_line(d) == TYPED_KEY_LINE)
+    expect_key_line_whole(page)
     yield from shoot_preferences(stage, "preferences-typed-key", "Claude")
     del os.environ[prefs.ENV_KEY]
     yield from drawn(spy, "the typed key's line alone", lambda d: key_line(d) == TYPED_KEY_LINE)

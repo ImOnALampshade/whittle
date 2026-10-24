@@ -132,14 +132,17 @@ class WhittlePreferences(bpy.types.AddonPreferences):
         box = layout.box()
         box.label(text="Claude", icon="USER")
         box.prop(self, "api_key")
+        # The line saying where the key comes from has a row of its own, so it
+        # is never cut off; the link goes under it, at the right.
         _, source = api_key()
-        row = box.row()
         if source == "environment":
-            row.label(text=f"Using {ENV_KEY} from Blender's environment.", icon="INFO")
+            box.label(text=f"Using {ENV_KEY} from Blender's environment.", icon="INFO")
         elif source is None:
-            row.label(text="Whittle needs an Anthropic API key to run Claude.", icon="INFO")
+            box.label(text="Whittle needs an Anthropic API key to run Claude.", icon="INFO")
         else:
-            row.label(text="Usage is billed to the key's Anthropic Console account.", icon="INFO")
+            box.label(text="Usage is billed to the key's Anthropic Console account.", icon="INFO")
+        row = box.row()
+        row.alignment = "RIGHT"
         row.operator("wm.url_open", text="Get an API Key", icon="URL").url = KEYS_URL
         box.prop(self, "model", text="Model for New Chats")
         box.prop(self, "usage_data")
