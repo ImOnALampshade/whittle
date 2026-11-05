@@ -84,6 +84,11 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
   The version and each archive's SHA-256 are pinned in `.github/scripts/fetch_blender.py`,
   from Blender's published `.sha256` file, and checked on every use, cached or not, so the
   cache is not trusted.
+- **Blender's mirrors as a fallback** (2026-11-05): the first run's `ubuntu-latest` job got
+  403 from download.blender.org's CDN on all three attempts while the Windows and macOS
+  jobs were served at once, and the same request is served from elsewhere, so the refusal looks tied to the runner's address.
+  A mirror adds no trust to give, since its file must match the same pin, and the job
+  never pretends to be anything but what it is to get past a refusal.
 - **blender.org's 5.2 builds bundle Python 3.13**, on all three platforms; only a
   distribution's package may run on a system 3.14. The venv in CI is made from that 3.13,
   which Whittle accepts alongside 3.14 (Environment, above).

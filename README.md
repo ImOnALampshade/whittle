@@ -441,8 +441,8 @@ to that key): they use `claude-haiku-5-5` with a tiny prompt, and `run_tests.sh`
 GitHub Actions runs on GitHub's free standard runners and needs no secrets.
 `.github/workflows/ci.yml` runs on pushes to `main` and `ci/**` and on pull requests;
 `release.yml` runs on tags. Both call `test.yml`, which downloads a pinned Blender
-from download.blender.org (`.github/scripts/fetch_blender.py` checks its SHA-256 before
-unpacking it), makes `.venv` from Blender's Python, installs the lock, and runs
+from download.blender.org, or a public mirror if that refuses the runner
+(`.github/scripts/fetch_blender.py` checks its SHA-256 before unpacking it), makes `.venv` from Blender's Python, installs the lock, and runs
 `./run_tests.sh` and `./build.sh`. The GUI checks and screenshots are not part of CI: they
 need `kwin_wayland`.
 

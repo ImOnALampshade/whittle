@@ -30,6 +30,13 @@ SERIES = VERSION.rsplit(".", 1)[0]
 # package can differ: it may run on the system's Python instead.
 PYTHON = "python3.13"
 BASE_URL = f"https://download.blender.org/release/Blender{SERIES}"
+# Blender's CDN answers some runners' addresses with 403 and others not, so a
+# runner that it refuses falls back on these. They need no trust of their own:
+# whatever they serve still has to match the pin below.
+MIRRORS = (
+    f"https://mirrors.ocf.berkeley.edu/blender/release/Blender{SERIES}",
+    f"https://ftp.nluug.nl/pub/graphics/blender/release/Blender{SERIES}",
+)
 # Blender publishes no Linux arm64 build, and Intel Macs are not supported.
 ARCHIVES = {
     ("Linux", "x86_64"): (
@@ -100,6 +107,18 @@ def download(url: str, target: Path, expected: str) -> None:
             time.sleep(RETRY_WAIT * attempt)
 
 
+def download_from_any(name: str, target: Path, expected: str) -> None:
+    """From blender.org, else from each mirror in turn."""
+    first, *rest = [f"{base}/{name}" for base in (BASE_URL, *MIRRORS)]
+    for url in (first, *rest[:-1]):
+        try:
+            download(url, target, expected)
+            return
+        except SystemExit as exc:
+            print(f"{exc}\nTrying the next source.", file=sys.stderr, flush=True)
+    download(rest[-1], target, expected)
+
+
 def fetch(name: str, expected: str, archive_dir: Path) -> Path:
     """The verified archive. One already there (a cache hit) is only used if
     its hash matches; otherwise it is replaced."""
@@ -111,7 +130,7 @@ def fetch(name: str, expected: str, archive_dir: Path) -> Path:
             return archive
         print(f"The cached {name} does not match its pin: downloading it again", flush=True)
         archive.unlink()
-    download(f"{BASE_URL}/{name}", archive, expected)
+    download_from_any(name, archive, expected)
     print(f"SHA-256 verified: {name} {expected}", flush=True)
     return archive
 

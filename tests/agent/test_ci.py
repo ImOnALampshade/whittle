@@ -214,6 +214,18 @@ class FetchBlenderTest(unittest.TestCase):
     def test_the_url_is_blender_s_own_over_https(self):
         self.assertTrue(self.fetch.BASE_URL.startswith("https://download.blender.org/release/"))
 
+    def test_mirrors_are_https_and_serve_the_same_series(self):
+        self.assertTrue(self.fetch.MIRRORS)
+        for mirror in self.fetch.MIRRORS:
+            self.assertTrue(mirror.startswith("https://"), mirror)
+            self.assertTrue(mirror.endswith(f"/release/Blender{self.fetch.SERIES}"), mirror)
+
+    def test_blender_s_own_server_is_tried_first_and_alone_when_it_answers(self):
+        tried = []
+        with unittest.mock.patch.object(self.fetch, "download", lambda url, *_: tried.append(url)):
+            self.fetch.download_from_any("a.zip", Path("a.zip"), "0" * 64)
+        self.assertEqual(tried, [f"{self.fetch.BASE_URL}/a.zip"])
+
     def test_a_cached_archive_that_matches_is_used_without_downloading(self):
         with tempfile.TemporaryDirectory() as tmp:
             archive = Path(tmp) / "a.zip"
@@ -267,6 +279,10 @@ def tampered(handler):
 
 def not_found(handler):
     handler.send_error(404)
+
+
+def forbidden(handler):
+    handler.send_error(403)
 
 
 class DownloadTest(unittest.TestCase):
@@ -349,6 +365,38 @@ class DownloadTest(unittest.TestCase):
         url, served = self.serve(not_found)
         with self.assertRaisesRegex(SystemExit, "could not download"):
             self.fetch.download(url, self.target, self.digest)
+        self.assert_nothing_left()
+
+    def sources(self, *urls):
+        """Points blender.org and the mirrors at these local servers."""
+        bases = [url.removesuffix("/a.zip") for url in urls]
+        for name, value in (("BASE_URL", bases[0]), ("MIRRORS", tuple(bases[1:]))):
+            patch = unittest.mock.patch.object(self.fetch, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_a_refused_download_comes_from_the_next_source(self):
+        refused, refusals = self.serve(forbidden)
+        mirror, served = self.serve(whole)
+        self.sources(refused, mirror)
+        self.fetch.download_from_any("a.zip", self.target, self.digest)
+        self.assertEqual(self.target.read_bytes(), BODY)
+        self.assertEqual(len(refusals), self.fetch.ATTEMPTS)
+        self.assertEqual(len(served), 1)
+
+    def test_a_mirror_s_wrong_file_is_refused_like_any_other(self):
+        refused, _ = self.serve(forbidden)
+        mirror, _ = self.serve(tampered)
+        self.sources(refused, mirror)
+        with self.assertRaisesRegex(SystemExit, "SHA-256 mismatch"):
+            self.fetch.download_from_any("a.zip", self.target, self.digest)
+        self.assert_nothing_left()
+
+    def test_every_source_failing_fails_and_leaves_nothing(self):
+        urls = [self.serve(forbidden)[0] for _ in range(3)]
+        self.sources(*urls)
+        with self.assertRaisesRegex(SystemExit, "could not download"):
+            self.fetch.download_from_any("a.zip", self.target, self.digest)
         self.assert_nothing_left()
 
 
