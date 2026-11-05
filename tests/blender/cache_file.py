@@ -86,7 +86,7 @@ def new(blend: str, fake: str) -> dict:
 def open_file(blend: str, fake: str, *flags) -> dict:
     addon.register()
     bpy.ops.wm.open_mainfile(filepath=blend)
-    out = {"opened": state(blend)}
+    out = {"opened": state(blend), "elsewhere": chats.open_elsewhere()}
     if "turn" in flags:
         send("Nudge it.", fake)
         out["after_turn"] = state(blend)

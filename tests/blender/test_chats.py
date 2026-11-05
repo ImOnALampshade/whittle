@@ -420,6 +420,14 @@ class RenameTest(ChatCase):
         self.assertEqual(self.store.entry(chat).title, "Crate")
         self.assertEqual(operators.rename_chat(bpy.context, ""), "Make the crate bigger")
 
+    def test_a_chat_that_began_with_only_a_sketch_gets_its_title_back(self):
+        self.send("")
+        chat = self.store.current
+        title = self.store.entry(chat).title
+        self.assertTrue(title.startswith("Sketch of "), title)
+        operators.rename_chat(bpy.context, "Crate")
+        self.assertEqual(operators.rename_chat(bpy.context, ""), title)
+
 
 class ForeignChatTest(ChatCase):
     """A chat made by another install reads, but sends nothing until
@@ -498,6 +506,36 @@ class ElsewhereTest(ChatCase):
             (other / caches.LOCK_NAME).unlink()
             self.assertFalse(chats.open_elsewhere(now=time.monotonic() + 2 * chats.ELSEWHERE_EVERY),
                              "only while the other claim is live")
+
+    def test_a_blender_shows_itself_while_its_file_is_open(self):
+        blend = self.user_dir / "scene.blend"
+        blend.write_bytes(b"BLENDER")
+        cache_dir = self.user_dir / "cache"
+
+        def seen() -> bool:
+            with mock.patch.object(caches.os, "getpid", return_value=os.getppid()):
+                return caches.open_elsewhere(cache_dir, blend)
+
+        chats.reset()
+        with mock.patch.object(paths, "blend_path", return_value=blend):
+            chats.after_load()
+            self.assertIsNone(chats.root(), "a file without chats has no cache")
+            self.assertTrue(seen(), "and shows all the same")
+            chats.release()
+            self.assertFalse(seen(), "closing it lets go")
+            chats.load_failed()
+            self.assertTrue(seen(), "a failed open keeps the file")
+            chats.reset()
+            self.assertFalse(seen())
+            chats.after_save(str(blend))
+            self.assertTrue(seen(), "saved under a new name, the file is this one")
+        recovery = self.user_dir / "quit.blend"
+        recovery.write_bytes(b"BLENDER")
+        with mock.patch.object(paths, "blend_path", return_value=recovery), \
+                mock.patch.object(paths, "is_recovery_file", return_value=True):
+            chats.after_load()
+        self.assertFalse(seen())
+        self.assertEqual(list(cache_dir.glob(caches.OPEN_MARKS)), [], "a recovery file is not the file")
 
 
 class SaveTest(ChatCase):

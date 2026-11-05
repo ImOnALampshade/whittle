@@ -15,6 +15,16 @@ from whittle import chats, formats, models, tree
 from whittle.chats import Chats
 
 
+def write_request(folder: Path, node: str, prompt: str, targets=()) -> None:
+    """The request a node's turn was sent with, as its node folder keeps it."""
+    request = formats.Request(node=node, parent=None, prompt=prompt,
+                              target=[{"uid": f"u{i}", "name": name, "type": "MESH"}
+                                      for i, name in enumerate(targets)],
+                              stroke_types=[], views=[], units={"system": "METRIC", "scale_length": 1.0},
+                              settings={})
+    formats.write_request(formats.SessionDir(folder).request_dir(node), request, [], [])
+
+
 def write_session(folder: Path, prompts=("Make a crate with rope handles on both sides, please",),
                   sessions=()) -> tree.Tree:
     """A session folder with a root and one finished turn per prompt."""
@@ -255,6 +265,36 @@ class ChatsTest(TempRoot):
         self.assertEqual(found.entry(chat).title, "My crate")
         self.assertEqual(found.rename(chat, ""), "Make a crate", "empty puts the automatic title back")
         self.assertFalse(found.read_chat(chat)["title_custom"])
+
+    def test_rename_back_to_a_sketch_title(self):
+        found = self.chats()
+        chat = found.new()
+        write_session(found.folder(chat), ("",))
+        write_request(found.folder(chat), "n0001", "", ("Crate", "Lid"))
+        found.began(chat, "", "Crate")
+        self.assertEqual(found.entry(chat).title, "Sketch of Crate")
+        found.rename(chat, "My crate")
+        self.assertEqual(found.rename(chat, ""), "Sketch of Crate", "the first turn's target, not plain Sketch")
+        self.assertEqual(found.read_chat(chat)["title"], "Sketch of Crate")
+
+    def test_rename_back_without_a_request_to_read(self):
+        found = self.chats()
+        chat = found.new()
+        write_session(found.folder(chat), ("",))
+        found.began(chat, "")
+        found.rename(chat, "My crate")
+        self.assertEqual(found.rename(chat, ""), "Sketch")
+        write_request(found.folder(chat), "n0001", "", ())
+        (found.folder(chat) / "nodes" / "n0001" / "request" / "request.json").write_text("{")
+        self.assertEqual(found.rename(chat, ""), "Sketch", "an unreadable request names nothing")
+
+    def test_a_chat_described_from_its_folder_keeps_its_sketch_title(self):
+        found = self.chats()
+        chat = found.new()
+        write_session(found.folder(chat), ("",))
+        write_request(found.folder(chat), "n0001", "", ("Crate",))
+        (self.root / "chats.json").unlink()
+        self.assertEqual(self.chats().entry(chat).title, "Sketch of Crate")
 
     def test_delete(self):
         found = self.chats()

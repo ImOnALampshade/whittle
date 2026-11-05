@@ -212,6 +212,80 @@ class OpenElsewhereTest(CacheDirCase):
         self.lock(mine, os.getppid())
         self.assertTrue(caches.open_elsewhere(self.cache, blend, skip=theirs.name), "seen from the other side")
 
+    def as_other_blender(self):
+        return mock.patch.object(caches.os, "getpid", return_value=os.getppid())
+
+    def test_a_blender_without_a_cache_is_seen(self):
+        blend = self.blend()
+        with self.as_other_blender():
+            caches.mark_open(self.cache, blend)
+        self.assertTrue(caches.open_elsewhere(self.cache, blend), "no cache on either side")
+        mine = self.cache / caches.new_file_id()
+        caches.update_record(mine, path=str(blend))
+        caches.take(mine)
+        self.assertTrue(caches.open_elsewhere(self.cache, blend, skip=mine.name), "only this one has a cache")
+        self.assertFalse(caches.open_elsewhere(self.cache, self.blend("other.blend")), "another file")
+        self.assertFalse(caches.open_elsewhere(self.cache, None), "an unsaved file")
+        with self.as_other_blender():
+            caches.unmark_open(self.cache)
+        self.assertFalse(caches.open_elsewhere(self.cache, blend, skip=mine.name), "it closed the file")
+
+    def test_this_blender_does_not_see_itself(self):
+        blend = self.blend()
+        caches.mark_open(self.cache, blend)
+        self.assertFalse(caches.open_elsewhere(self.cache, blend))
+
+    def test_a_blender_marks_one_file_at_a_time(self):
+        first, second = self.blend(), self.blend("second.blend")
+        with self.as_other_blender():
+            caches.mark_open(self.cache, first)
+            caches.mark_open(self.cache, second)
+        self.assertFalse(caches.open_elsewhere(self.cache, first))
+        self.assertTrue(caches.open_elsewhere(self.cache, second))
+        with self.as_other_blender():
+            caches.mark_open(self.cache, None)
+        self.assertFalse(caches.open_elsewhere(self.cache, second), "an unsaved file is nobody's")
+
+    def test_a_crashed_blender_is_not_seen_and_its_mark_goes(self):
+        blend = self.blend()
+        with mock.patch.object(caches.os, "getpid", return_value=self.dead_pid()):
+            caches.mark_open(self.cache, blend)
+        self.assertFalse(caches.open_elsewhere(self.cache, blend))
+        caches.mark_open(self.cache, blend)
+        with self.as_other_blender():
+            caches.mark_open(self.cache, blend)
+        caches.cleanup(self.cache)
+        marks = list(self.cache.glob(caches.OPEN_MARKS))
+        self.assertEqual(len(marks), 2, "this Blender's and a live one's stay")
+
+    def test_a_mark_from_another_machine_lasts_until_it_is_old(self):
+        blend = self.blend()
+        with mock.patch.object(caches, "_host", return_value="elsewhere"):
+            caches.mark_open(self.cache, blend)
+        self.assertTrue(caches.open_elsewhere(self.cache, blend), "its processes cannot be checked")
+        caches.cleanup(self.cache)
+        self.assertTrue(caches.open_elsewhere(self.cache, blend))
+        caches.cleanup(self.cache, now=time.time() + caches.MAX_AGE + DAY)
+        self.assertFalse(caches.open_elsewhere(self.cache, blend))
+
+    def test_a_running_blender_keeps_its_hostname(self):
+        """macOS renames the machine when the network changes."""
+        blend = self.blend()
+        mine = self.cache / caches.new_file_id()
+        caches.update_record(mine, path=str(blend))
+        caches._host.cache_clear()
+        self.addCleanup(caches._host.cache_clear)
+        with mock.patch.object(caches.socket, "gethostname", return_value="mbp.local"):
+            caches.mark_open(self.cache, blend)
+            caches.take(mine)
+        with mock.patch.object(caches.socket, "gethostname", return_value="mbp-2.local"):
+            self.assertFalse(caches.open_elsewhere(self.cache, blend, skip=mine.name), "it does not see itself")
+            self.assertFalse(caches.in_use_elsewhere(mine))
+            caches.unmark_open(self.cache)
+            caches.release(mine)
+        self.assertEqual(list(self.cache.glob(caches.OPEN_MARKS)), [], "a clean quit leaves no mark")
+        self.assertFalse((mine / caches.LOCK_NAME).exists(), "and no claim")
+
 
 if __name__ == "__main__":
     unittest.main()

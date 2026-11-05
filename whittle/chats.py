@@ -493,9 +493,22 @@ class Chats:
         return sorted((n for n in found.nodes.values() if n.parent is not None and not n.folded),
                       key=lambda n: formats.node_number(n.id))
 
-    def _first_turn(self, chat: str):
-        turns = self._turns(self._tree(chat))
-        return turns[0] if turns else None
+    def _sent_on(self, chat: str, node: str) -> str | None:
+        """The first target's name when the turn was sent, which the request
+        it keeps records (the object may have been renamed since)."""
+        path = formats.SessionDir(self.folder(chat)).request_dir(node) / "request.json"
+        try:
+            request = formats.read_json(path)
+            formats.validate_request(request, str(path))
+        except formats.FormatError:
+            return None
+        return request["target"][0]["name"] if request["target"] else None
+
+    def _auto_title(self, chat: str, turns: list) -> str:
+        """The title the chat's first turn gives it."""
+        if not turns:
+            return NEW_TITLE
+        return title_for(turns[0].prompt, self._sent_on(chat, turns[0].id))
 
     def _describe(self, chat: str) -> Entry:
         """An entry from the chat's folder alone."""
@@ -516,7 +529,7 @@ class Chats:
             if stamps:
                 entry.updated = max(stamps, key=epoch)
             if entry.title == NEW_TITLE and turns:
-                entry.title = title_for(turns[0].prompt)
+                entry.title = self._auto_title(chat, turns)
             entry.size = packed_size(self.folder(chat))
         return entry
 
@@ -603,8 +616,7 @@ class Chats:
         if title:
             self._write_chat(chat, title=title, title_custom=True)
         else:
-            first = self._first_turn(chat)
-            title = title_for(first.prompt) if first is not None else NEW_TITLE
+            title = self._auto_title(chat, self._turns(self._tree(chat)))
             self._write_chat(chat, title=title, title_custom=False)
         self.index.chats[chat].title = title
         self.save()

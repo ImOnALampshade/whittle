@@ -608,7 +608,8 @@ its own conversation, history tree and Claude session; the panel shows the curre
   stored with the chat so it never asks again; New Chat stays available. Chats from
   before the marker never ask.
 - **The same file in two Blenders** keeps a cache in each, as before, and while the
-  other's claim is live the sidebar has one dim line saying the chats won't merge.
+  other has the file, which its open mark says (or its claim on a recovered copy), the
+  sidebar has one dim line saying the chats won't merge, with or without chats.
 - **No migration**: the code for earlier development layouts (a single-session folder,
   `<name>.whittle/` beside a file and its `.replaced-<time>/` copies, the user folder's
   `caches/<sha1>/` and `dev-sessions/`) was removed.

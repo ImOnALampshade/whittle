@@ -1812,8 +1812,9 @@ aside, below). Nothing is ever written beside a `.blend`.
   `state_stamp(index_json, packed)`, the record (`read_record`, `update_record`), the
   claim (`take`, `release`, `in_use_elsewhere`), `find(cache_dir, file_id, blend)`
   (which cache an opened file uses, with copy-on-conflict), `cleanup()` by age,
-  `open_elsewhere(cache_dir, blend, skip)` (the same file open in another Blender) and
-  `install_id(user_dir)`.
+  `mark_open(cache_dir, blend)` and `unmark_open(cache_dir)` (this Blender's open mark),
+  `open_elsewhere(cache_dir, blend, skip)` (another Blender's mark on the same file, or its
+  claim on a cache that records the file) and `install_id(user_dir)`.
 - `addon/chats.py`: which cache the open file uses (`file_id()`, `root()`, `get()`: its
   `Chats`, read once per file; `current_folder()`), the `save_pre` /
   `save_post` / `load_post` work (`before_save`, `after_save`, `after_load`),
@@ -1837,6 +1838,7 @@ aside, below). Nothing is ever written beside a `.blend`.
 ### The cache folder
 
 ```
+<user dir>/cache/open-<key>.json           {"pid", "host", "path"}: a running Blender's mark (below)
 <user dir>/cache/<file id>/                the cache root, saved file or not
   cache.json                               {"format": "whittle.cache", "version": 1, "id",
                                             "path": the .blend (null while unsaved),
@@ -1882,7 +1884,15 @@ so an undo that drops the Text changes nothing. Which cache an opened file uses
 
 A file that never had a chat makes no cache. The claim is written when the cache is
 found and removed on `load_pre`, `exit_pre` and unregister; a crashed Blender's claim
-names a dead process and does not count.
+names a dead process and does not count. A Blender reads its hostname once
+(`caches._host` is memoized), so a rename while it runs, as macOS does when networks
+change, changes neither its claims nor its marks.
+
+**Open marks**: `open-<key>.json` beside the caches, `<key>` a hash of the host and pid: one
+per running Blender with a saved file open, cache or no cache. Written on `load_post`,
+`load_post_fail` and `save_post` (`chats._mark_open`), removed on `load_pre`, `exit_pre` and
+unregister (`chats.release`). A recovery file is not marked. `cleanup` clears a crashed
+Blender's; another machine's cannot be checked and lasts `MAX_AGE`.
 
 **chats.json** (`chats.write_index`, atomic like every JSON file, §8):
 
@@ -2062,10 +2072,12 @@ store-materialized resume, and a resume after the chat folder moved.
   (`created_uids` of its own tree): what another chat's agent made is the user's to
   that chat, and is never removed by it.
 - **Rename**: sets `title` and `title_custom` in `chat.json` and the index; an empty
-  title clears `title_custom` and puts back `chats.title_for` of the first turn.
+  title clears `title_custom` and puts back the automatic one (`Chats._auto_title`).
 - **Titles**: the agent accepting a chat's first turn (`turn_began` → `Chats.began`) sets
   the title from its prompt (or `Sketch of <first target>`) unless `title_custom`; a
-  title, once set, never changes by itself.
+  title, once set, never changes by itself. An automatic title rebuilt later, by a rename
+  back or from a chat's folder, reads the first target from that turn's `request.json`, so
+  it stays what it was; plain `Sketch` if the request is missing or unreadable.
 - **Undo**: `history.sync_from_scene` applies `history_node` only when
   `scene.whittle.chat` is the current chat (an empty one, from before a chat was
   named in the scene, counts as the current chat); undo never switches chats.
@@ -2111,13 +2123,14 @@ elsewhere, README Security) the default.
 
 The second Blender to open a file finds its cache claimed by a live process and gets a
 cache of its own (copy-on-conflict, above); both record the same path. The two never
-merge: whichever saves last is what the file stores. While another Blender's claim is
-live, the sidebar draws one dim line (`ui.ELSEWHERE_NOTE`): `addon/chats.open_elsewhere()`
+merge: whichever saves last is what the file stores. While another Blender has the file,
+the sidebar draws one dim line (`ui.ELSEWHERE_NOTE`): `addon/chats.open_elsewhere()`
 asks `caches.open_elsewhere(cache_dir, blend, skip=<this file's id>)`, true when another
-cache records the same file and is claimed by a live Blender (any process on another
-host counts, since it cannot be checked). It reads every cache's claim, so the answer
+live Blender's open mark names the same file, or another cache records it and is claimed
+by a live Blender, which may be on a recovered copy, not marked (any process on another
+host counts, since it cannot be checked). It reads every mark and claim, so the answer
 is kept for `ELSEWHERE_EVERY` (2 s) rather than read at every redraw. Both Blenders see
-the line, since each cache records the path.
+the line, with or without chats, since every Blender on a saved file has a mark.
 
 ### Tests
 
@@ -2134,7 +2147,8 @@ the line, since each cache records the path.
   `test_caches.py`: ids and stamps, the record, `find` (a moved file, a copy, a cache
   in use by a live, a dead or a foreign process, a file without an id), `cleanup` by
   age (never the open one or a live claim, the CLI's transcripts too), `install_id`,
-  `open_elsewhere` (a live, a dead and the other side's claim); `FolderSessionStore`
+  `open_elsewhere` (a live, a dead and the other side's claim; marks on a file with no
+  cache, a crashed Blender's, a hostname that changes while running); `FolderSessionStore`
   append/load/subkeys and path safety, and the SDK materializing a resume from it;
   the fake agent's store lines.
 - Blender side (`tests/blender/test_chats.py`): New Chat (a fresh session, its own
@@ -2145,7 +2159,8 @@ the line, since each cache records the path.
   recent, then an empty chat), and in bulk; the menu's rows, footer and Show N More;
   rename; a chat from another install (read-only, Send refused with its tooltip, New
   Chat available, Continue adopts it for good) and one without an origin (never asks);
-  the line while another Blender has the file; the payload on the holder only between `before_save` and `after_save`. `chats_file.py`, in a
+  the line while another Blender has the file, and marks through load, save and quit
+  (`test_cache.py`); an empty title bringing `Sketch of <target>` back; the payload on the holder only between `before_save` and `after_save`. `chats_file.py`, in a
   fresh Blender: a real save, the cache deleted, the file opened without the add-on
   (both chats in its data) and with it (rebuilt: chats, titles, nodes, thumbnails, and
   an old node restored), then the delete shrink test above; the folder holds only the
