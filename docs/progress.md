@@ -358,6 +358,10 @@ these are fixed, each with a regression test.
   the parent, so the agent never sees the failed exchange. A failed turn that did edit
   the scene is still a node. The model is described in `architecture.md` §6
   (`test_history.OutcomeTest`, `test_tree`).
+- **Images too big for a request** never end a turn with a bare stop: the SDK's read limit
+  is 128 MiB, a request over 180 MiB of images is refused when its bundle is written, and a
+  turn that fails for size says so and offers Edit in place of Retry (architecture §5 Image
+  limits, `test_runner`, `test_bundle`, `test_sidebar`, screenshot `too_large`).
 - **Compare → End and Toggle back to live** put the target list back as it was, found
   by `whittle_uid` (`test_compare.CompareTest.test_end_keeps_the_target_list`).
 - **Prompt-only requests**: a request with no strokes and no views says so plainly in
@@ -397,9 +401,9 @@ shot in a GUI Blender without a person at the keyboard.
   item shows as hovered (a menu keeps its last hovered item lit when the pointer moves onto
   nothing, and lets go of it when the window loses focus; the popup stays open), and the
   window is shot again and cropped to what changed.
-- `tests/screens/scenarios.py`: 23 states (empty, start, prompt_typed, prompt_only_done,
+- `tests/screens/scenarios.py`: 24 states (empty, start, prompt_typed, prompt_only_done,
   sketching, streaming, conversation, branched, branch_edit, asking, interrupted,
-  error_turn, folded_failure, crashed, setup_needed, key_needed, comparing, manual_targets,
+  error_turn, folded_failure, too_large, crashed, setup_needed, key_needed, comparing, manual_targets,
   long_session, history_popover, turn_menu, references, developer), reached through
   `operators.submit_sketch`, `branch_node`, `compare_node`, `interrupt`, `targets`,
   `sketch.start_session` and the controller's state, never through the layout, with fake
@@ -971,3 +975,7 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     would, and check that the palette and bevel style reach `request.json`:
     `preferences_defaults`). Click into Bevel Style: none, subtle and chunky are offered,
     and other text can be typed.
+14. **Images too big**: attach references that come to more than 180 MB and Send: an error
+    says how big they are, nothing is sent, the prompt and chips stay, and the next turn takes
+    the same number. With `too_large.json`, Send: the turn ends with its reason in red and
+    **Edit** in Retry's place; Edit brings the request back to change.

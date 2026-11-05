@@ -228,7 +228,8 @@ class History:
             node, status=status, agent_session_id=data.get("session_id"),
             agent_message_uuid=data.get("message_uuid"), cost_usd=data.get("cost_usd"),
             num_turns=data.get("num_turns"), duration_ms=data.get("duration_ms"),
-            kept_partial=kept_partial, restored=restored, snapshot=ok, created_uids=uids)
+            kept_partial=kept_partial, restored=restored, snapshot=ok, created_uids=uids,
+            too_large=bool(data.get("too_large")))
         self.tree.current = node
         _mirror(scene, node, self.chat)
         self.save()
@@ -242,7 +243,8 @@ class History:
         folded = self.tree.finish(
             node, status="failed", folded=True, agent_session_id=data.get("session_id"),
             agent_message_uuid=data.get("message_uuid"), cost_usd=data.get("cost_usd"),
-            num_turns=data.get("num_turns"), duration_ms=data.get("duration_ms"), snapshot=False)
+            num_turns=data.get("num_turns"), duration_ms=data.get("duration_ms"), snapshot=False,
+            too_large=bool(data.get("too_large")))
         if self.tree.current == node:
             self.tree.current = folded.parent
         self.save()

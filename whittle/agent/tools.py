@@ -20,9 +20,6 @@ STROKES_TEXT_LIMIT = 200_000
 # tool_result events without tracking which tool call produced which image.
 IMAGE_LINE = re.compile(r"^image: (.+)$", re.MULTILINE)
 
-MIME_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-              ".webp": "image/webp", ".gif": "image/gif"}
-
 
 @dataclass
 class Amendment:
@@ -80,7 +77,7 @@ def text_block(text: str) -> dict:
 
 
 def image_block(path: Path) -> dict:
-    mime = MIME_TYPES.get(path.suffix.lower(), "image/png")
+    mime = formats.IMAGE_TYPES.get(path.suffix.lower(), "image/png")
     return {"type": "image", "data": base64.b64encode(path.read_bytes()).decode("ascii"),
             "mimeType": mime}
 
@@ -316,7 +313,7 @@ def describe_bundle(bundle: formats.Bundle) -> list[dict]:
             content.append(image_block(overlay))
     for ref in req.refs:
         path = bundle.root / ref
-        if path.suffix.lower() in MIME_TYPES:
+        if path.suffix.lower() in formats.IMAGE_TYPES:
             content.append(text_block(f"Reference image {ref}\nimage: {path}"))
             content.append(image_block(path))
     return content

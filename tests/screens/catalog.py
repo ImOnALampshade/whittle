@@ -22,6 +22,7 @@ SCENARIOS = {
     "interrupted": "A turn interrupted mid-way and kept partial.",
     "error_turn": "A turn whose tool call failed and then recovered, then a turn that failed.",
     "folded_failure": "A turn that failed without changing anything, shown once with Retry.",
+    "too_large": "A turn whose images were too big for one request: Edit in place of Retry.",
     "crashed": "The agent crashed during a turn: the attention box offers Restart and Retry.",
     "setup_needed": "No agent environment: the attention box offers to set one up.",
     "key_needed": "No API key: Send started nothing, the prompt stays and the attention box asks for a key.",

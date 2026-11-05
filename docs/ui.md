@@ -425,7 +425,10 @@ failure):
   the right of its first line
   (`whittle.retry`: a recorded failure is branched then sent; a folded one never left
   its parent, so its prompt goes back in the box if it is empty and its pending strokes
-  and references are sent as they are).
+  and references are sent as they are). A turn whose images were too big (`too_large` on
+  its node) has `Edit` there instead (`whittle.history_branch`, `GREASEPENCIL`): the same
+  request would fail the same way. Images over `formats.REQUEST_IMAGE_BYTES` never make a
+  turn: Send, Retry or an amendment says how big they are and nothing is sent.
 - **A failed turn that changed nothing** is folded in the tree (never current). It still
   shows after its parent while it is the latest thing that happened in this Blender
   session, with its failure and `Retry`; it disappears at the next send or when Blender
@@ -1252,7 +1255,7 @@ Added for the chat sidebar:
 | Id | Label | Does |
 |---|---|---|
 | `whittle.branch_switch` | Switch Branch | `node`: restore the newest leaf under it; undo step |
-| `whittle.retry` | Retry | `node`: resend a failed turn's request from its parent (branch then send; a folded turn just sends); restarts a stopped agent on the way |
+| `whittle.retry` | Retry | `node`: resend a failed turn's request from its parent (branch then send; a folded turn just sends); restarts a stopped agent on the way; refuses a `too_large` turn |
 | `whittle.turn_menu` | Turn | `node`: opens the turn's ⋯ menu (§5) |
 | `whittle.ref_menu` | Reference | `index`: opens the reference's ⋯ menu (§5) |
 
@@ -1481,6 +1484,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `interrupted` | thumbnail, then one dim "Stopped, changes kept" |
 | `error_turn` | 4.9; recovered error not red; the failure one red line (wrapped at most once) with Retry beside it |
 | `folded_failure` | a failed turn that changed nothing: shown with Retry, no tree node, prompt box empty, no start row |
+| `too_large` | the reason in red (wrapped at most once) with Edit, not Retry, beside it |
 | `crashed` | one red line with Restart and Retry; the turn ends with a dim "Interrupted", without its own Retry |
 | `setup_needed` | neutral box with Set Up…; Send disabled; no repeated note |
 | `key_needed` | neutral box `Add an API key to start` with its dim line, Preferences… and Get a Key; the prompt still in the box; no repeated note |
@@ -1519,5 +1523,5 @@ the popup's first item.
 General checks on every shot: no text clipped by Blender's own `...` at 280 px (Whittle
 shortens with `…` at a word's end), except inside a one-line text field; nothing said
 twice (a draft, a busy sign, a list and its heading); no row wider than the sidebar;
-text lines use the width they have; red only in `error_turn`, `folded_failure` and
-`crashed`.
+text lines use the width they have; red only in `error_turn`, `folded_failure`,
+`too_large` and `crashed`.

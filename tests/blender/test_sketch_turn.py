@@ -131,6 +131,11 @@ class SketchTurnTest(AgentTestCase):
             ctl.run_sketch("Carve.", targets=[self.crate])
         with self.assertRaisesRegex(Exception, "not found"):
             ctl.run_sketch("Carve.", targets=[self.crate], refs=["/nonexistent/whittle-ref.png"])
+        big = ctl.session.root / "big.png"
+        big.write_bytes(b"x" * 64)
+        with mock.patch.object(formats, "REQUEST_IMAGE_BYTES", 32):
+            with self.assertRaisesRegex(Exception, "fewer or smaller"):
+                ctl.run_sketch("Carve.", targets=[self.crate], refs=[big])
         self.assertFalse((ctl.session.root / "nodes").exists() and any((ctl.session.root / "nodes").iterdir()))
         self.assertEqual([t for _l, _v, t, _n in self.strokes()], [0, 0])
 

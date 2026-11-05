@@ -13,6 +13,7 @@ import urllib.request
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    CLIJSONDecodeError,
     ClaudeSDKClient,
     ResultMessage,
     SystemMessage,
@@ -39,6 +40,22 @@ MCP_TOOL_TIMEOUT_MS = "86400000"
 API_URL = "https://api.anthropic.com"
 MODELS_TIMEOUT = 10.0
 MODELS_PAGES = 5
+# The most the Messages API takes in one request (it answers 413 above that).
+API_REQUEST_BYTES = 32 * 1024 * 1024
+# The longest line the SDK reads from the CLI; a longer one ends the session.
+# Images are what make lines long: a tool result's frame holds their base64
+# twice, so a request at the API's limit is a 64 MiB frame, and the transcript
+# mirror's frames batch lines on top of that. The CLI recompresses big images
+# but not many of them, so nothing smaller bounds it. It is a limit, not an
+# allocation. A frame holds what the CLI would send, after that shrinking, so
+# above this limit the API would refuse the request anyway. The other way, a
+# tool result on its way to the CLI, is bounded by formats.REQUEST_IMAGE_BYTES.
+MAX_FRAME_BYTES = 4 * API_REQUEST_BYTES
+# Fits stream.REASON_CHARS, which the sidebar cuts a turn's reason to.
+IMAGES_TOO_LARGE = "The images are too big for one request: send fewer or smaller references, or start a new chat."
+CLI_STOPPED = "the agent CLI stopped"
+# How the CLI words a request the API refused for its size or its images.
+SIZE_REFUSALS = ("Request too large", "Image was too large")
 
 
 def inline_skills_from_env() -> bool:
@@ -75,6 +92,7 @@ def build_options(params: dict, servers: dict, *, inline_skills: bool) -> Claude
              "CLAUDE_CODE_THINKING_DISPLAY_UPDATES": "1",
              "CLAUDE_AGENT_SDK_CLIENT_APP": f"whittle/{__version__}"},
         stderr=lambda line: log.debug("cli: %s", line.rstrip()),
+        max_buffer_size=MAX_FRAME_BYTES,
         max_turns=settings.get("max_turns"),
         max_budget_usd=settings.get("max_budget_usd"),
         # The chat's own transcript store: the SDK mirrors every transcript
@@ -175,6 +193,16 @@ def _tool_result_text(content) -> str:
         return "\n".join(b.get("text", "") for b in content
                          if isinstance(b, dict) and b.get("type") == "text")
     return ""
+
+
+def frame_too_long(exc: Exception | None) -> bool:
+    """The SDK gave up on a line longer than MAX_FRAME_BYTES. It raises the
+    same error for a line that is not JSON, which is not about the images."""
+    return isinstance(exc, CLIJSONDecodeError) and "maximum buffer size" in str(exc)
+
+
+def refused_for_size(result: ResultMessage) -> bool:
+    return result.is_error and (result.api_error_status == 413 or (result.result or "").startswith(SIZE_REFUSALS))
 
 
 NARRATION = "narration"
@@ -477,11 +505,12 @@ class SdkRunner:
             self._alive = False
         if failure is not None:
             await self._event(Event.ERROR, {"code": "stream_failed", "message": str(failure)})
+        reason = IMAGES_TOO_LARGE if frame_too_long(failure) else CLI_STOPPED
         # The stream ending means the CLI is gone; nothing more can run in this session.
         if self.turn_id is not None:
-            await self._finish_turn(error="the agent CLI stopped")
+            await self._finish_turn(error=reason)
         # Blender has to start a new session before its next submit.
-        await self._event(Event.STATUS, {"state": SESSION_ENDED, "detail": "the agent CLI stopped"})
+        await self._event(Event.STATUS, {"state": SESSION_ENDED, "detail": reason})
         commands.put_nowait(("stop", None))
 
     async def _handle(self, msg) -> None:
@@ -535,6 +564,8 @@ class SdkRunner:
             return
         results = self._turn_results
         r = results[-1] if results else None
+        if error is None and r is not None and refused_for_size(r):
+            error = IMAGES_TOO_LARGE
         errors = [e for res in results for e in (res.errors or [])]
         if error:
             errors.append(error)
@@ -561,6 +592,8 @@ class SdkRunner:
                             else int((time.monotonic() - self._turn_start) * 1000)),
             "result_text": (r.result or "") if r else "",
             "errors": errors,
+            # Sending the same images again would fail the same way.
+            "too_large": error == IMAGES_TOO_LARGE,
             "amends_undelivered": undelivered,
             "message_uuid": self._last_uuid,
         })

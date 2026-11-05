@@ -7,8 +7,8 @@ import os
 import unittest
 from unittest import mock
 
-from claude_agent_sdk import (AssistantMessage, RateLimitEvent, SystemMessage, TextBlock, ThinkingBlock,
-                              ToolResultBlock, ToolUseBlock, UserMessage)
+from claude_agent_sdk import (AssistantMessage, CLIJSONDecodeError, RateLimitEvent, SystemMessage, TextBlock,
+                              ThinkingBlock, ToolResultBlock, ToolUseBlock, UserMessage)
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
 from tests.agent.fakes import FakeSdkClient, StubConnection, init_message, result_message
@@ -73,6 +73,13 @@ class OptionsTest(unittest.TestCase):
         self.assertIn("whittle:boolean-carve", system)
         self.assertFalse([c for c in cmd if c.startswith("--resume")])
         self.assertNotIn("--effort", cmd, "no effort given, none set")
+
+    def test_read_buffer_holds_the_largest_request_the_api_takes(self):
+        options = build_options(PARAMS, build_servers(ToolContext(None)), inline_skills=False)
+        transport = SubprocessCLITransport(prompt="unused", options=options)
+        self.assertEqual(transport._max_buffer_size, runner.MAX_FRAME_BYTES)
+        # A tool result's images are in its stdout frame twice.
+        self.assertGreater(runner.MAX_FRAME_BYTES, 2 * runner.API_REQUEST_BYTES)
 
     def test_effort_and_thinking_display(self):
         options = build_options({**PARAMS, "effort": "medium"}, build_servers(ToolContext(None)),
@@ -363,6 +370,70 @@ class SdkRunnerTest(RunnerTestCase):
         with self.assertRaises(BridgeCallError) as cm:
             await r.submit("n0002", "/b", "")
         self.assertEqual(cm.exception.code, "no_session")
+        await r.close()
+
+    async def stream_failure(self, exc):
+        """A turn whose stream fails with exc: its turn_finished and the
+        session_ended status after it."""
+        class Failing(FakeSdkClient):
+            async def receive_messages(self):
+                await self._interrupt.wait()
+                raise exc
+                yield
+
+            async def query(self, prompt, session_id="default"):
+                self._interrupt.set()
+
+        r = SdkRunner(self.conn, client_factory=lambda options: Failing(options=options), inline_skills=False)
+        await r.start_session(PARAMS)
+        await r.submit("n0001", "/b", "")
+        finished = await self.wait_for("turn_finished")
+        for _ in range(500):
+            ended = [d for _, d in self.events("status") if d["state"] == "session_ended"]
+            if ended:
+                break
+            await asyncio.sleep(0.01)
+        await r.close()
+        return finished, ended[0]
+
+    async def test_a_frame_over_the_read_buffer_names_the_images(self):
+        finished, ended = await self.stream_failure(CLIJSONDecodeError(
+            "JSON message exceeded maximum buffer size of 1048576 bytes", ValueError("Buffer size 2 exceeds limit 1")))
+        self.assertTrue(finished["is_error"])
+        self.assertTrue(finished["too_large"])
+        self.assertEqual(finished["errors"], [runner.IMAGES_TOO_LARGE])
+        self.assertIn("images", runner.IMAGES_TOO_LARGE)
+        self.assertEqual(ended["detail"], runner.IMAGES_TOO_LARGE)
+
+    async def test_a_bad_line_from_the_cli_is_not_blamed_on_the_images(self):
+        finished, ended = await self.stream_failure(CLIJSONDecodeError("{oops", ValueError("not JSON")))
+        self.assertFalse(finished["too_large"])
+        self.assertEqual(finished["errors"], ["the agent CLI stopped"])
+        self.assertEqual(ended["detail"], "the agent CLI stopped")
+
+    async def test_the_api_refusing_the_request_size_names_the_images(self):
+        text = "Request too large (max 32MB). Accumulated images and attachments in the conversation..."
+        cases = [dict(api_error_status=413, result=text), dict(result=text),
+                 dict(result="Image was too large. Try resizing the image or using a different approach.")]
+        for overrides in cases:
+            self.conn.events.clear()
+            r = self.make_runner([init_message(), result_message(is_error=True, **overrides)])
+            await r.start_session(PARAMS)
+            await r.submit("n0001", "/b", "")
+            finished = await self.wait_for("turn_finished")
+            self.assertTrue(finished["too_large"], overrides)
+            self.assertEqual(finished["errors"], [runner.IMAGES_TOO_LARGE])
+            await r.close()
+
+    async def test_other_failures_are_not_too_large(self):
+        r = self.make_runner([init_message(), result_message(is_error=True, api_error_status=500,
+                                                             result="API Error: 500")])
+        await r.start_session(PARAMS)
+        await r.submit("n0001", "/b", "")
+        finished = await self.wait_for("turn_finished")
+        self.assertTrue(finished["is_error"])
+        self.assertFalse(finished["too_large"])
+        self.assertEqual(finished["errors"], [])
         await r.close()
 
     async def test_submit_while_the_ended_session_disconnects_is_refused(self):

@@ -596,6 +596,15 @@ class ConversationDrawTest(HistoryCase):
         layout = self.draw(fake_controller(), self.hist)
         self.assertNotIn("Add brass hinges.", layout.labels(), "gone once it is not the latest thing")
 
+    def test_too_large_failure_offers_edit_instead_of_retry(self):
+        self.turn("n0001", "Add a lid.")
+        self.turn("n0002", "Add brass hinges.", failed=True, folded=True)
+        self.hist.tree.node("n0002").too_large = True
+        layout = self.draw(fake_controller(last_folded="n0002"), self.hist)
+        self.assertEqual(layout.operators("whittle.retry"), [])
+        (edit,) = [c for c in layout.operators("whittle.history_branch") if c["text"] == "Edit"]
+        self.assertEqual(edit["props"].node, "n0002")
+
     def test_a_crash_is_reported_once(self):
         """The attention box offers to restart and send the turn again; the
         turn the crash ended is a dim line with no Retry of its own."""

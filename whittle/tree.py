@@ -61,6 +61,9 @@ class Node:
     # place in the SDK conversation), but folded into its parent, so it is
     # never current, never shown and never has children.
     folded: bool = False
+    # A failed turn whose images were too big to send: sending it again as
+    # it was would fail the same way.
+    too_large: bool = False
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -74,7 +77,7 @@ _NODE_SPEC = {
     "created_uids": list,
 }
 # Keys a session.json written before they existed may lack.
-_OPTIONAL_SPEC = {"continued_session": (str, None), "folded": bool}
+_OPTIONAL_SPEC = {"continued_session": (str, None), "folded": bool, "too_large": bool}
 
 
 class TreeError(ValueError):

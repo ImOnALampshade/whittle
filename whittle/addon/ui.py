@@ -1063,15 +1063,20 @@ def draw_turn_body(layout, turn: conversation.Turn, ctx: Ctx, *, last: bool = Fa
 
 def draw_failure(layout, turn: conversation.Turn, ctx: Ctx, *, retry: bool) -> None:
     """A failed turn's end: its reason in red, one line (two at most), with
-    Retry at the right of the first."""
+    Retry at the right of the first, or Edit when sending the same request
+    again would fail the same way."""
     end = ctx.px(3.6) if retry else 0
     # A split leaves a gap between its parts, and a label pads its text.
     room = ctx.width - end - ICON_PX * ctx.scale - (ctx.px(0.8) if retry else 0)
     lines = ctx.lines(" ".join((turn.failure or "Failed").split()), room, 2)
     if retry:
         left, right = _split_end(layout.row(), ctx, end)
-        right.enabled = operators.can_retry(ctx.hist, ctx.ctl, turn.node)
-        right.operator("whittle.retry", text="Retry", icon="FILE_REFRESH").node = turn.node
+        if operators.too_large(ctx.hist, turn.node):
+            right.enabled = operators.can_branch(ctx.hist, ctx.ctl, turn.node)
+            right.operator("whittle.history_branch", text="Edit", icon="GREASEPENCIL").node = turn.node
+        else:
+            right.enabled = operators.can_retry(ctx.hist, ctx.ctl, turn.node)
+            right.operator("whittle.retry", text="Retry", icon="FILE_REFRESH").node = turn.node
     else:
         left = layout.row()
     col = left.column(align=True)

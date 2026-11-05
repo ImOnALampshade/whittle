@@ -443,7 +443,7 @@ All carry `turn_id` (null outside a turn).
 | `thinking` | `text` — any other thinking block (usually empty: the API omits thinking text) |
 | `tool_use` | `tool_use_id`, `tool` (short name, e.g. `exec`), `input` (dict) |
 | `tool_result` | `tool_use_id`, `is_error`, `summary` (first 500 chars of text content), `images` (paths) |
-| `turn_finished` | `session_id`, `subtype`, `is_error`, `interrupted` (bool), `cost_usd` (this turn), `session_cost_usd` (the SDK session's running total), `num_turns`, `duration_ms` (both summed over the turn's queries), `result_text`, `errors` (list of str), `amends_undelivered` ([int]: amendments queued but never delivered — interrupt, session end, CLI crash), `message_uuid` (str \| null: uuid of the turn's last `AssistantMessage`/`UserMessage`, where a later branch forks) |
+| `turn_finished` | `session_id`, `subtype`, `is_error`, `interrupted` (bool), `cost_usd` (this turn), `session_cost_usd` (the SDK session's running total), `num_turns`, `duration_ms` (both summed over the turn's queries), `result_text`, `errors` (list of str), `too_large` (bool: the turn failed because its images were too big, §5 Image limits), `amends_undelivered` ([int]: amendments queued but never delivered — interrupt, session end, CLI crash), `message_uuid` (str \| null: uuid of the turn's last `AssistantMessage`/`UserMessage`, where a later branch forks) |
 | `amend_delivered` | `amend` (int), `via` (`"tool_result"` \| `"query"`) |
 | `error` | `code`, `message` — non-fatal agent-side failure (e.g. SDK connect failed) |
 | `log` | `level`, `message` |
@@ -662,8 +662,23 @@ ClaudeAgentOptions(
          "CLAUDE_CODE_THINKING_DISPLAY_UPDATES": "1",  # progress notes (below)
          "CLAUDE_AGENT_SDK_CLIENT_APP": f"whittle/{VERSION}"},
     stderr=lambda line: log.debug("cli: %s", line),
+    max_buffer_size=MAX_FRAME_BYTES,
 )
 ```
+
+**Image limits.** Two limits bound what images do to a session, one per direction.
+`runner.MAX_FRAME_BYTES` (128 MiB, four times the API's 32 MiB) is the longest line the
+SDK reads from the CLI: a tool result's frame holds its images' base64 twice, and the
+SDK's default of 1 MiB ended the session at about 390 KB of images. Above it, or when the
+API refuses for size (413, or a result starting with `runner.SIZE_REFUSALS`), the turn gets
+the reason `runner.IMAGES_TOO_LARGE` and `too_large: true` in `turn_finished`, recorded on
+the node (§8) and in place of **Retry** in the sidebar. The other way, the `request` tool's
+result reaches the CLI as one line of stdin, and past 256 Mi characters the CLI exits before
+it shrinks anything. `formats.REQUEST_IMAGE_BYTES` (180 MiB, 240 Mi characters in base64,
+leaving room for the result's text) bounds that: `bundle.check_image_size` refuses a request
+over it, on the references before anything is written and again after rendering, so overlays
+count. It counts only `formats.IMAGE_TYPES`, the files that really get attached. `render`
+is capped at 1024 px and attaches one image, so only `request` can reach that limit.
 
 **Progress notes.** On Opus 5.5 the text Claude writes between tool calls comes back
 in thinking blocks, which are empty at the API's default thinking display. `thinking`
@@ -1246,6 +1261,7 @@ references and pending views are not stored here.
 | `snapshot` | bool | `target.blend` was written (Restore needs it) |
 | `created_uids` | [str] | `whittle_uid` of each object the agent made in this turn |
 | `folded` | bool | failed turn that changed nothing, folded into its parent (§6); optional when reading |
+| `too_large` | bool | failed turn whose images were too big (§5 Image limits): the sidebar offers Edit, not Retry; optional when reading |
 
 
 **target.json** (also `checkpoints/<k>.json`): `{"format": "whittle.target", "version":
@@ -1526,7 +1542,8 @@ Details settled while building the agent and bridge, beyond the sections above.
   that cannot happen. It then reserves the next node, writes the bundle straight into
   `nodes/<id>/request/`, stamps the sent strokes and queues the run; `submit` takes the
   reserved node and uses the bundle in place. The parent is the current history node
-  (§6). A run dropped before it reached the
+  (§6). A request whose images are over `formats.REQUEST_IMAGE_BYTES` (§5 Image limits) is
+  refused here, with nothing left on disk and the node number free. A run dropped before it reached the
   agent removes its node folder; its strokes stay for the next run. The `no_session`
   retry resubmits the same `(bundle, prompt, node, from_sketch)`, so the node is never
   re-counted. `load_strokes` runs only for bundles copied from disk: reloading a sketch
@@ -1607,7 +1624,7 @@ never writes Blender data.
     never red), amendments and answers as small boxes, the turn's picture (its
     last render, else `thumb.png`) and its end: "Stopped, changes kept / undone", or the
     reason (`stream.failure_reason`) as one red line with **Retry** beside it on the last
-    turn (`ui.draw_failure`).
+    turn, or **Edit** (`whittle.history_branch`) for a `too_large` one (`ui.draw_failure`).
     A tool error the agent recovered from is never red.
   - Older turns are one closed `layout.panel(f"whittle_turn_{node}")` each, headed by
     the prompt; past six, the oldest go into "N earlier turns".
@@ -1661,7 +1678,8 @@ never writes Blender data.
   Open Transcript (the start: Go Back to the Start and Compare With Current).
 - **Operators**: `whittle.branch_switch` (`node`: restore the newest restorable leaf
   under it, one undo step "Whittle: switch to <node>"), `whittle.retry` (`node`: a
-  folded failure is sent again as it is, a recorded one is branched first), plus
+  folded failure is sent again as it is, a recorded one is branched first; a `too_large`
+  turn is refused), plus
   `whittle.history_restore` / `history_branch` / `history_compare`,
   `whittle.compare_toggle`, `whittle.compare_end` (`keep`), `whittle.ghost_toggle`.
   Their bodies are the plain functions `switch_branch`, `retry`, `restore_node`,

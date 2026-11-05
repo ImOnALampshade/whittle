@@ -223,7 +223,8 @@ class FakeRunner:
             "num_turns": len(steps),
             "duration_ms": int((time.monotonic() - start) * 1000),
             "result_text": finish.get("result", ""),
-            "errors": errors,
+            "errors": errors + finish.get("errors", []),
+            "too_large": bool(finish.get("too_large")),
             "amends_undelivered": undelivered,
             "message_uuid": _new_id("fake-msg-"),
         })

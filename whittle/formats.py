@@ -21,6 +21,16 @@ VERSION = 1
 
 STROKE_TYPES = ("free", "add", "carve", "crease", "region", "note")
 RENDER_MODES = ("shaded", "wireframe", "matcap", "overlay")
+# The image files the agent attaches to a tool result; others stay on disk.
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+               ".webp": "image/webp", ".gif": "image/gif"}
+# The most image data one request may hold. The request tool's result reaches
+# the CLI as a single line of stdin, and past 256 Mi characters of it the CLI
+# exits, before it shrinks anything, which ends the session. In base64 this is
+# 240 Mi characters, which leaves room for the result's text. It is well over
+# the API's own limit because the CLI recompresses big images: nine 20 MiB
+# images went out as a request of under 6 MB.
+REQUEST_IMAGE_BYTES = 180 * 1024 * 1024
 
 
 class FormatError(ValueError):

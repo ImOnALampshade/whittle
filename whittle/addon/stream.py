@@ -174,18 +174,23 @@ FAILURES = {
     "error_max_budget_usd": "the turn reached its budget",
     "error_during_execution": "Claude stopped with an error",
     "session_ended": "the session ended",
+    # An API failure reaches us as an error result of subtype success.
+    "success": "Claude stopped with an error",
 }
 REASON_CHARS = 120
 
 
 def failure_reason(data: dict) -> str:
     """Why a turn failed, in a few words: its first error line, else what
-    its subtype means."""
+    its subtype means, else what the CLI gave as its result."""
     errors = [e for e in data.get("errors") or [] if isinstance(e, str) and e.strip()]
+    subtype = data.get("subtype") or ""
+    text = str(data.get("result_text") or "")
+    if not errors and text.strip() and subtype in ("", "success"):
+        errors = [text]
     if errors:
         reason = _first_line(errors[0])
         return reason if len(reason) <= REASON_CHARS else reason[:REASON_CHARS - 1] + "…"
-    subtype = data.get("subtype") or ""
     return FAILURES.get(subtype, subtype.replace("_", " ") or "unknown error")
 
 

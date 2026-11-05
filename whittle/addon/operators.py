@@ -213,13 +213,20 @@ def can_switch(hist, ctl, node: str) -> bool:
     return history_idle(ctl) and switch_target(hist, node) is not None
 
 
+def too_large(hist, node: str) -> bool:
+    """The turn failed because its images were too big, so it wants changing
+    (Edit & Resend) rather than sending again."""
+    return hist is not None and hist.tree is not None and node in hist.tree.nodes and hist.tree.node(node).too_large
+
+
 def can_retry(hist, ctl, node: str) -> bool:
     """A failed turn can be sent again from where it started: a folded one
-    while the scene is still at its parent, a recorded one by branching."""
+    while the scene is still at its parent, a recorded one by branching.
+    Not one whose images were too big: they would fail the same way."""
     if hist is None or hist.tree is None or node not in hist.tree.nodes or not history_idle(ctl):
         return False
     found = hist.tree.node(node)
-    if found.status != "failed":
+    if found.status != "failed" or found.too_large:
         return False
     if found.folded:
         return hist.current == found.parent
@@ -284,6 +291,8 @@ def retry(context, node: str, fake_script: str = "") -> tuple[turn.TurnControlle
     found = hist.tree.node(node)
     if found.status != "failed":
         raise RuntimeError(f"{node} did not fail")
+    if found.too_large:
+        raise RuntimeError(f"the images of {node} were too big; change them and send it again")
     props = context.scene.whittle
     if found.folded:
         if hist.current != found.parent:

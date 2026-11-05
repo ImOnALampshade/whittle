@@ -120,6 +120,16 @@ def check_refs(paths) -> None:
     missing = [str(p) for p in paths if not Path(p).is_file()]
     if missing:
         raise BundleError(f"reference image not found: {', '.join(missing)}")
+    check_image_size(paths)
+
+
+def check_image_size(paths) -> None:
+    """Refuses a request whose images are more than the agent could be handed."""
+    total = sum(Path(p).stat().st_size for p in paths if Path(p).suffix.lower() in formats.IMAGE_TYPES)
+    if total > formats.REQUEST_IMAGE_BYTES:
+        raise BundleError(f"the images of this request come to {total / 2**20:.0f} MB, over the "
+                          f"{formats.REQUEST_IMAGE_BYTES / 2**20:.0f} MB a request can hold: "
+                          "send fewer or smaller references")
 
 
 def copy_refs(paths, dest_dir: Path) -> list[str]:
@@ -199,6 +209,7 @@ def write_bundle(dest, *, scene, sketch_obj, node: str, parent: str | None, prom
             render.render(scene, view.camera, "overlay", render_size, folder / "overlay.png",
                           aspect=view.aspect, sketch=sketch_obj, targets=list(targets),
                           strokes_out=folder / "strokes.png", keep_strokes=stroke_filter)
+        check_image_size([*(tmp / "refs").glob("*"), *(tmp / "views").glob("*/overlay.png")])
         formats.read_bundle(tmp)
         os.rename(tmp, dest)
     except BaseException as exc:

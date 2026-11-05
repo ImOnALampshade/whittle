@@ -213,6 +213,23 @@ class BranchTest(ChatTurnCase):
         self.assertIsNone(operators.switch_target(hist, "n9999"))
 
 
+class TooLargeTest(ChatTurnCase):
+    script = "too_large.json"
+
+    def test_retry_is_withheld_but_editing_is_not(self):
+        hist = self.ctl.history
+        node = self.send("Match the references.")
+        self.wait(self.ctl, node)
+        found = hist.tree.node(node)
+        self.assertTrue(found.folded and found.too_large)
+        self.assertFalse(operators.can_retry(hist, self.ctl, node), "the same images would fail the same way")
+        self.assertTrue(operators.can_branch(hist, self.ctl, node))
+        with self.assertRaises(RuntimeError):
+            operators.retry(bpy.context, node, self.fake)
+        conv = conversation.build(hist, self.ctl)
+        self.assertEqual(conv.turns[-1].failure, "The images are too big.")
+
+
 class RetryTest(ChatTurnCase):
     script = "fail_untouched.json"
 

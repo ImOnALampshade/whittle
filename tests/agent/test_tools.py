@@ -128,6 +128,12 @@ class ToolHandlerTest(unittest.IsolatedAsyncioTestCase):
         payload = text.split("Strokes (3, world space):\n", 1)[1].split("\n", 1)[0]
         self.assertEqual(payload, json.dumps([s.to_json() for s in bundle.strokes], separators=(",", ":")))
 
+    def test_the_most_a_request_may_carry_fits_one_line_to_the_cli(self):
+        """The bundled CLI's stdin budget: a longer line ends the session
+        before it shrinks anything."""
+        base64_chars = -(-formats.REQUEST_IMAGE_BYTES // 3) * 4
+        self.assertLess(base64_chars + 2 * tools.STROKES_TEXT_LIMIT, 256 * 1024 * 1024)
+
     def test_dense_strokes_are_decimated_into_valid_json(self):
         bundle = formats.read_bundle(BUNDLE)
         long = make_stroke(0, 20_000)

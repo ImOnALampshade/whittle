@@ -462,6 +462,21 @@ def folded_failure(stage: Stage):
 
 
 @scenario
+def too_large(stage: Stage):
+    """A turn whose images were too big: the same request would fail the
+    same way, so its end offers Edit, not Retry."""
+    stage.crate()
+    script = stage.script("too_large", [
+        {"steps": [say("Adding a lid."), exec_("add lid", LID), render((1.5, -1.5, 1.2)),
+                   say("Done: the crate has a lid.")], "finish": done("Added a lid.")},
+        {"steps": [say("Looking at the photos.")],
+         "finish": {"subtype": "success", "is_error": True, "too_large": True,
+                    "errors": ["The images are too big for one request: send fewer or smaller references, or start a new chat."]}},
+    ])
+    yield from stage.turns(["Add a lid.", "Match the wood in these photos."], script)
+
+
+@scenario
 def crashed(stage: Stage):
     stage.crate()
     script = stage.script("crashed", [{"steps": [say("Starting on the lid."), {"sleep": 0.2},

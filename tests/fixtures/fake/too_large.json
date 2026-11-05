@@ -1,0 +1,10 @@
+{
+  "turns": [
+    {
+      "steps": [
+        {"say": "Looking at the request."}
+      ],
+      "finish": {"subtype": "success", "is_error": true, "too_large": true, "errors": ["The images are too big."]}
+    }
+  ]
+}
