@@ -155,11 +155,13 @@ class PosixTreeTest(unittest.TestCase):
     def test_signals_go_to_the_group(self):
         popen = FakePopen()
         tree = platforms.ProcessTree(popen, platform="linux")
-        with mock.patch.object(platforms.os, "killpg", create=True) as killpg:
+        # Windows's signal module has no SIGKILL, and the POSIX branch runs there too.
+        with (mock.patch.object(platforms.os, "killpg", create=True) as killpg,
+              mock.patch.object(platforms.signal, "SIGKILL", mock.sentinel.SIGKILL, create=True)):
             tree.terminate()
             tree.kill()
         self.assertEqual(killpg.call_args_list, [mock.call(4242, signal.SIGTERM),
-                                                 mock.call(4242, getattr(signal, "SIGKILL", 9))])
+                                                 mock.call(4242, mock.sentinel.SIGKILL)])
         self.assertEqual(popen.signals, [])
 
     def test_falls_back_to_the_process(self):

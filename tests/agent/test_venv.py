@@ -181,8 +181,8 @@ class StatusTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.venv = self.tmp / "venv"
 
-    def make_python(self):
-        python = venv.venv_python(self.venv)
+    def make_python(self, platform=sys.platform):
+        python = venv.venv_python(self.venv, platform)
         python.parent.mkdir(parents=True, exist_ok=True)
         python.symlink_to(sys.executable)
         return python
@@ -230,7 +230,7 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(venv.status(self.venv, LOCK, "win32"), VenvStatus.BROKEN)
 
     def test_pyvenv_home_is_only_read_on_windows(self):
-        python = self.make_python()
+        python = self.make_python("linux")
         (self.venv / "pyvenv.cfg").write_text(f"home = {self.tmp / 'gone'}\n")
         venv.write_marker(self.venv, LOCK, sdk=PINNED_SDK, base_python=python)
         self.assertEqual(venv.status(self.venv, LOCK, "linux"), VenvStatus.READY)
