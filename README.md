@@ -23,8 +23,8 @@ for how it is built, [docs/decisions.md](docs/decisions.md) for the choices behi
 works today and what is still rough.
 
 Requirements: Blender 5.2 (its Python, 3.13 or 3.14) on Linux x64 or arm64, Windows x64 or an
-Apple silicon Mac, and an Anthropic API key. Linux arm64, Windows and macOS are untested:
-reports welcome (see [Platforms](#platforms)).
+Apple silicon Mac, and an Anthropic API key. No one has used it for real on Linux arm64,
+Windows or macOS yet: reports welcome (see [Platforms](#platforms)).
 
 ## Screenshots
 
@@ -45,8 +45,9 @@ reports welcome (see [Platforms](#platforms)).
 Whittle is young (0.1.0); expect rough edges.
 
 - **Platforms**: developed and tested on Linux x64 only. Linux arm64, Windows x64 and
-  macOS on Apple silicon are supported in the code but untested: reports welcome. Intel
-  Macs are not supported. See [Platforms](#platforms).
+  macOS on Apple silicon are supported in the code, and the last two run in CI, but real
+  use on all three is untested: reports welcome. Intel Macs are not supported. See
+  [Platforms](#platforms).
 - **Sign-in**: an Anthropic API key only (API key and cost). Every turn calls Claude
   and costs tokens.
 - **Checked in a real GUI Blender by script**: flows background tests cannot reach, such
@@ -60,10 +61,10 @@ Whittle is young (0.1.0); expect rough edges.
 
 | Platform | Blender name | Status |
 |---|---|---|
-| Linux x64 | `linux-x64` | Developed and tested here. |
-| Linux arm64 | `linux-arm64` | Untested: reports welcome. |
-| Windows x64 | `windows-x64` | Untested: reports welcome. |
-| macOS on Apple silicon | `macos-arm64` | Untested: reports welcome. |
+| Linux x64 | `linux-x64` | Developed and tested here. CI gates every release on it. |
+| Linux arm64 | `linux-arm64` | Untested: blender.org publishes no build for it, so CI cannot run it. Reports welcome. |
+| Windows x64 | `windows-x64` | The agent-side tests have passed in CI, but the Blender suite cannot finish on the headless runner. Real use is untested: reports welcome. |
+| macOS on Apple silicon | `macos-arm64` | The offline suite has passed in CI. Real use is untested: reports welcome. |
 | macOS on Intel | `macos-x64` | Not supported. |
 
 One zip serves all four. It carries no wheels: the agent environment is downloaded at
@@ -74,7 +75,8 @@ its Windows x64 wheels), so pip picks the files for your platform (the
 left out because `cryptography` 50, which the lock pins, has no Intel macOS wheel, and
 Blender 5.2 has no Intel Mac build. Windows on Arm is left out too: the pinned SDK has
 no Windows Arm wheel. On Linux arm64 every pin that applies has an aarch64 or pure-Python wheel for
-Python 3.13 and 3.14 whose hash is in the lock (checked against PyPI), but no one has run it yet.
+Python 3.13 and 3.14 whose hash is in the lock (checked against PyPI), but no one has run it yet,
+and blender.org publishes no Blender for it.
 
 What differs on Windows: setup steps and the agent run without a console window; the
 agent and the Claude CLI it starts share a Job Object, so stopping the agent (or
@@ -89,17 +91,19 @@ pick a shorter **Environment Folder**.
 
 ## Install
 
-1. Build the extension zip:
+1. Download `whittle-0.1.0.zip` from the
+   [latest release](https://github.com/ImOnALampshade/whittle/releases/latest). One zip serves
+   every platform, and the `.sha256` beside it is its checksum. Or build it from the source:
 
    ```sh
    ./build.sh            # validates, then writes build/whittle-0.1.0.zip
    ```
 
 2. Install it: in Blender, **Edit → Preferences → Get Extensions → Install from Disk…** and
-   pick `build/whittle-0.1.0.zip`, or from a shell:
+   pick the zip, or from a shell:
 
    ```sh
-   blender --command extension install-file -r user_default build/whittle-0.1.0.zip
+   blender --command extension install-file -r user_default whittle-0.1.0.zip
    ```
 
 3. Turn on **Preferences → System → Network → Allow Online Access**. Whittle refuses to start
@@ -480,7 +484,8 @@ need `kwin_wayland`.
 
 Linux x64 (`ubuntu-latest`) is the gate. Windows x64 and macOS on Apple silicon run too,
 but their failures count for nothing yet, and a release does not wait for them. Linux
-arm64 has no CI: Blender publishes no Linux arm64 build.
+arm64 has no CI: blender.org publishes no Linux arm64 build. [Platforms](#platforms) says how
+far each one has got.
 
 To cut a release:
 

@@ -8,8 +8,8 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
 - Extension format: `blender_manifest.toml`, minimum Blender 5.2: the Grease Pencil v3 API, and the lock's wheels are built for its Python, so an older Blender would install the extension and then fail.
 
 - **Platforms** (2026-10-23; `linux-arm64` added 2026-10-23): `linux-x64`, `linux-arm64`,
-  `windows-x64` and `macos-arm64`, in one extension zip. Linux x64 is the only one tested;
-  the others are marked untested in the README.
+  `windows-x64` and `macos-arm64`, in one extension zip. Linux x64 is the only one used for real;
+  the README's Platforms table says how far the others have got.
   - One lock for every platform. It was compiled for manylinux x86_64, but uv's
     `--generate-hashes` wrote the hash of every file of each pin, so the Windows x64
     and macOS arm64 wheels of all 30 compiled pins at their pinned versions already verify
@@ -107,8 +107,8 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
 - **blender.org's 5.2 builds bundle Python 3.13**, on all three platforms; only a
   distribution's package may run on a system 3.14. The venv in CI is made from that 3.13,
   which Whittle accepts alongside 3.14 (Environment, above).
-- **Only Linux x64 gates.** Windows and macOS have never been run, so they report without
-  blocking. `publish` needs `tag` and `linux` only, which keeps them out of a release by
+- **Only Linux x64 gates.** Windows and macOS have never been used for real, and Windows'
+  Blender suite cannot finish on the headless runner, so they report without blocking. `publish` needs `tag` and `linux` only, which keeps them out of a release by
   construction rather than through how a failed `continue-on-error` job reports.
 - **No Linux arm64 row**: Blender 5.2 publishes no such build. The lock has its wheels.
 - **macOS has no GNU `timeout`**: `.github/scripts/shims/timeout` goes on `PATH` when the

@@ -266,7 +266,8 @@ session can start from the scene, from nothing, from a primitive or from an asse
   would send Ctrl+C), `replace` (retries a held file on Windows) and `marker_applies`
   (which of the lock's pins a platform installs). Each branch takes
   the platform as an argument and kernel32 as a fake, so the Linux suite runs the
-  Windows code (`tests/agent/test_platforms.py`); none of it has run on Windows.
+  Windows code (`tests/agent/test_platforms.py`). On Windows itself it has run only in CI's
+  agent-side tests, never for real.
 - `addon/setup.py`: the venv folder (the `venv_dir` preference or `<user dir>/venv`),
   `begin()` with its refusals (a turn or a setup running, wrong platform, a foreign
   folder, no online access, background Blender), the timer (persistent, so opening or
@@ -729,10 +730,12 @@ them at each save. Nothing is written beside the `.blend`.
 - **Real-agent turns on Python 3.13 have not been run live**: the offline suite passes on
   blender.org's 3.13, and there the real agent's code compiles and imports with the lock
   installed, but no live test has run on it.
-- **CI on GitHub**: Linux x64 and macOS have passed the offline suite and the build.
-  Windows stopped on `No module named 'pywintypes'`, which is why the lock pins `pywin32`,
-  and has not run with the pin yet. Linux arm64 has no CI because Blender publishes no
-  build for it.
+- **CI on GitHub**: Linux x64 is the gate and passes the offline suite and the build.
+  macOS has passed the offline suite and the build; real use there is untested. Windows has
+  passed the agent-side tests with the `pywin32` pin, but the Blender suite cannot finish on
+  the headless runner: Blender stops on an access violation, which has not been looked into,
+  so the job fails before the build, and real use there is untested too. Linux arm64 has no
+  CI because blender.org publishes no build for it.
 - **The `pywin32` pin**: changing the lock makes every existing install `stale` on every
   platform, even where pip installs the same 30 packages, so each one needs **Reinstall**.
   CI's Blender bundles Python 3.13, so it can only exercise the cp313 wheel of 311; the
@@ -800,8 +803,9 @@ them at each save. Nothing is written beside the `.blend`.
   portrait viewport snapped into a landscape one keeps its field of view across the
   long side, not the short one.
 - **Not built yet**:
-  - Linux arm64, Windows and macOS have never been used for real: CI runs only the
-    offline suite and the build on the last two. The manifest lists `linux-arm64`,
+  - Linux arm64, Windows and macOS have never been used for real: CI runs the offline
+    suite and the build on macOS, and gets only through the agent-side tests on Windows.
+    The manifest lists `linux-arm64`,
     `windows-x64` and `macos-arm64` and the code handles them (`whittle/platforms.py`, `venv.compatible()`), but every
     platform branch is only unit-tested with the platform passed in and kernel32
     faked. Unchecked there: a real venv setup (Blender's bundled `ensurepip`, pip finding

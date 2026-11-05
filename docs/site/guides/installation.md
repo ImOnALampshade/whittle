@@ -16,8 +16,16 @@ covers both parts, then updating and removing them. When you are done, go on to
 
 ## Install the extension
 
-Whittle is not on extensions.blender.org yet, so you build the zip yourself. That only packs
-the source into a zip: nothing is compiled.
+Whittle is not on extensions.blender.org yet, so you install a zip. Download
+`whittle-0.1.0.zip` from the
+[latest release](https://github.com/ImOnALampshade/whittle/releases/latest). One zip serves every
+platform, and the `.sha256` file beside it is its checksum, to check the download against. Then
+go on to [Install the zip](#install-the-zip).
+
+### Build the zip yourself
+
+You can build the zip from the source instead. That only packs the source into a zip: nothing is
+compiled.
 
 Get the source from [Whittle's GitHub page](https://github.com/ImOnALampshade/whittle): choose
 **Code → Download ZIP** and unpack it, or run
@@ -51,8 +59,11 @@ blender --factory-startup --command extension build --source-dir whittle --outpu
 On a Mac, `./build.sh` works too once Blender is on your `PATH` and `brew install coreutils` has
 provided `timeout`.
 
-Either way the zip lands in the `build` folder, as `whittle-0.1.0.zip`. One zip serves every
-platform. Then, in Blender:
+Either way the zip lands in the `build` folder, as `whittle-0.1.0.zip`.
+
+### Install the zip
+
+In Blender:
 
 1. Open **Edit → Preferences → Get Extensions**. If an **Online Extensions** box appears, press
    its **Allow Online Access**: Whittle needs that, and it is the same switch as in
@@ -216,9 +227,9 @@ The log of each setup is `logs/venv-<time>.log` in Whittle's user folder.
 | Platform | Status |
 |---|---|
 | Linux x64 | Developed and tested. |
-| Linux arm64 | Untested: reports welcome. |
-| Windows x64 | Untested: reports welcome. |
-| macOS on Apple silicon | Untested: reports welcome. |
+| Linux arm64 | Untested: blender.org publishes no build for it, so the automated tests cannot run it. Reports welcome. |
+| Windows x64 | The agent-side tests have passed on GitHub's runners, but the Blender tests cannot finish there. Real use is untested: reports welcome. |
+| macOS on Apple silicon | The offline tests have passed on GitHub's runners. Real use is untested: reports welcome. |
 | macOS on Intel | Not supported. |
 | Windows on Arm | Not supported. |
 
@@ -236,7 +247,7 @@ Blender does not offer updates for an extension installed from disk, and Whittle
 itself.
 
 1. Wait for any turn or setup to finish: updating stops them.
-2. Build or get the newer zip, and install it with **Install from Disk…**, as in
+2. Download or build the newer zip, and install it with **Install from Disk…**, as in
    [Install the extension](#install-the-extension). Blender replaces the old version.
 3. Open **Preferences → Add-ons → Whittle**, and read the status.
 

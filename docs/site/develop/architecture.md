@@ -307,7 +307,7 @@ runs synchronously, with 10 s before the SIGTERM.
 
 The agent runs in its own process group, and a terminate or kill goes to the whole group, so
 the CLI goes with it. What differs per platform lives in `whittle/platforms.py`: on Windows,
-which is untested, the group is a Job Object and a terminate is a hard kill.
+which no one has used for real yet, the group is a Job Object and a terminate is a hard kill.
 
 ## Where to go next
 

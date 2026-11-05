@@ -16,8 +16,8 @@ problem or idea before a large change saves everyone time.
   developed on Linux x64; the scripts (`run_tests.sh`, `build.sh`, `screens.sh`,
   `gui_checks.sh`, `docs.sh`, `docs_shots.sh`) are POSIX shell, and `screens.sh`,
   `gui_checks.sh` and `docs_shots.sh` need Linux with KDE's `kwin_wayland`. Windows and Apple silicon
-  Macs are supported but untested: a report of what works there is a welcome
-  contribution.
+  Macs are supported and run in CI, but real use there is untested: a report of what
+  works is a welcome contribution.
   You do not need an API key: the offline suite and the screenshots use a scripted fake
   agent.
 

@@ -8,11 +8,10 @@ program that runs Claude beside Blender is the *agent*.
 You need:
 
 - Blender 5.2 on a [supported platform](guides/installation.md).
-- The Whittle zip, `whittle-0.1.0.zip`. You build it yourself: get
-  [Whittle's source](https://github.com/ImOnALampshade/whittle) and run `./build.sh` in
-  its folder, which needs Blender on your `PATH` and a POSIX shell. The zip lands in
-  `build/`. [Installing and updating](guides/installation.md#install-the-extension) has
-  more.
+- The Whittle zip, `whittle-0.1.0.zip`, from the
+  [latest release](https://github.com/ImOnALampshade/whittle/releases/latest).
+  [Installing and updating](guides/installation.md#install-the-extension) has more, and how
+  to build it yourself.
 - An Anthropic API key whose Console account has API credits. Every turn is billed to
   that account; [API key and cost](guides/api-key.md) says what moves the price.
 

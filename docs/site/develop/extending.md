@@ -432,8 +432,8 @@ To add a branch:
    `Kernel32`, and the tests replace it with `FakeKernel`, which records its calls and fails on
    request.
 
-3. **Say what you ran it on.** The README's Platforms table says what is tested, and so far
-   that is only Linux x64.
+3. **Say what you ran it on.** The README's Platforms table says how far each platform has got,
+   and so far only Linux x64 has been used for real.
 
 Paths that differ by platform inside the agent environment are in `whittle/venv.py`:
 `venv_python` and `bundled_cli_name`.

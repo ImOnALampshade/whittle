@@ -317,7 +317,7 @@ SIGTERM like `shutdown`: it still closes its session, so the SDK's temporary con
 folder (which holds a copy of the credentials) is removed.
 
 `AgentProcess.tree` (`platforms.ProcessTree`) does the terminating and killing, and is
-closed when the process is gone. On macOS it works as on Linux. On Windows (untested):
+closed when the process is gone. On macOS it works as on Linux. On Windows (no real use yet):
 
 - the agent starts with `CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW` instead of
   `start_new_session` (which Windows ignores), so neither it nor the CLI shows a console;
