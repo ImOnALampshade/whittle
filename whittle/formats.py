@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """On-disk formats: request bundles and session folder layout.
 
-Stdlib only, so the agent process and Blender share one reader. JSON files carry
-"format" and "version" keys and are written atomically.
+Stdlib only, so the agent process and Blender share one reader. JSON files are
+written atomically, and the versioned ones carry "format" and "version" keys.
 """
 
 import json
@@ -21,13 +21,26 @@ VERSION = 1
 
 STROKE_TYPES = ("free", "add", "carve", "crease", "region", "note")
 RENDER_MODES = ("shaded", "wireframe", "matcap", "overlay")
+# The image files the agent attaches to a tool result; others stay on disk.
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+               ".webp": "image/webp", ".gif": "image/gif"}
+# The most image data one request may hold. The request tool's result reaches
+# the CLI as a single line of stdin, and past 256 Mi characters of it the CLI
+# exits, before it shrinks anything, which ends the session. In base64 this is
+# 240 Mi characters, which leaves room for the result's text. It is well over
+# the API's own limit because the CLI recompresses big images: nine 20 MiB
+# images went out as a request of under 6 MB.
+REQUEST_IMAGE_BYTES = 180 * 1024 * 1024
 
 
 class FormatError(ValueError):
+    """A file or JSON object is missing, or does not fit its format or limits."""
     pass
 
 
 def write_json_atomic(path, obj) -> None:
+    """Writes obj as JSON through a temp file beside path, so a reader never sees half a
+    file. Makes the parent folders."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -47,6 +60,8 @@ def write_json_atomic(path, obj) -> None:
 
 
 def read_json(path) -> dict:
+    """Reads a JSON file that must hold an object; FormatError if it is missing or holds
+    anything else."""
     path = Path(path)
     try:
         with open(path, encoding="utf-8") as f:
@@ -106,6 +121,7 @@ def _check_vec3(value) -> bool:
 
 
 def validate_request(obj: dict, where: str = "request.json") -> None:
+    """Checks a request.json object, including that every ref stays inside the bundle."""
     _check_header(obj, where, REQUEST_FORMAT)
     _check(obj, where, {
         "node": str, "parent": (str, None), "prompt": str, "amend": (int, None),
@@ -140,6 +156,8 @@ def _inside(rel: str) -> bool:
 
 
 def validate_strokes(obj: dict, where: str = "strokes.json") -> None:
+    """Checks a strokes.json object, including that each per-point list has one entry per
+    point."""
     _check_header(obj, where, STROKES_FORMAT)
     _check(obj, where, {"strokes": list})
     for i, s in enumerate(obj["strokes"]):
@@ -166,6 +184,8 @@ def validate_strokes(obj: dict, where: str = "strokes.json") -> None:
 
 
 def validate_camera(obj: dict, where: str = "camera.json") -> None:
+    """Checks a camera.json object: the view's matrices and size, and the camera derived
+    from them."""
     _check(obj, where, {
         "id": int, "view_matrix": list, "window_matrix": list, "is_perspective": bool,
         "width": int, "height": int, "from_camera": (str, None), "camera": dict,
@@ -221,11 +241,13 @@ def validate_target(obj: dict, where: str = "target.json") -> None:
 
 
 def write_target_manifest(path, manifest: dict) -> None:
+    """Validates a snapshot manifest and writes it, so a bad one never reaches disk."""
     validate_target(manifest, str(path))
     write_json_atomic(path, manifest)
 
 
 def read_target_manifest(path) -> dict:
+    """Reads and validates a snapshot manifest."""
     obj = read_json(path)
     validate_target(obj, str(path))
     return obj
@@ -235,6 +257,8 @@ def read_target_manifest(path) -> dict:
 
 @dataclass
 class View:
+    """A captured view, as camera.json holds it. The camera is derived at capture, so a
+    render need not work it out again."""
     id: int
     view_matrix: list
     window_matrix: list
@@ -246,19 +270,24 @@ class View:
 
     @classmethod
     def from_json(cls, obj: dict) -> "View":
+        """Builds a View from a camera.json object, validating it first."""
         validate_camera(obj)
         return cls(**{k: obj[k] for k in cls.__dataclass_fields__})
 
     def to_json(self) -> dict:
+        """The camera.json object."""
         return asdict(self)
 
     @property
     def aspect(self) -> float:
+        """Width over height."""
         return self.width / self.height
 
 
 @dataclass
 class Stroke:
+    """One sketched stroke, as strokes.json holds it. The per-point lists run parallel to
+    points."""
     index: int
     type: str
     view: int
@@ -272,14 +301,18 @@ class Stroke:
 
     @classmethod
     def from_json(cls, obj: dict) -> "Stroke":
+        """Builds a Stroke from a strokes.json entry. It does not validate: validate_strokes
+        checks the whole file first."""
         return cls(**{k: obj[k] for k in cls.__dataclass_fields__})
 
     def to_json(self) -> dict:
+        """The strokes.json entry."""
         return asdict(self)
 
 
 @dataclass
 class Request:
+    """What request.json holds for one turn. amend is set on an amendment's bundle."""
     node: str
     parent: str | None
     prompt: str
@@ -295,27 +328,33 @@ class Request:
 
     @classmethod
     def from_json(cls, obj: dict) -> "Request":
+        """Builds a Request from a request.json object, validating it first."""
         validate_request(obj)
         return cls(**{k: obj[k] for k in cls.__dataclass_fields__ if k in obj})
 
     def to_json(self) -> dict:
+        """The request.json object, with its format header."""
         return {"format": REQUEST_FORMAT, "version": VERSION, **asdict(self)}
 
 
 @dataclass
 class Bundle:
+    """A request bundle read from its folder. The images stay on disk, under root."""
     root: Path
     request: Request
     strokes: list[Stroke]
     views: dict[int, View]
 
     def view_dir(self, view_id: int) -> Path:
+        """The folder of one view: its camera.json and images."""
         return self.root / "views" / str(view_id)
 
     def overlay_path(self, view_id: int) -> Path:
+        """The view's shaded render with the strokes composited on it."""
         return self.view_dir(view_id) / "overlay.png"
 
     def strokes_png_path(self, view_id: int) -> Path:
+        """The view's strokes alone, on a transparent background."""
         return self.view_dir(view_id) / "strokes.png"
 
 
@@ -368,10 +407,12 @@ _NODE_ID = re.compile(r"^n\d{4,}$")
 
 
 def node_id(n: int) -> str:
+    """The zero-padded id of a node number, such as n0042."""
     return f"n{n:04d}"
 
 
 def is_node_id(node: object) -> bool:
+    """Whether a value of any type is a well-formed node id."""
     return isinstance(node, str) and _NODE_ID.fullmatch(node) is not None
 
 
@@ -389,6 +430,7 @@ class SessionDir:
         self.root = Path(root)
 
     def session_path(self) -> Path:
+        """The session.json holding the history tree."""
         return self.root / "session.json"
 
     def target_blend(self, node: str) -> Path:
@@ -396,21 +438,28 @@ class SessionDir:
         return self.node_dir(node) / "target.blend"
 
     def thumb_path(self, node: str) -> Path:
+        """The node's 128 px square shaded render, thumb.png; absent when none could be rendered,
+        as after a blank start."""
         return self.node_dir(node) / "thumb.png"
 
     def compare_dir(self) -> Path:
+        """Holds live.blend, the scene as it was, while a comparison runs."""
         return self.root / "compare"
 
     def node_dir(self, node: str) -> Path:
+        """The folder holding everything about one node."""
         return self.root / "nodes" / node
 
     def request_dir(self, node: str) -> Path:
+        """The request bundle that produced the node; node 0 has none."""
         return self.node_dir(node) / "request"
 
     def renders_dir(self, node: str) -> Path:
+        """The renders made during the node's turn."""
         return self.node_dir(node) / "renders"
 
     def amend_dir(self, node: str, n: int) -> Path:
+        """The bundle of the node's amendment n; a text-only amendment has none."""
         return self.node_dir(node) / f"amend-{n}"
 
     def checkpoint_paths(self, node: str, name: str) -> tuple[Path, Path]:
@@ -419,6 +468,8 @@ class SessionDir:
         return folder / f"{name}.blend", folder / f"{name}.json"
 
     def transcript_path(self, node: str) -> Path:
+        """The node's transcript: the agent's events as received, one per line, plus
+        Blender-side records."""
         return self.node_dir(node) / "transcript.jsonl"
 
     def node_ids(self) -> list[str]:
@@ -430,6 +481,8 @@ class SessionDir:
         return sorted(found, key=node_number)
 
     def next_render_path(self, node: str, view: int | None, mode: str) -> Path:
+        """The path of the node's next render, numbered after those already there. A view of
+        None marks a camera render. Makes the folder."""
         d = self.renders_dir(node)
         d.mkdir(parents=True, exist_ok=True)
         seqs = [int(m.group(1)) for p in d.iterdir() if (m := _RENDER_SEQ.match(p.name))]

@@ -213,6 +213,23 @@ class BranchTest(ChatTurnCase):
         self.assertIsNone(operators.switch_target(hist, "n9999"))
 
 
+class TooLargeTest(ChatTurnCase):
+    script = "too_large.json"
+
+    def test_retry_is_withheld_but_editing_is_not(self):
+        hist = self.ctl.history
+        node = self.send("Match the references.")
+        self.wait(self.ctl, node)
+        found = hist.tree.node(node)
+        self.assertTrue(found.folded and found.too_large)
+        self.assertFalse(operators.can_retry(hist, self.ctl, node), "the same images would fail the same way")
+        self.assertTrue(operators.can_branch(hist, self.ctl, node))
+        with self.assertRaises(RuntimeError):
+            operators.retry(bpy.context, node, self.fake)
+        conv = conversation.build(hist, self.ctl)
+        self.assertEqual(conv.turns[-1].failure, "Images too big: send fewer or smaller")
+
+
 class RetryTest(ChatTurnCase):
     script = "fail_untouched.json"
 
@@ -223,6 +240,7 @@ class RetryTest(ChatTurnCase):
         self.assertTrue(hist.tree.node(node).folded)
         self.assertEqual(self.ctl.last_folded, node)
         self.assertEqual(self.props.prompt, "", "the folded turn shows its prompt; Retry brings it back")
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 1}, "a folded turn's strokes are pending again")
         conv = conversation.build(hist, self.ctl)
         self.assertEqual([(t.node, t.folded) for t in conv.turns], [(node, True)])
         self.assertTrue(operators.can_retry(hist, self.ctl, node))
@@ -232,6 +250,8 @@ class RetryTest(ChatTurnCase):
         ctl, again = operators.retry(bpy.context, node, self.fake)
         self.assertNotEqual(again, node)
         self.assertIsNone(self.ctl.last_folded, "a new run clears the folded turn")
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("Add a lid.", 1))
         self.wait(self.ctl, again)
         self.assertEqual(hist.tree.node(again).parent, hist.tree.node(node).parent)
         found = hist.tree.node(again)
@@ -247,6 +267,96 @@ class RetryTest(ChatTurnCase):
         self.assertEqual(hist.tree.siblings(third), [again, third])
         with self.assertRaises(RuntimeError):
             operators.retry(bpy.context, third, self.fake)
+
+    def test_retry_turns_sent_with_strokes_alone(self):
+        hist = self.ctl.history
+        node = self.send("")
+        self.wait(self.ctl, node)
+        self.assertTrue(hist.tree.node(node).folded)
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 1})
+        self.assertEqual(operators.send_key_action(bpy.context), "submit", "Send has something to send")
+
+        ctl, again = operators.retry(bpy.context, node, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("", 1))
+        self.wait(self.ctl, again)
+
+        # This one edited the crate, so it keeps its node and its stamp, and
+        # Retry brings its strokes back from its request.
+        found = hist.tree.node(again)
+        self.assertEqual((found.status, found.folded), ("failed", False))
+        self.assertEqual(sketch.stroke_counts(self.obj), {turn.node_number(again): 1})
+        ctl, third = operators.retry(bpy.context, again, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(third))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("", 1))
+        self.wait(self.ctl, third)
+        self.assertEqual(hist.tree.node(third).status, "complete")
+        self.assertEqual(sketch.stroke_counts(self.obj), {}, "the strokes went with the finished turn")
+
+    def test_send_on_a_blank_box_carries_the_folded_turns_prompt(self):
+        hist = self.ctl.history
+        node = self.send("Add a lid.")
+        self.wait(self.ctl, node)
+        self.assertEqual(self.props.prompt, "")
+        self.assertEqual(operators.send_key_action(bpy.context), "submit")
+
+        # Send is lit by the pending strokes, and the box is blank only
+        # because the folded turn shows the prompt.
+        ctl, again = operators.submit_sketch(bpy.context, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("Add a lid.", 1))
+        self.assertEqual(self.props.prompt, "", "the prompt left the box with the run")
+        self.wait(self.ctl, again)
+        self.assertEqual(hist.tree.node(again).prompt, "Add a lid.")
+
+    def test_a_typed_prompt_replaces_the_folded_one(self):
+        node = self.send("Add a lid.")
+        self.wait(self.ctl, node)
+        self.props.prompt = "Add a handle."
+        ctl, again = operators.submit_sketch(bpy.context, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual(sent.request.prompt, "Add a handle.")
+        self.wait(self.ctl, again)
+
+    def test_undo_to_a_folded_turns_start_leaves_its_strokes_pending(self):
+        from whittle import addon
+
+        node = self.send("")
+        self.wait(self.ctl, node)
+        number = turn.node_number(node)
+        # The turn-start undo step holds the strokes as the turn stamped them,
+        # an amendment's among them, and background Blender cannot undo.
+        sketch.stamp_strokes(self.obj, number)
+        add_stroke(self.obj, "free", [(0.1 * i, 0.2, 0.3) for i in range(4)], view=1, radius=0.01)
+        sketch.stamp_pending(self.obj, number, 1)
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 2})
+        self.assertEqual(operators.send_key_action(bpy.context), "submit")
+
+        # A failure that kept its node is not folded: its strokes stay sent.
+        ctl, again = operators.retry(bpy.context, node, self.fake)
+        self.wait(self.ctl, again)
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {turn.node_number(again): 2})
+
+
+class FoldedPromptTest(ChatTurnCase):
+    script = "fold_second.json"
+
+    def test_send_leaves_a_folded_prompt_the_conversation_no_longer_shows(self):
+        hist = self.ctl.history
+        first = self.send("Scale it.")
+        self.wait(self.ctl, first)
+        node = self.send("Add a lid.")
+        self.wait(self.ctl, node)
+        self.assertEqual(self.ctl.last_folded, node)
+        operators.restore_node(bpy.context, hist.tree.root)
+        self.assertEqual([t.node for t in conversation.build(hist, self.ctl).turns], [])
+
+        ctl, again = operators.submit_sketch(bpy.context, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("", 1))
+        self.wait(self.ctl, again)
 
 
 class PromptHandBackTest(ChatTurnCase):
@@ -278,6 +388,7 @@ class ConversationModelTest(unittest.TestCase):
     def test_transcript_records_replay_as_entries(self):
         records = [
             {"type": "local", "name": "submit", "data": {"node": "n0001", "prompt": "Add a lid."}},
+            {"type": "local", "name": "warning", "data": {"text": "Could not resume."}},
             {"type": "event", "name": Event.TEXT, "data": {"turn_id": "n0001", "text": "Adding a lid."}},
             {"type": "event", "name": Event.TOOL_USE,
              "data": {"turn_id": "n0001", "tool_use_id": "a", "tool": "exec", "input": {"label": "lid"}}},
@@ -291,17 +402,18 @@ class ConversationModelTest(unittest.TestCase):
             {"type": "local", "name": "interrupt", "data": {"mode": "keep"}},
             {"type": "event", "name": Event.TURN_FINISHED,
              "data": {"turn_id": "n0001", "is_error": True, "interrupted": False, "num_turns": 4,
-                      "cost_usd": 0.01, "subtype": "error_max_turns", "errors": []}},
+                      "cost_usd": 0.01, "subtype": "error_during_execution", "errors": []}},
         ]
         entries = stream.entries_from_records(records, "n0001")
         self.assertEqual([e.kind for e in entries],
-                         ["text", "tool", "amend", "note", "answer", "stopping", "turn"],
+                         ["warning", "text", "tool", "amend", "note", "answer", "stopping", "turn"],
                          "a target_edited record from an older session is not shown")
-        self.assertEqual(entries[2].text, "taller (+ 2 new strokes)")
-        self.assertEqual(entries[4].text, "yes")
+        self.assertEqual(entries[0].text, "Could not resume.")
+        self.assertEqual(entries[3].text, "taller (+ 2 new strokes)")
+        self.assertEqual(entries[5].text, "yes")
         end = entries[-1]
-        self.assertEqual((end.status, end.result, end.steps, end.cost), ("failed", "Claude ran out of steps",
-                                                                         4, 0.01))
+        self.assertEqual((end.status, end.result, end.steps, end.cost),
+                         ("failed", "Claude stopped with an error", 4, 0.01))
         self.assertTrue(all(e.turn_id == "n0001" for e in entries))
 
     def test_failure_reasons(self):
@@ -309,6 +421,15 @@ class ConversationModelTest(unittest.TestCase):
                          "the agent exited with code 3")
         self.assertEqual(stream.failure_reason({"subtype": "session_ended"}), "the session ended")
         self.assertEqual(stream.failure_reason({"subtype": "error_odd_thing"}), "error odd thing")
+        self.assertEqual(stream.failure_reason({"subtype": "error_max_turns",
+                                                "errors": ["Reached maximum number of turns (4)"]}),
+                         "Reached maximum number of turns (4)", "the CLI words its own limits")
+        self.assertNotIn("error_max_turns", stream.FAILURES)
+        self.assertNotIn("error_max_budget_usd", stream.FAILURES)
+        self.assertEqual(stream.failure_reason({"subtype": "success", "result_text": "API Error: 500\nmore"}),
+                         "API Error: 500", "the CLI reports an API failure as a result with subtype success")
+        self.assertEqual(stream.failure_reason({"subtype": "error_during_execution", "result_text": "x"}),
+                         "Claude stopped with an error")
         long = stream.failure_reason({"errors": ["x" * 500]})
         self.assertEqual(len(long), stream.REASON_CHARS)
 

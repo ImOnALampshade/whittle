@@ -8,20 +8,7 @@ from unittest import mock
 
 import bpy
 
-from whittle.addon import enter
-
-
-class FakeOp:
-    def __init__(self, ok=True):
-        self.ok = ok
-        self.calls = []
-
-    def poll(self):
-        return self.ok
-
-    def __call__(self, mode):
-        self.calls.append(mode)
-        return {"FINISHED"}
+from whittle.addon import enter, operators
 
 
 class EnterTest(unittest.TestCase):
@@ -35,26 +22,21 @@ class EnterTest(unittest.TestCase):
         for name in enter.SENDERS:
             self.addCleanup(setattr, self.props, name, "")
 
-    def press(self, **ops):
-        whittle = SimpleNamespace(**{name: FakeOp() for name in enter.SENDERS.values()} | ops)
-        with mock.patch.object(enter, "bpy", SimpleNamespace(ops=SimpleNamespace(whittle=whittle))):
-            result = enter.WHITTLE_OT_enter_send.invoke(None, bpy.context, None)
-        return result, whittle
+    def press(self, sent=frozenset({"FINISHED"})):
+        """Presses Enter; returns its result and the actions it sent. `sent`
+        is what sending returns, None when the operator's poll refuses."""
+        with mock.patch.object(operators, "key_send", return_value=sent) as send:
+            result = enter.WHITTLE_OT_enter_send.invoke(SimpleNamespace(), bpy.context, None)
+        return result, [call.args[2] for call in send.call_args_list]
 
     def test_each_field_sends_with_its_operator(self):
         for name, sender in enter.SENDERS.items():
             with self.subTest(name):
                 setattr(self.props, name, "taller")
-                result, whittle = self.press()
-                self.assertEqual(result, {"FINISHED"})
-                self.assertEqual(getattr(whittle, sender).calls, ["EXEC_DEFAULT"])
-                others = [op for key, op in vars(whittle).items() if key != sender]
-                self.assertTrue(all(not op.calls for op in others))
+                self.assertEqual(self.press(), ({"FINISHED"}, [sender]))
 
     def test_enter_elsewhere_passes_through(self):
-        result, whittle = self.press()
-        self.assertEqual(result, {"PASS_THROUGH"})
-        self.assertEqual(whittle.submit.calls, [])
+        self.assertEqual(self.press(), ({"PASS_THROUGH"}, []))
 
     def test_a_confirm_sends_once(self):
         self.props.prompt = "Add a lid."
@@ -76,9 +58,7 @@ class EnterTest(unittest.TestCase):
 
     def test_nothing_sent_when_sending_is_not_possible(self):
         self.props.prompt = "Add a lid."
-        result, whittle = self.press(submit=FakeOp(ok=False))
-        self.assertEqual(result, {"PASS_THROUGH"})
-        self.assertEqual(whittle.submit.calls, [])
+        self.assertEqual(self.press(sent=None), ({"PASS_THROUGH"}, ["submit"]))
 
     def test_registers_in_the_window_keymap(self):
         # Background Blender has no key configurations, so a stand-in.

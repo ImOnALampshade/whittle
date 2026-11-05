@@ -32,8 +32,9 @@ Blender (add-on, main thread)  <-- bridge: JSON lines over 127.0.0.1 -->  agent 
 - **Add-on**, `whittle/addon/`: may import `bpy`, `bmesh`, `mathutils`, `gpu`, `numpy`.
   Never imports `whittle.agent`.
 - **Agent**, `whittle/agent/`: never imports `bpy`. Only `agent/runner.py` imports
-  `claude_agent_sdk`; everything else there is stdlib, so the fake agent runs under any
-  Python 3.13 or 3.14.
+  `claude_agent_sdk` at module level (`tools.build_servers` does so when called); everything
+  else there is stdlib, so the fake agent runs under any Python 3.13
+  or 3.14.
 - **Shared**, `whittle/*.py` (`protocol`, `formats`, `tree`, `chats`, `caches`,
   `markdown`, `models`, `style`, `venv`, `platforms`): stdlib only at module level.
   `whittle/__init__.py` stays bpy-free at import time.
@@ -71,8 +72,8 @@ exact commands; in short:
 ## Commands
 
 Every command is time-bounded; keep it that way for anything you add. The scripts are
-POSIX shell and use GNU `timeout`; `screens.sh` and `gui_checks.sh` need Linux with
-KDE's `kwin_wayland`.
+POSIX shell and use GNU `timeout`; `screens.sh`, `gui_checks.sh` and `docs_shots.sh` need
+Linux with KDE's `kwin_wayland`.
 
 ```sh
 ./run_tests.sh                 # offline suite: agent side in .venv, then blender -b
@@ -80,10 +81,14 @@ KDE's `kwin_wayland`.
 ./gui_checks.sh                # every GUI check in a real, hidden Blender (~4 min)
 ./gui_checks.sh undo_turn send_key
 WHITTLE_GUI=1 ./run_tests.sh   # the suite, then every GUI check
-./screens.sh                   # sidebar screenshots into build/screens/ (~1.5 min)
+./screens.sh                   # sidebar screenshots into build/screens/ (several minutes)
 ./screens.sh conversation asking
 ./screens.sh --docs            # the README's images, into docs/images/
 ./build.sh                     # validate and build build/whittle-<version>.zip
+./docs.sh                      # the documentation site into build/docs/html
+./docs.sh --strict --out DIR   # every page rebuilt, warnings are errors, all of it in DIR
+./docs_shots.sh guides-undo    # a site page's screenshots, into docs/site/images/
+./docs_shots.sh --all          # every page's (~6 min); --list and --check launch nothing
 ```
 
 - **Tests** use the stdlib `unittest` (pytest is not installed). Agent tests are in
@@ -104,7 +109,8 @@ WHITTLE_GUI=1 ./run_tests.sh   # the suite, then every GUI check
   phase with `--enable-event-simulate`, sends simulated input through Blender's own event
   handling, and uses the fake agent and fake API keys only, with Blender offline.
   Blender's user folders, its temp folder and Whittle's user folder are the run's own,
-  under `build/gui-checks/`; the harness refuses to run otherwise. Results are in
+  under `build/gui-checks/`; the harness refuses to run if Blender's config folder is not
+  the run's or Whittle was not loaded from the run's repository. Results are in
   `build/gui-checks/report.json`, each phase's log in
   `build/gui-checks/<check>/phase-<n>.log`, and the preference checks leave screenshots
   beside it. `tests/gui/spy.py` records what Blender's own redraws drew, for asserting
@@ -114,11 +120,20 @@ WHITTLE_GUI=1 ./run_tests.sh   # the suite, then every GUI check
   `build/screens-work/<scenario>/blender.log`. The README's images are committed under
   `docs/images/`; regenerate them with `--docs` after a change to what they show, and
   look at each before committing.
-- **Hidden windows**: both `gui_checks.sh` and `screens.sh` open their Blenders in a
-  hidden nested Wayland session (`kwin_wayland --virtual`), so no window appears on the
-  desktop. Without `kwin_wayland` they stop and say so. `WHITTLE_GUI_VISIBLE=1` and
+- **Hidden windows**: `gui_checks.sh`, `screens.sh` and `docs_shots.sh` open their Blenders
+  in a hidden nested Wayland session (`kwin_wayland --virtual`), so no window appears on
+  the desktop. Without `kwin_wayland` they stop and say so. `WHITTLE_GUI_VISIBLE=1` and
   `WHITTLE_SCREENS_VISIBLE=1` show the windows instead, only when the person running
-  them wants that.
+  them wants that; `docs_shots.sh` has no such switch.
+- **Documentation site**: `docs/site/`, a Sphinx project with one MyST page per doc and the
+  API reference autodoc builds from the docstrings. `docs.sh` builds it from `.venv-docs/`,
+  a docs-only venv from `docs/site/requirements.lock`; it needs no Blender and no network.
+  Install nothing for it into `.venv`. `docs_shots.sh` runs from `.venv`: each shot's spec is
+  `docs/site/shots/<page-slug>.py` (`tests/docshots/` runs them; `docs/site/shots/README.md`
+  is the guide), its image `docs/site/images/<page-slug>/<shot>.png`, committed. Every
+  Blender gets its own hidden session and folders under `build/docs-shots/`, and
+  `WHITTLE_DOCSHOTS_SLOTS` caps how many run at once. `tests/agent/test_docs_site.py` and
+  `test_docshots.py` check the source and the specs without Sphinx or Blender.
 - **Build**: `build.sh` refuses to build when `whittle/requirements.lock` or
   `whittle/LICENSE` differs from its root copy. It never copies them for you.
 
@@ -135,7 +150,8 @@ WHITTLE_GUI=1 ./run_tests.sh   # the suite, then every GUI check
 
 **Supply chain.**
 - Every dependency is an exact pin with hashes in `agent_env/requirements.lock`,
-  installed from wheels only, without resolution. No `github:`/VCS references.
+  installed from wheels only, without resolution. No `github:`/VCS references. The docs
+  site's tools follow the same rules in `docs/site/requirements.lock`, and never ship.
 - Never add, upgrade or remove a package without the maintainer's explicit approval,
   and never in a change about something else.
 - `whittle/requirements.lock` stays byte-identical to `agent_env/requirements.lock`
@@ -157,7 +173,7 @@ Auth and Distribution).
   folder for it).
 - The CLI's own usage telemetry and error reports are off by default: the agent runs
   with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` unless the user turns on **Send
-  Claude Code usage data** (`usage_data`, off by default). Keep that default.
+  Claude CLI usage data** (`usage_data`, off by default). Keep that default.
 - Never modify the bundled CLI; Whittle only chooses its environment and folder.
 - No "Claude Code" branding: Whittle is its own product, "Powered by Claude" at most.
 
@@ -214,7 +230,7 @@ Auth and Distribution).
   `DESCRIPTIONS`, `LIMITS`); `whittle/style.py` words the style for the agent.
 - **Chats from another machine** (ui.md §3.11): every chat records the install that
   made it (`origin`, the random id in the user folder's `install.json`). A chat from
-  another install opens read-only with a **Continue this chat?** box; Send stays disabled
+  another install opens with a **Continue this chat?** box; Send stays disabled
   until Continue (`whittle.chat_continue`) adds this install to the chat's `adopted`.
   Anything that sends a turn must respect that gate.
 - **Agent-facing text** (system prompt, skills, tool descriptions, errors the agent
@@ -222,7 +238,8 @@ Auth and Distribution).
   volume, one home per fact, brief replies to the user, actionable errors.
 - **Docs stay in step with the code**: update README, `docs/architecture.md`, `ui.md`,
   `decisions.md` and `progress.md` (what exists, known gaps, the manual checklist) in the
-  same change, and this file when what it says changes.
+  same change, and this file when what it says changes. The site in `docs/site/` is part
+  of that: `docs/*.md` are the specs and the record, its guide pages are the user's view.
 - **Commits**: imperative subject line, short body saying why.
 
 ## Where to look first
@@ -253,5 +270,9 @@ Auth and Distribution).
 - **Something platform-specific**: `whittle/platforms.py` (with the platform passed
   in, tested in `tests/agent/test_platforms.py`), `venv.compatible()` for which
   platforms set up at all, and the README's Platforms table.
+- **A page of the documentation site**: `docs/site/<doc>.md`, listed in a toctree in
+  `docs/site/index.md`; its pictures in `docs/site/shots/<page-slug>.py`, shot with
+  `./docs_shots.sh <page-slug>` and shown on the page (`tests/agent/test_docs_site.py`
+  checks that); a new module gets its `automodule` in `docs/site/reference/`.
 - **Wire formats**: `protocol.py` (bridge), `formats.py` (request bundle, session
   folder), architecture §3 and §8.

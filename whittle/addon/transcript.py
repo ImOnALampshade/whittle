@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The full transcript of a session as readable text, for a Text datablock."""
+"""The full transcript of a session as readable text, for a Text datablock.
+The Text is a view of the chat, never data of the file: it is runtime data,
+which a save leaves out even while a Text Editor shows it (the editor's user
+would keep a plain Text in the file), so no file carries it, whatever Save
+Chats says. It ends with its chat too, also when an undo step from before the
+delete brings it back."""
 
 import json
 import logging
@@ -11,6 +16,7 @@ from .stream import turn_status
 log = logging.getLogger("whittle")
 
 TEXT_NAME = "Whittle Transcript"
+CHAT_PROP = "whittle_chat"
 RESULT_LINES = 30
 
 
@@ -68,6 +74,8 @@ def _local_lines(name: str, data: dict) -> list[str]:
     if name == "target_edited":
         edits = ", ".join(f"{e['name']} ({e['kind']})" for e in data.get("edits") or [])
         return [f">> You edited the target: {edits}"]
+    if name == "warning":
+        return [f">> Warning: {data.get('text')}"]
     if name == "amend_returned":
         return [f">> Amendment {data.get('amend')} was not delivered: {data.get('reason')}"]
     return [f">> {name}: {json.dumps(data, ensure_ascii=False)}"]
@@ -121,15 +129,56 @@ def session_records(session: formats.SessionDir) -> list[dict]:
     return records
 
 
+def has_transcript(session: formats.SessionDir) -> bool:
+    """Whether any node of the session has a transcript file to show."""
+    return any(session.transcript_path(node).is_file() for node in session.node_ids())
+
+
 def open_transcript(session: formats.SessionDir, context=None):
     """Writes the session's transcript into the Whittle Transcript text and
     shows it in a Text Editor when there is a window for one."""
     import bpy
 
-    from . import editors
+    from . import editors, history
 
     text = bpy.data.texts.get(TEXT_NAME) or bpy.data.texts.new(TEXT_NAME)
+    text.is_runtime_data = True
+    text[CHAT_PROP] = history.chat_id(session)
     text.clear()
     text.write(format_transcript(session_records(session)))
     editors.show_text(context or bpy.context, text)
     return text
+
+
+def keep_out_of_file() -> None:
+    """Before a save: a Text an older Whittle left in the file is a view too."""
+    import bpy
+
+    text = bpy.data.texts.get(TEXT_NAME)
+    if text is not None:
+        text.is_runtime_data = True
+
+
+def close(chat: str) -> None:
+    """The chat is gone, and with it the view of it."""
+    import bpy
+
+    text = bpy.data.texts.get(TEXT_NAME)
+    if text is not None and text.get(CHAT_PROP) == chat:
+        bpy.data.texts.remove(text)
+
+
+def after_undo() -> None:
+    """Undo steps hold the Text, but chats are never undone: a step from
+    before its chat was deleted brings back a view of nothing."""
+    import bpy
+
+    from . import chats
+
+    text = bpy.data.texts.get(TEXT_NAME)
+    chat = text.get(CHAT_PROP) if text is not None else None
+    if not chat:
+        return
+    found = chats.get()
+    if found is None or chat not in found:
+        bpy.data.texts.remove(text)

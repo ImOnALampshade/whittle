@@ -12,6 +12,10 @@ A cache root holds what chats.py describes, plus:
                     step with
     in-use.json    {"pid", "host"}: the Blender that has it open
 
+Beside the caches, open-<key>.json, one per running Blender, holds {"pid",
+"host", "path"}: the saved file it has open, with or without a cache, so two
+Blenders on one file see each other even when it has no chats yet.
+
 The file id is stored in the .blend, so the cache follows the file through
 renames and moves. A copy opened while the original's cache is in use, or
 whose cache records another file that still exists, gets an id of its own.
@@ -22,6 +26,7 @@ records as its origin (chats.py), so a chat that came in a file from
 elsewhere can be told apart.
 """
 
+import functools
 import hashlib
 import logging
 import os
@@ -40,6 +45,7 @@ log = logging.getLogger("whittle")
 CACHE_FORMAT = "whittle.cache"
 RECORD_NAME = "cache.json"
 LOCK_NAME = "in-use.json"
+OPEN_MARKS = "open-*.json"
 INSTALL_FORMAT = "whittle.install"
 INSTALL_NAME = "install.json"
 # A cache not used for this long is deleted (never the one in use).
@@ -54,6 +60,7 @@ def new_file_id() -> str:
 
 
 def is_file_id(text) -> bool:
+    """Whether text is a string of the form new_file_id gives."""
     return isinstance(text, str) and bool(_FILE_ID.match(text))
 
 
@@ -117,7 +124,10 @@ def _used(root: Path) -> float:
 
 # -- in use -----------------------------------------------------------------------
 
+@functools.cache
 def _host() -> str:
+    """This machine's name, read once: macOS renames the machine as networks
+    change, and a Blender must go on knowing its own claims and marks."""
     return socket.gethostname()
 
 
@@ -125,9 +135,9 @@ def _alive(pid: int) -> bool:
     return platforms.pid_alive(pid)
 
 
-def _lock(root: Path) -> dict | None:
+def _claim(path: Path) -> dict | None:
     try:
-        found = formats.read_json(root / LOCK_NAME)
+        found = formats.read_json(path)
     except formats.FormatError:
         return None
     pid = found.get("pid")
@@ -136,16 +146,19 @@ def _lock(root: Path) -> dict | None:
     return found
 
 
-def in_use_elsewhere(root, *, here_only: bool = False) -> bool:
-    """Whether another Blender has the cache open: a live process on this
-    machine, or any on another one (whose processes cannot be checked;
-    here_only leaves those out)."""
-    found = _lock(Path(root))
-    if found is None:
-        return False
+def _held_elsewhere(found: dict, *, here_only: bool = False) -> bool:
+    """Whether a claim is another Blender's: a live process on this machine,
+    or any on another one (whose processes cannot be checked; here_only
+    leaves those out)."""
     if found.get("host") != _host():
         return not here_only
     return found["pid"] != os.getpid() and _alive(found["pid"])
+
+
+def in_use_elsewhere(root, *, here_only: bool = False) -> bool:
+    """Whether another Blender has the cache open."""
+    found = _claim(Path(root) / LOCK_NAME)
+    return found is not None and _held_elsewhere(found, here_only=here_only)
 
 
 def take(root) -> None:
@@ -156,18 +169,46 @@ def take(root) -> None:
 def release(root) -> None:
     """This Blender let go of the cache; another's claim stays."""
     root = Path(root)
-    found = _lock(root)
+    found = _claim(root / LOCK_NAME)
     if found is not None and found["pid"] == os.getpid() and found.get("host") == _host():
         (root / LOCK_NAME).unlink(missing_ok=True)
 
 
+def _open_mark(cache_dir) -> Path:
+    key = hashlib.sha256(f"{_host()}\0{os.getpid()}".encode()).hexdigest()[:16]
+    return Path(cache_dir) / OPEN_MARKS.replace("*", key)
+
+
+def mark_open(cache_dir, blend) -> None:
+    """This Blender has the saved file blend open, and none if it is None. A
+    file that never had chats has no cache to claim, and a Blender on it
+    would otherwise go unseen."""
+    if blend is None:
+        unmark_open(cache_dir)
+    else:
+        formats.write_json_atomic(_open_mark(cache_dir),
+                                  {"pid": os.getpid(), "host": _host(), "path": str(blend)})
+
+
+def unmark_open(cache_dir) -> None:
+    """This Blender closed its file."""
+    _open_mark(cache_dir).unlink(missing_ok=True)
+
+
 def open_elsewhere(cache_dir, blend, skip=None) -> bool:
-    """Whether another Blender has the same file open: a cache other than
-    skip (this Blender's) records it and is claimed by a live Blender. Each
-    of the two works on a cache of its own, so their chats do not merge."""
+    """Whether another Blender has the same file open: it marked the file
+    open, or a cache other than skip (this Blender's) records the file and
+    is claimed by a live Blender, which may be on a recovered copy of it.
+    Each of the two works on a cache of its own, so their chats do not
+    merge."""
     cache_dir = Path(cache_dir)
     if blend is None or not cache_dir.is_dir():
         return False
+    for mark in cache_dir.glob(OPEN_MARKS):
+        found = _claim(mark)
+        recorded = found.get("path") if found is not None else None
+        if isinstance(recorded, str) and same_file(recorded, blend) and _held_elsewhere(found):
+            return True
     for folder in cache_dir.iterdir():
         if folder.name == skip or not is_file_id(folder.name) or folder.is_symlink() \
                 or not (folder / LOCK_NAME).is_file():
@@ -182,6 +223,8 @@ def open_elsewhere(cache_dir, blend, skip=None) -> bool:
 # -- which cache a file uses -----------------------------------------------------
 
 def same_file(a, b) -> bool:
+    """Whether two paths are one file; when that cannot be checked (one is
+    missing, say), whether their real paths match."""
     try:
         return os.path.samefile(a, b)
     except OSError:
@@ -233,16 +276,31 @@ def _by_path(cache_dir: Path, blend, skip: str | None = None) -> str | None:
 
 # -- cleanup ------------------------------------------------------------------------
 
+def _stale_mark(mark: Path, now: float, max_age: float) -> bool:
+    """Whether an open mark's Blender is gone; one on another machine cannot
+    be checked, so it lasts as long as an unused cache."""
+    found = _claim(mark)
+    if found is None:
+        return True
+    if found.get("host") != _host():
+        return now - mark.stat().st_mtime >= max_age
+    return not _alive(found["pid"])
+
+
 def cleanup(cache_dir, keep=(), *, now: float | None = None, max_age: float = MAX_AGE,
             config=None) -> list[str]:
     """Deletes the caches not used for max_age, with the CLI's transcripts
     of their chats' folders; never one in keep or open in a live Blender on
-    this machine. Returns the ids deleted."""
+    this machine. Marks a crashed Blender left go too. Returns the ids
+    deleted."""
     cache_dir = Path(cache_dir)
     if not cache_dir.is_dir():
         return []
     now = time.time() if now is None else now
     kept = {Path(k).resolve() for k in keep if k is not None}
+    for mark in cache_dir.glob(OPEN_MARKS):
+        if _stale_mark(mark, now, max_age):
+            mark.unlink(missing_ok=True)
     gone = []
     for folder in sorted(cache_dir.iterdir()):
         if not is_file_id(folder.name) or not folder.is_dir() or folder.is_symlink():

@@ -19,7 +19,7 @@ from . import (bundle, chats, commands, compare, execution, history, models, pat
 from . import refs as references
 from .bridge import modal_running, redraw_view3d
 from .process import AgentProcess, AgentState
-from .stream import Stream, TranscriptWriter, local_entry
+from .stream import Entry, Stream, TranscriptWriter, local_entry
 
 log = logging.getLogger("whittle")
 
@@ -61,6 +61,8 @@ def next_node_number(session: formats.SessionDir) -> int:
 
 
 class TurnController:
+    """Runs one session folder's turns: owns its agent process, stream and history,
+    and carries each run from Send to turn_finished."""
     def __init__(self, session_root: Path, *, fake_script: Path | None = None,
                  python: Path | None = None, agent_token: str | None = None,
                  use_timer: bool = True, model: str | None = None,
@@ -110,6 +112,9 @@ class TurnController:
         self._context: list[str] = []
         # Set when resuming the SDK session failed: the next start is fresh.
         self._resume_failed: str | None = None
+        # The sidebar's word on that, kept until the fresh session takes a
+        # turn: submit hands it to the turn that tells the agent.
+        self._resume_warning: Entry | None = None
         self._resumed = False
         self._session_turns = 0
         # What the sidebar shows: idle | starting | running | waiting_user | interrupting.
@@ -157,10 +162,13 @@ class TurnController:
 
     @property
     def bridge(self):
+        """The agent process's bridge, or None while there is no agent."""
         return self.process.bridge
 
     @property
     def running(self) -> bool:
+        """A turn was submitted and has not finished; a run still waiting for the
+        agent does not count (busy covers that too)."""
         return self.turn_id is not None
 
     @property
@@ -208,6 +216,7 @@ class TurnController:
 
     @property
     def interrupting(self) -> bool:
+        """The running turn was told to stop and has not finished yet."""
         return self.running and self.bridge is not None and self.bridge.interrupted
 
     def _turn_number(self) -> int | None:
@@ -221,6 +230,8 @@ class TurnController:
     # -- commands from the UI ------------------------------------------------
 
     def start(self) -> None:
+        """Starts the agent unless one is alive, keeping what it launched with for
+        launch_changed."""
         if not self.process.alive:
             self.session_ready = False
             launched = self.launch_settings()
@@ -256,6 +267,7 @@ class TurnController:
         return self.process.alive and self._launched is not None and self._launched != self.launch_settings()
 
     def stop(self, *, wait: bool = False) -> None:
+        """Asks the agent to exit; with wait, sees it out before returning."""
         self.process.stop(wait=wait)
 
     def close(self) -> None:
@@ -427,6 +439,11 @@ class TurnController:
             # is not left running a turn that never started.
             self._abandon_submit(node, began=began)
             raise
+        warning = self._resume_warning
+        # A submit sent again after no_session is the same turn: it has it.
+        if warning is not None and warning.turn_id != node:
+            warning.turn_id = node
+            self._local("warning", {"text": warning.text})
         self.stream.note(f"Turn {node}: {text or '(sketch only)'}", kind="submit", turn_id=node)
         self.bridge.call(Method.SUBMIT, {"turn_id": node, "bundle_dir": str(dest), "prompt": text,
                                          "context": context, "model": model, "effort": self.chat_effort()},
@@ -445,6 +462,10 @@ class TurnController:
         self._transcript = None
         self._from_sketch = False
         self._began = None
+        if self._resume_warning is not None:
+            # Off the node: its number can go to the next turn. The plan's
+            # note still waits for a turn, and this waits with it.
+            self._resume_warning.turn_id = None
         if began:
             try:
                 self.history.discard(node)
@@ -463,15 +484,19 @@ class TurnController:
         succeeds, unsent."""
         shutil.rmtree(self.session.node_dir(node), ignore_errors=True)
         if unstamp:
-            obj = sketch.find_sketch_object()
-            if obj is not None:
-                try:
-                    sketch.unstamp_strokes(obj, node_number(node))
-                except (ReferenceError, RuntimeError) as exc:
-                    log.warning("could not unstamp the strokes of %s: %s", node, exc)
+            self._unstamp_strokes(node)
         # The next run takes the freed number, so node ids stay contiguous.
         if self._next_node == node_number(node) + 1:
             self._next_node = node_number(node)
+
+    def _unstamp_strokes(self, node: str) -> None:
+        obj = sketch.find_sketch_object()
+        if obj is None:
+            return
+        try:
+            sketch.unstamp_strokes(obj, node_number(node))
+        except (ReferenceError, RuntimeError) as exc:
+            log.warning("could not unstamp the strokes of %s: %s", node, exc)
 
     def _continued_session(self) -> str | None:
         """The SDK session a submit now carries on: the one the session just
@@ -540,6 +565,8 @@ class TurnController:
         self._set_phase("interrupting")
 
     def answer(self, text: str) -> bool:
+        """Answers the agent's question with this text and any notes waiting for it.
+        False when no question is waiting or its call has gone."""
         if self.bridge is None or self.question is None:
             return False
         question = self.question
@@ -680,6 +707,8 @@ class TurnController:
     # -- callbacks -----------------------------------------------------------
 
     def on_event(self, msg: dict) -> None:
+        """Takes one agent event: it goes into the stream and the turn's transcript,
+        then moves the turn or session state on."""
         name, data = msg.get("name", ""), msg.get("data") or {}
         self.events.append(msg)
         self.stream.append(name, data)
@@ -705,10 +734,10 @@ class TurnController:
             # next run has to start a new one.
             self.session_ready = False
             self.live_node = None
-            if self._resumed and self._session_turns == 0:
-                # A resumed conversation that ends before taking a turn could
-                # not really be resumed; the next start is fresh.
-                self._resume_failed = data.get("detail") or "the session ended at once"
+            if self.busy and self._resumed and self._session_turns == 0:
+                # A resumed conversation that ends before taking its run's
+                # turn could not really be resumed; the next start is fresh.
+                self._resume_lost(data.get("detail") or "the session ended at once")
             # An accepted turn the end is not tagged with will get no
             # turn_finished. One still being submitted waits for its answer.
             if self.running and self._accepted and data.get("turn_id") != self.turn_id:
@@ -753,6 +782,7 @@ class TurnController:
         # is going; the next agent starts its own.
         self._session_starting = False
         self._plan = None
+        self._resume_warning = None
         # The agent is going or gone: a run waiting for it must not fire on
         # some later, unrelated start.
         if self._pending_run is not None:
@@ -785,13 +815,19 @@ class TurnController:
                 and not crashed):
             # The conversation could not be resumed (the session folder moved,
             # say): carry on in a fresh one, with a note in its place.
-            self._resume_failed = message
-            self.stream.note(f"Could not resume the agent's earlier conversation ({message}); "
-                             "starting a new one.", kind="warning")
+            self._resume_lost(message)
             self._advance()
             return
         self._drop_pending_run()
         self._error(f"start_session failed: {message}")
+
+    def _resume_lost(self, reason: str) -> None:
+        """The run's conversation could not be resumed, so its next start is
+        fresh. plan_session tells the agent; this tells the user, once."""
+        self._resume_failed = reason
+        if self._resume_warning is None:
+            self._resume_warning = self.stream.note(f"Could not resume the agent's earlier conversation "
+                                                    f"({reason}); starting a new one.", kind="warning")
 
     def _on_submit_result(self, ok: bool, data: dict) -> None:
         if ok:
@@ -804,6 +840,7 @@ class TurnController:
             self._plan = None
             self._context = []
             self._resume_failed = None
+            self._resume_warning = None
             self._send_queued_amends()
             return
         submitted = self._submitted
@@ -822,7 +859,7 @@ class TurnController:
             # The refused turn never ran in that session.
             self.history.forget_session(submitted[2])
             if self._resumed and self._session_turns == 0 and self._resume_failed is None:
-                self._resume_failed = data.get("message") or "the resumed session ended at once"
+                self._resume_lost("the resumed session ended at once")
             self._pending_run = submitted
             self.stream.note("The agent session had ended; starting a new one.")
             self._advance()
@@ -856,6 +893,9 @@ class TurnController:
         plan = self.plan_session()
         if plan.restart:
             self.session_ready = False
+            if self._resume_failed is None and not self._retried:
+                # Another session takes over: the loss is not its to report.
+                self._resume_warning = None
             self._plan, self._plan_node = plan, self.history.current
             self.start_session(plan)
             return
@@ -941,6 +981,10 @@ class TurnController:
         if from_sketch and node is not None and completed:
             self._clear_sent_strokes(node)
             self._clear_sent_refs()
+        elif from_sketch and node is not None and folded:
+            # No node holds this request any more: its strokes wait for the
+            # next send, as its references do. No undo step: nothing changed.
+            self._unstamp_strokes(node)
         self._sent_refs = []
         self._accepted = False
         self._started = False
@@ -1109,6 +1153,7 @@ _current: TurnController | None = None
 
 
 def current() -> TurnController | None:
+    """The controller the UI talks to, if there is one."""
     return _current
 
 
@@ -1121,11 +1166,14 @@ def busy(ctl) -> bool:
 
 
 def set_current(controller: TurnController | None) -> None:
+    """Makes this controller, or None, the one the UI talks to; closing the one
+    before it is the caller's job."""
     global _current
     _current = controller
 
 
 def shutdown_current() -> None:
+    """Closes the current controller, waiting for its agent to exit, and clears it."""
     global _current
     if _current is not None:
         _current.close()

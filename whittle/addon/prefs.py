@@ -83,6 +83,16 @@ def _key_changed(_self, _context):
         ctl.process.clear_key()
 
 
+def _environment_changed(_self, _context):
+    """Another environment may be ready: the next start looks, and asks for
+    a setup again if it is not."""
+    from . import turn
+
+    ctl = turn.current()
+    if ctl is not None:
+        ctl.process.clear_setup()
+
+
 class WhittlePreferences(bpy.types.AddonPreferences):
     bl_idname = PACKAGE
 
@@ -97,10 +107,12 @@ class WhittlePreferences(bpy.types.AddonPreferences):
                     "model button beside Send")
     venv_dir: StringProperty(
         name="Environment Folder", subtype="DIR_PATH", default=DEFAULTS["venv_dir"],
+        update=_environment_changed,
         description="Where the agent's private Python environment lives; empty means the "
                     "extension's own user folder")
     agent_python: StringProperty(
         name="Agent Python", subtype="FILE_PATH", default=DEFAULTS["agent_python"],
+        update=_environment_changed,
         description="Development override for the Python that runs the agent")
     self_check_rounds: IntProperty(name="Self-check Rounds", default=DEFAULTS["self_check_rounds"],
                                    min=LIMITS["self_check_rounds"][0], max=LIMITS["self_check_rounds"][1],
@@ -122,8 +134,8 @@ class WhittlePreferences(bpy.types.AddonPreferences):
                     "in this computer's cache only, and files saved from now on carry none")
 
     usage_data: BoolProperty(
-        name="Send Claude Code usage data", default=DEFAULTS["usage_data"],
-        description="Let the bundled Claude Code CLI send Anthropic its own usage telemetry and error "
+        name="Send Claude CLI usage data", default=DEFAULTS["usage_data"],
+        description="Let the bundled Claude CLI send Anthropic its own usage telemetry and error "
                     "reports. Off: it sends only the turns themselves "
                     "(CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC). An idle agent restarts with the change "
                     "at the next turn")
@@ -268,6 +280,8 @@ def wrap_status(text: str, width: float | None, measure) -> list[str]:
 
 
 def get():
+    """A copy of the preferences as a namespace, or DEFAULTS when the add-on is not
+    registered, so callers need not care which. Setting a field on it changes nothing."""
     addon = bpy.context.preferences.addons.get(PACKAGE)
     if addon is None or addon.preferences is None:
         return SimpleNamespace(**DEFAULTS)

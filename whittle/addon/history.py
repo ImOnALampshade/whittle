@@ -108,6 +108,8 @@ def chat_id(session: formats.SessionDir) -> str:
 
 
 class History:
+    """One session folder's tree and the snapshots of its nodes; get() keeps one
+    per folder. The tree is None until the first turn or start point."""
     def __init__(self, session: formats.SessionDir):
         self.session = session
         self.chat = chat_id(session)
@@ -118,6 +120,8 @@ class History:
     # -- persistence ----------------------------------------------------------
 
     def load(self) -> None:
+        """Reads session.json, if there is one. Turns left running are marked failed
+        and saved; a file that fails to parse or validate leaves no tree and sets error."""
         path = self.session.session_path()
         self.tree, self.error = None, None
         if not path.is_file():
@@ -133,14 +137,17 @@ class History:
             self.save()
 
     def save(self) -> None:
+        """Writes session.json, if there is a tree yet."""
         if self.tree is not None:
             tree.write_session(self.session.session_path(), self.tree)
 
     @property
     def current(self) -> str | None:
+        """The current node's id, or None without a tree."""
         return self.tree.current if self.tree is not None else None
 
     def node(self, node_id: str) -> tree.Node:
+        """The node with this id; TreeError when it or the tree is missing."""
         if self.tree is None:
             raise tree.TreeError("there is no history yet")
         return self.tree.node(node_id)
@@ -198,12 +205,15 @@ class History:
         return added
 
     def forget_session(self, node: str | None) -> None:
+        """Clears the SDK session a node carries on, when the submit was refused
+        and the turn never ran in it."""
         if self.tree is None or node not in self.tree.nodes:
             return
         self.tree.node(node).continued_session = None
         self.save()
 
     def discard(self, node: str) -> None:
+        """Forgets a node whose turn never started."""
         if self.tree is None or node not in self.tree.nodes:
             return
         self.tree.discard(node)
@@ -228,7 +238,8 @@ class History:
             node, status=status, agent_session_id=data.get("session_id"),
             agent_message_uuid=data.get("message_uuid"), cost_usd=data.get("cost_usd"),
             num_turns=data.get("num_turns"), duration_ms=data.get("duration_ms"),
-            kept_partial=kept_partial, restored=restored, snapshot=ok, created_uids=uids)
+            kept_partial=kept_partial, restored=restored, snapshot=ok, created_uids=uids,
+            too_large=bool(data.get("too_large")))
         self.tree.current = node
         _mirror(scene, node, self.chat)
         self.save()
@@ -242,7 +253,8 @@ class History:
         folded = self.tree.finish(
             node, status="failed", folded=True, agent_session_id=data.get("session_id"),
             agent_message_uuid=data.get("message_uuid"), cost_usd=data.get("cost_usd"),
-            num_turns=data.get("num_turns"), duration_ms=data.get("duration_ms"), snapshot=False)
+            num_turns=data.get("num_turns"), duration_ms=data.get("duration_ms"), snapshot=False,
+            too_large=bool(data.get("too_large")))
         if self.tree.current == node:
             self.tree.current = folded.parent
         self.save()
@@ -260,6 +272,7 @@ class History:
     # -- restore and branch -----------------------------------------------------
 
     def can_restore(self, node: str) -> bool:
+        """Whether the node has a snapshot on disk to go back to."""
         if self.tree is None or node not in self.tree.nodes:
             return False
         return self.tree.node(node).snapshot and self.session.target_blend(node).is_file()
@@ -423,6 +436,38 @@ def active() -> History | None:
 def invalidate() -> None:
     """Forgets every cached tree; a file load may point at another session."""
     _cache.clear()
+
+
+def _history_of_scene(scene) -> History | None:
+    """The history of the chat the scene's undo step was made in, which may
+    not be the current one: chats are not undone."""
+    from . import chats
+
+    found = active()
+    chat = scene.whittle.chat
+    if found is not None and chat in ("", found.chat):
+        return found
+    store = chats.get()
+    if not chat or store is None or chat not in store:
+        return None
+    return get(store.folder(chat))
+
+
+def release_folded_strokes(scene=None) -> None:
+    """After undo or redo: a folded turn's strokes are pending, but its
+    turn-start step, which either can land on, holds them with the turn's
+    stamp. Numbers repeat across chats, so only the folded turns of the chat
+    the step was made in count."""
+    scene = scene or bpy.context.scene
+    obj = sketch.find_sketch_object()
+    if scene is None or not hasattr(scene, "whittle") or obj is None:
+        return
+    found = _history_of_scene(scene)
+    if found is None or found.tree is None:
+        return
+    for node in found.tree.nodes.values():
+        if node.folded:
+            sketch.unstamp_strokes(obj, formats.node_number(node.id))
 
 
 def sync_from_scene(scene=None, *, reason: str = "undo") -> str | None:

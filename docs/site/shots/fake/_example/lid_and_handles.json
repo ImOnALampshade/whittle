@@ -1,0 +1,86 @@
+{
+ "turns": [
+  {
+   "steps": [
+    {
+     "say": "Adding a lid that overhangs the crate a little."
+    },
+    {
+     "call": "exec",
+     "params": {
+      "label": "add lid",
+      "code": "mesh = bpy.data.meshes.new('Crate_Lid')\nbm = bmesh.new()\nbmesh.ops.create_cube(bm, size=1.0)\nbm.to_mesh(mesh)\nbm.free()\nlid = bpy.data.objects.new('Crate_Lid', mesh)\nlid.scale = (0.54, 0.54, 0.04)\nlid.location = (0, 0, 0.52)\nbpy.context.scene.collection.objects.link(lid)\nprint('lid', lid.name)"
+     }
+    },
+    {
+     "call": "render",
+     "params": {
+      "camera": {
+       "location": [
+        1.5,
+        -1.5,
+        1.2
+       ],
+       "look_at": [
+        0.0,
+        0.0,
+        0.3
+       ]
+      },
+      "mode": "shaded",
+      "size": 128
+     }
+    },
+    {
+     "say": "Done: the crate has a lid."
+    }
+   ],
+   "finish": {
+    "subtype": "success",
+    "is_error": false,
+    "result": "Added a lid."
+   }
+  },
+  {
+   "steps": [
+    {
+     "say": "Looping a rope handle through each side."
+    },
+    {
+     "call": "exec",
+     "params": {
+      "label": "rope handles",
+      "code": "import math\nrope = bpy.data.materials.new('Rope')\nrope.diffuse_color = (0.78, 0.66, 0.42, 1)\nfor side in (-1, 1):\n    ring, tube, rings, sides = 0.08, 0.014, 32, 10\n    verts, faces = [], []\n    for i in range(rings):\n        a = 2 * math.pi * i / rings\n        for j in range(sides):\n            b = 2 * math.pi * j / sides\n            r = ring + tube * math.cos(b)\n            verts.append((side * (0.25 + tube * math.sin(b)), r * math.cos(a), 0.3 + r * math.sin(a)))\n            n = (i + 1) % rings\n            faces.append((i * sides + j, i * sides + (j + 1) % sides,\n                          n * sides + (j + 1) % sides, n * sides + j))\n    mesh = bpy.data.meshes.new('Handle')\n    mesh.from_pydata(verts, [], faces)\n    mesh.shade_smooth()\n    mesh.materials.append(rope)\n    handle = bpy.data.objects.new('Handle', mesh)\n    bpy.context.scene.collection.objects.link(handle)"
+     }
+    },
+    {
+     "call": "render",
+     "params": {
+      "camera": {
+       "location": [
+        1.6,
+        -1.2,
+        0.9
+       ],
+       "look_at": [
+        0.0,
+        0.0,
+        0.3
+       ]
+      },
+      "mode": "shaded",
+      "size": 128
+     }
+    },
+    {
+     "say": "Both sides have a rope handle."
+    }
+   ],
+   "finish": {
+    "subtype": "success",
+    "is_error": false,
+    "result": "Added rope handles."
+   }
+  }
+ ]
+}

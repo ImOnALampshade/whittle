@@ -50,6 +50,7 @@ def config_dir() -> Path:
 
 
 def file_id() -> str | None:
+    """The open file's id, which names its cache; None until it has one."""
     return _file_id
 
 
@@ -165,13 +166,27 @@ def current_folder(*, create: bool = False) -> Path | None:
     return chats.folder(chats.current)
 
 
+def _mark_open() -> None:
+    """Another Blender on the file can see this one, cache or no cache. A
+    recovery file is not the file it was saved from."""
+    blend = paths.blend_path()
+    try:
+        caches.mark_open(paths.cache_dir(), None if blend is None or paths.is_recovery_file(blend) else blend)
+    except OSError as exc:
+        log.warning("cannot mark the file open: %s", exc)
+
+
 def release() -> None:
-    """This Blender lets go of the open file's cache (closing the file or quitting)."""
+    """This Blender lets go of the open file and its cache (closing the file or quitting)."""
     if _root is not None:
         try:
             caches.release(_root)
         except OSError as exc:
             log.warning("cannot release the chats' cache %s: %s", _root, exc)
+    try:
+        caches.unmark_open(paths.cache_dir())
+    except OSError as exc:
+        log.warning("cannot unmark the file: %s", exc)
 
 
 def reset() -> None:
@@ -329,6 +344,7 @@ def after_save(filepath: str | None = None) -> None:
     blend = paths.blend_path()
     if filepath is None or blend is None or not caches.same_file(filepath, blend):
         return
+    _mark_open()
     if _root is None:
         return
     values = {"path": str(blend), "used": time.time()}
@@ -355,6 +371,7 @@ def save_failed() -> None:
 def load_failed() -> None:
     """Opening another file failed (load_post_fail): the open file keeps its
     cache, which load_pre let go of."""
+    _mark_open()
     if _root is not None:
         try:
             caches.take(_root)
@@ -371,6 +388,7 @@ def after_load() -> None:
     without chats uses the cache as it is."""
     global _file_id
     reset()
+    _mark_open()
     text = _holder()
     payload = _take_payload(text)
     blend = paths.blend_path()

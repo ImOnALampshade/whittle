@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import bpy
 from mathutils import Vector
@@ -155,6 +156,28 @@ class BundleTest(unittest.TestCase):
 
     def assert_nothing_written(self):
         self.assertEqual(sorted(p.name for p in self.tmp.iterdir()), ["my ref!.png"])
+
+    def test_images_over_what_a_request_carries_are_refused(self):
+        big = self.tmp / "big.png"
+        with big.open("wb") as f:
+            f.truncate(formats.REQUEST_IMAGE_BYTES + 1)
+        with self.assertRaisesRegex(bundle.BundleError, "fewer or smaller"):
+            self.write(refs=[big])
+        big.unlink()
+        self.assert_nothing_written()
+
+    def test_the_size_limit_counts_the_overlays(self):
+        size = self.ref.stat().st_size
+        with mock.patch.object(formats, "REQUEST_IMAGE_BYTES", size + 1):
+            with self.assertRaisesRegex(bundle.BundleError, "fewer or smaller"):
+                self.write()
+        self.assert_nothing_written()
+
+    def test_the_size_limit_skips_what_is_not_sent(self):
+        unsent = self.tmp / "scan.tif"
+        unsent.write_bytes(b"x" * 4096)
+        with mock.patch.object(formats, "REQUEST_IMAGE_BYTES", 2048):
+            bundle.check_refs([unsent])
 
     def test_failures_leave_nothing(self):
         with self.assertRaisesRegex(bundle.BundleError, "not found"):

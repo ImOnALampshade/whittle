@@ -129,6 +129,8 @@ def hint(context) -> str:
 
 
 class WHITTLE_OT_type_prompt(bpy.types.Operator):
+    """Picks the field for the moment, opens the Whittle sidebar and shows the
+    popup. execute does the same, so it also runs from a script."""
     bl_idname = "whittle.type_prompt"
     bl_label = TITLE
     bl_description = ("Open the Whittle sidebar and a prompt field under the pointer, ready to type: Enter "
@@ -153,6 +155,8 @@ CLASSES = (WHITTLE_PT_type_prompt, WHITTLE_OT_type_prompt)
 
 
 def register_keymap() -> None:
+    """Puts the shortcut on the Window keymap, when there is a key configuration to
+    add it to."""
     kc = bpy.context.window_manager.keyconfigs.addon
     if kc is None:
         # Background Blender has no key configurations.
@@ -165,6 +169,7 @@ def register_keymap() -> None:
 
 
 def unregister_keymap() -> None:
+    """Removes the key register_keymap added."""
     for km, kmi in _keymaps:
         km.keymap_items.remove(kmi)
     _keymaps.clear()

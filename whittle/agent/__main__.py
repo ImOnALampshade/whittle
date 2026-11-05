@@ -20,6 +20,7 @@ log = logging.getLogger("whittle.agent")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
+    """Reads the agent's command line; the host defaults to the loopback address."""
     parser = argparse.ArgumentParser(prog="python -m whittle.agent")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--fake", metavar="SCRIPT", help="play a scripted fake agent")
@@ -28,6 +29,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def make_runner(args, connection):
+    """The fake runner with --fake, else the SDK runner, imported only then
+    so the fake agent runs without claude_agent_sdk."""
     if args.fake:
         from .fake import FakeRunner
 
@@ -66,6 +69,9 @@ def watch_signals(loop, shutdown: asyncio.Event, signals=signal) -> list:
 
 
 async def main(argv: list[str]) -> int:
+    """Serves Blender until it sends shutdown or closes the socket, or a
+    terminate signal arrives, then closes the runner (15 s at most) and the
+    connection. Returns the exit code."""
     args = parse_args(argv)
     shutdown = asyncio.Event()
     watch_signals(asyncio.get_running_loop(), shutdown)
@@ -100,6 +106,7 @@ async def main(argv: list[str]) -> int:
 
 
 def run() -> int:
+    """The entry point: logs to stderr at WHITTLE_LOG_LEVEL and runs main."""
     logging.basicConfig(level=os.environ.get("WHITTLE_LOG_LEVEL", "INFO"), stream=sys.stderr,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     return asyncio.run(main(sys.argv[1:]))

@@ -53,7 +53,7 @@ whittle/                          repo root
 │   │   ├── compare.py            A/B compare against a node, the parent ghost
 │   │   ├── turn.py               TurnController: submit/amend/interrupt/finish state machine
 │   │   ├── stream.py             sidebar entries (tool calls merged with results), transcript.jsonl writer
-│   │   ├── transcript.py         the session transcript as text, for the Whittle Transcript datablock
+│   │   ├── transcript.py         the session transcript as text, for the runtime Whittle Transcript Text
 │   │   ├── targets.py            the target picker (object list + collection on scene.whittle)
 │   │   ├── autotarget.py         Auto: the target list follows the selection
 │   │   ├── conversation.py       the conversation the sidebar draws, built from the history and stream
@@ -69,7 +69,7 @@ whittle/                          repo root
 │       ├── __main__.py           `python -m whittle.agent --port N [--fake SCRIPT]`
 │       ├── connection.py         asyncio bridge client (mirror of addon/bridge.py)
 │       ├── dispatch.py           Runner protocol; checks Blender's call params and routes them
-│       ├── runner.py             SdkRunner (the only module importing claude_agent_sdk)
+│       ├── runner.py             SdkRunner (the only module importing claude_agent_sdk at module level)
 │       ├── store.py              FolderSessionStore: a chat's SDK transcripts in its folder (§14)
 │       ├── tools.py              MCP tool handlers (plain async functions) + server builders
 │       ├── fake.py               FakeRunner: scripted agent for tests, stdlib only
@@ -83,19 +83,28 @@ whittle/                          repo root
 │   ├── agent/                    unittest, run with .venv/bin/python
 │   ├── blender/                  unittest, run inside `blender -b`; run.py is the entry point
 │   ├── fixtures/                 crate request bundle (+ scene.py, make_bundle.py), fake agent scripts
-│   ├── screens/                  screenshots: catalog.py (scenarios, the README's images), scenarios.py, harness.py
-│   │                             (runs inside each GUI Blender), run.py (drives them)
+│   ├── screens/                  screenshots: catalog.py (scenarios, the README's images), scenarios.py, steps.py
+│   │                             (shared with docshots), harness.py (runs inside each GUI Blender), run.py (drives them)
+│   ├── docshots/                 the docs site's screenshots: spec.py, harness.py, run.py, slots.py
 │   └── gui/                      GUI checks: catalog.py, checks.py, harness.py, spy.py, alias.py, run.py
 ├── run_tests.sh                  the single test command
 ├── build.sh                      validates and builds the extension zip into build/ (gitignored)
 ├── screens.sh                    screenshots into build/screens/; --docs refreshes docs/images/ (README)
 ├── gui_checks.sh                 GUI checks on the installed extension, into build/gui-checks/
+├── docs.sh                       the documentation site, from .venv-docs/ (gitignored) into build/docs/html
+├── docs_shots.sh                 the site's screenshots, into docs/site/images/
 ├── README.md                     what it is, install, API key, use, privacy, development, tests
 ├── CONTRIBUTING.md               how to propose a change
 ├── AGENTS.md                     the working guide for coding agents and contributors
 ├── LICENSE                       GPL-3.0 (the project is GPL-3.0-or-later)
 └── docs/
-    └── images/                   the README's screenshots, made by ./screens.sh --docs
+    ├── images/                   the README's screenshots, made by ./screens.sh --docs
+    └── site/                     the documentation site (Sphinx, MyST); none of it is in the zip
+        ├── conf.py, index.md     the site, and its pages by section in quickstart.md, walkthrough.md,
+        │                         guides/, develop/ and reference/ (autodoc, from the docstrings)
+        ├── requirements.in, .lock  the site's tools, hash-pinned, for .venv-docs/ only
+        ├── shots/<page-slug>.py  a page's screenshot spec; shots/README.md is the guide to writing one
+        └── images/<page-slug>/   the screenshots, committed
 ```
 
 Rules:
@@ -103,9 +112,9 @@ Rules:
 - Every source file starts with `# SPDX-License-Identifier: GPL-3.0-or-later` (after a
   shebang), and the manifest says `license = ["SPDX:GPL-3.0-or-later"]`.
 - `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `models.py`, `style.py`, `venv.py`, `platforms.py` and everything under `agent/`
-  import only the stdlib at module level. `agent/runner.py` imports `claude_agent_sdk`;
-  nothing else does, so the fake agent and the formats code run under any Python 3.13 or 3.14,
-  including Blender's.
+  import only the stdlib at module level. `agent/runner.py` imports `claude_agent_sdk`,
+  and `tools.build_servers` does when the real runner calls it; nothing else does, so the
+  fake agent and the formats code run under any Python 3.13 or 3.14, including Blender's.
 - `addon/*` may import `bpy`, `bmesh`, `mathutils`, `gpu`, `numpy` (numpy ships with
   Blender). It never imports `whittle.agent`.
 - Inside Blender the package is imported as `bl_ext.<repo>.whittle`; in tests it is
@@ -241,7 +250,7 @@ or Max plan ([Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/over
   whose name starts with `ANTHROPIC_` or `CLAUDE` except `ANTHROPIC_BASE_URL` and
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` (the user's telemetry opt-out), plus
   `ANTHROPIC_API_KEY` (the resolved key) and `CLAUDE_CONFIG_DIR`, and
-  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` unless the **Send Claude Code usage
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` unless the **Send Claude CLI usage
   data** preference (`usage_data`, off) is on: the CLI then sends no telemetry or error
   reports of its own. The preference is part of `launch_settings()`, so an idle agent
   restarts with a change at the next turn. That drops
@@ -302,7 +311,7 @@ same sequence runs synchronously with `popen.wait(timeout=…)`, since no more t
 come, with a shorter 10 s before the SIGTERM. `unregister()` does the same.
 
 The agent runs in its own process group (`start_new_session=True`), and every terminate
-or kill goes to the whole group (`os.killpg`), so the Claude Code CLI the SDK runs goes
+or kill goes to the whole group (`os.killpg`), so the Claude CLI the SDK runs goes
 with it, also when the bridge fails or the handshake times out. The agent handles
 SIGTERM like `shutdown`: it still closes its session, so the SDK's temporary config
 folder (which holds a copy of the credentials) is removed.
@@ -434,7 +443,7 @@ All carry `turn_id` (null outside a turn).
 | `thinking` | `text` — any other thinking block (usually empty: the API omits thinking text) |
 | `tool_use` | `tool_use_id`, `tool` (short name, e.g. `exec`), `input` (dict) |
 | `tool_result` | `tool_use_id`, `is_error`, `summary` (first 500 chars of text content), `images` (paths) |
-| `turn_finished` | `session_id`, `subtype`, `is_error`, `interrupted` (bool), `cost_usd` (this turn), `session_cost_usd` (the SDK session's running total), `num_turns`, `duration_ms` (both summed over the turn's queries), `result_text`, `errors` (list of str), `amends_undelivered` ([int]: amendments queued but never delivered — interrupt, session end, CLI crash), `message_uuid` (str \| null: uuid of the turn's last `AssistantMessage`/`UserMessage`, where a later branch forks) |
+| `turn_finished` | `session_id`, `subtype`, `is_error`, `interrupted` (bool), `cost_usd` (this turn), `session_cost_usd` (the SDK session's running total), `num_turns`, `duration_ms` (both summed over the turn's queries), `result_text`, `errors` (list of str), `too_large` (bool: the turn failed because its images were too big, §5 Image limits), `amends_undelivered` ([int]: amendments queued but never delivered — interrupt, session end, CLI crash), `message_uuid` (str \| null: uuid of the turn's last `AssistantMessage`/`UserMessage`, where a later branch forks) |
 | `amend_delivered` | `amend` (int), `via` (`"tool_result"` \| `"query"`) |
 | `error` | `code`, `message` — non-fatal agent-side failure (e.g. SDK connect failed) |
 | `log` | `level`, `message` |
@@ -553,7 +562,11 @@ the sketch being drawn on, is left alone.
   edited since the last step: Ctrl+Z during a turn then lands exactly on its start (or
   on a step the user made during it), and Ctrl+Shift+Z brings the edits back. With no
   edit since, nothing is pushed, so a second Ctrl+Z goes on past the start. Ctrl+Z
-  during a turn tells the agent with `UNDO_NOTE` on its next result.
+  during a turn tells the agent with `UNDO_NOTE` on its next result. A folded turn's
+  turn-start step still holds the turn's stamp on the strokes, so after an undo or redo
+  `history.release_folded_strokes`, a step of `addon._after_undo` that needs no
+  controller, makes them pending again. Numbers repeat across chats, so it reads only the
+  folded turns of the chat the landed step names (`scene.whittle.chat`).
 
 ### Render (`addon/render.py`)
 
@@ -653,8 +666,23 @@ ClaudeAgentOptions(
          "CLAUDE_CODE_THINKING_DISPLAY_UPDATES": "1",  # progress notes (below)
          "CLAUDE_AGENT_SDK_CLIENT_APP": f"whittle/{VERSION}"},
     stderr=lambda line: log.debug("cli: %s", line),
+    max_buffer_size=MAX_FRAME_BYTES,
 )
 ```
+
+**Image limits.** Two limits bound what images do to a session, one per direction.
+`runner.MAX_FRAME_BYTES` (128 MiB, four times the API's 32 MiB) is the longest line the
+SDK reads from the CLI: a tool result's frame holds its images' base64 twice, and the
+SDK's default of 1 MiB ended the session at about 390 KB of images. Above it, or when the
+API refuses for size (413, or a result starting with `runner.SIZE_REFUSALS`), the turn gets
+the reason `runner.IMAGES_TOO_LARGE` and `too_large: true` in `turn_finished`, recorded on
+the node (§8) and in place of **Retry** in the sidebar. The other way, the `request` tool's
+result reaches the CLI as one line of stdin, and past 256 Mi characters the CLI exits before
+it shrinks anything. `formats.REQUEST_IMAGE_BYTES` (180 MiB, 240 Mi characters in base64,
+leaving room for the result's text) bounds that: `bundle.check_image_size` refuses a request
+over it, on the references before anything is written and again after rendering, so overlays
+count. It counts only `formats.IMAGE_TYPES`, the files that really get attached. `render`
+is capped at 1024 px and attaches one image, so only `request` can reach that limit.
 
 **Progress notes.** On Opus 5.5 the text Claude writes between tool calls comes back
 in thinking blocks, which are empty at the API's default thinking display. `thinking`
@@ -799,7 +827,8 @@ mismatch reported as an `error` event); `ask` → bridge `ask`; `end_session` �
 session_ended`, so the next submit answers `no_session`; `fail` → exit the process
 with code 3 (crash tests); `finish` → `turn_finished` with a fake `session_id`
 `"fake-<hex8>"` (new for a fresh session or a fork, kept for a plain resume) and a
-`message_uuid` `"fake-msg-<hex8>"`. A top-level `"resume_fails": true` refuses every
+`message_uuid` `"fake-msg-<hex8>"`; besides `subtype`, `is_error` and `result` it can give
+`cost` (USD, 0 by default), `errors` and `too_large`. A top-level `"resume_fails": true` refuses every
 `start_session` that has a `resume` with `internal`; a turn with `"refuse": "<code>"`
 answers its submit with that error. `start_session` echoes `resume`/`fork`/`resume_at`
 (and `store_dir`, §14) in its status detail and a `log` event, plus `session model: <id>`
@@ -912,7 +941,9 @@ ghost) and `addon/snapshot.py`, on top of `formats.SessionDir`.
   panel do not count them), and Restore, Branch and Compare refuse them. They still
   count for `latest_in_session`: the conversation went past the parent with the failed
   exchange, so the next submit from the parent forks at the parent's message
-  (`live_node` is cleared) and the agent never sees the failure. `session.json`
+  (`live_node` is cleared) and the agent never sees the failure. No node holds its
+  request any more, so its strokes go back to pending (`TurnController._finish`), and Send
+  on a blank box carries its prompt with them (`operators.submit_sketch`). `session.json`
   validation refuses a folded node that is current, not `failed`, or has children; an
   older file without the key reads as not folded. Why fold rather than delete: the
   node's SDK session must keep counting, or a later plan would resume a conversation
@@ -957,7 +988,10 @@ ghost) and `addon/snapshot.py`, on top of `formats.SessionDir`.
 - **Undo**: `scene.whittle.history_node` is saved in Blender's undo steps; an
   `undo_post`/`redo_post` handler (`history.sync_from_scene`) copies it back into
   `session.json`'s `current`. An empty mirror (a scene from before the first turn)
-  means the root; a node the tree lacks changes nothing and logs a warning.
+  means the root; a node the tree lacks changes nothing and logs a warning. The same
+  handler, `addon._after_undo`, also runs `history.release_folded_strokes` (§5) and
+  `transcript.after_undo`, which drops a transcript Text an undo step brought back when its
+  chat is gone: undo steps hold the Text, but chats are never undone.
 - **File load**: restores write `session.json` at once, but the mirror reaches disk only
   when the `.blend` is saved, so after `load_post` clears the cache it runs
   `sync_from_scene` too: the reopened scene decides the current node, and with it the
@@ -999,7 +1033,12 @@ recorded in `TurnController.session_starts`. **A failed resume** (the CLI cannot
 the session, e.g. the `.blend` moved and with it the session folder the CLI keys its
 sessions by; or a resumed session that ends before its first turn) falls back once to
 a fresh session with the note "The earlier conversation could not be resumed
-(<message>); inspect the target before editing."; a second failure drops the run.
+(<message>); inspect the target before editing."; a second failure drops the run. The
+user gets a warning too (`TurnController._resume_lost`, once per loss), also when the
+resumed session ends before taking its run's turn (`session_ended` or `no_session`). It
+waits for the first turn the fresh session takes, across a refused submit, and is stored
+there as a `warning` record, so it stays on that turn. It goes with the agent, or when a
+restart into another session follows with no failure to report.
 
 **Session resume after a Blender restart**: a new controller reads `session.json`
 (`history.get(root, reload=True)`), so the first submit resumes the current node's
@@ -1237,6 +1276,7 @@ references and pending views are not stored here.
 | `snapshot` | bool | `target.blend` was written (Restore needs it) |
 | `created_uids` | [str] | `whittle_uid` of each object the agent made in this turn |
 | `folded` | bool | failed turn that changed nothing, folded into its parent (§6); optional when reading |
+| `too_large` | bool | failed turn whose images were too big (§5 Image limits): the sidebar offers Edit, not Retry; optional when reading |
 
 
 **target.json** (also `checkpoints/<k>.json`): `{"format": "whittle.target", "version":
@@ -1257,7 +1297,8 @@ snapshot uses; a restore replaces the ones of those names the file has).
 `{"v": 1, "type": "local", "name": …, "data": …}`: `submit` (node, prompt, bundle_dir,
 targets, parent, context — the first line of each node), `amend` (amend, text, bundle_dir, strokes),
 `amend_returned` (amend, reason), `answer` (question, answer), `interrupt` (mode
-`keep` | `restore`), `restored` (objects) and `target_edited` (edits: [{name, kind}]).
+`keep` | `restore`), `restored` (objects), `target_edited` (edits: [{name, kind}]) and
+`warning` (text).
 
 ### Request bundle
 
@@ -1382,9 +1423,13 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
 - **Steps** (`venv.plan(base, venv, lock, reinstall=)`), each with its own timeout:
   1. `create` (120 s): `[sys.executable, "-I", "-m", "venv", ("--clear",) venv]`;
      `--clear` for a reinstall, and for a stale or broken venv (Whittle's own).
-  2. `install` (900 s): `[venv python, "-I", "-m", "pip", "install", "--isolated",
-     "--disable-pip-version-check", "--no-input", "--require-hashes", "--only-binary",
-     ":all:", "--no-deps", "-r", lock]`.
+  2. `install` (900 s): `[venv python, "-I", "-u", "-m", "pip", "install", "--isolated",
+     "--disable-pip-version-check", "--no-input", "--no-cache-dir", "--index-url",
+     "https://pypi.org/simple", "--progress-bar", "raw", "--require-hashes", "--only-binary",
+     ":all:", "--no-deps", "-r", lock]`. `--isolated` skips the user's pip config and
+     `PIP_*`, not the system-wide one; `--index-url` overrides its `index-url`, while its
+     proxy and CA still apply, and so do its `extra-index-url`, `find-links` and `no-index`,
+     which no flag undoes. The hashes, not the index, decide what gets installed.
   3. `verify` (60 s): `[venv python, "-I", "-c", …]` imports `claude_agent_sdk` and prints
      `whittle-verify:{"sdk": <installed version>, "cli": <_bundled/claude is a file>}`
      (`claude.exe` on Windows, as the SDK looks for it: `venv.bundled_cli_name()`);
@@ -1410,7 +1455,12 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
   has no `ensurepip`, the folder is `foreign`, the venv is `ready` and this is not a
   reinstall, there is no online access, or Blender runs in the background. The last two
   do not apply to a dry run. When a real setup finishes, a controller in `needs_setup`
-  goes back to `stopped`, so the next submit finds the venv.
+  goes back to `stopped`, so the next submit finds the venv. So does a change to the
+  Agent Python or Environment Folder preference (`prefs._environment_changed`), and
+  `setup.recheck()` when `paths.agent_python()` resolves again: `operators.key_send` calls
+  it before a key's poll, and `whittle.venv_install`'s `invoke` before its dialog, which
+  then reports `setup.FOUND` instead. `submit`'s poll refuses while in `needs_setup`
+  (`SETUP_FIRST`) and never reads the venv, as polls run on redraw.
 - **Operators**: `whittle.venv_install` (`reinstall`, hidden `dry_run`): `poll` is false
   during a turn and while a setup runs, so an agent `exec` cannot start one; `invoke` is
   `wm.invoke_confirm(title=…, message=setup.install_summary(), confirm_text="Download and
@@ -1517,7 +1567,8 @@ Details settled while building the agent and bridge, beyond the sections above.
   that cannot happen. It then reserves the next node, writes the bundle straight into
   `nodes/<id>/request/`, stamps the sent strokes and queues the run; `submit` takes the
   reserved node and uses the bundle in place. The parent is the current history node
-  (§6). A run dropped before it reached the
+  (§6). A request whose images are over `formats.REQUEST_IMAGE_BYTES` (§5 Image limits) is
+  refused here, with nothing left on disk and the node number free. A run dropped before it reached the
   agent removes its node folder; its strokes stay for the next run. The `no_session`
   retry resubmits the same `(bundle, prompt, node, from_sketch)`, so the node is never
   re-counted. `load_strokes` runs only for bundles copied from disk: reloading a sketch
@@ -1526,7 +1577,8 @@ Details settled while building the agent and bridge, beyond the sections above.
   default, shown only with Developer Extras on): the bundle in use, `window_manager.whittle_fake_script` (used by Submit, Run Bundle
   and Start Agent when set), Run Bundle, Start/Stop Agent and the log tail after a crash.
 - **Which controller** (`operators.controller(fake_script)`, called by every operator
-  that runs the agent): a busy controller is always kept. An idle one with another
+  that runs the agent): the fake script is made absolute first, against Blender's working
+  folder, since the agent runs in the session folder. A busy controller is always kept. An idle one with another
   fake script is closed and replaced. An idle one whose agent was started with other
   launch settings (`TurnController.launch_settings()`: the Python, fake script, a
   digest of the API key and the session settings, recorded at
@@ -1598,7 +1650,7 @@ never writes Blender data.
     never red), amendments and answers as small boxes, the turn's picture (its
     last render, else `thumb.png`) and its end: "Stopped, changes kept / undone", or the
     reason (`stream.failure_reason`) as one red line with **Retry** beside it on the last
-    turn (`ui.draw_failure`).
+    turn, or **Edit** (`whittle.history_branch`) for a `too_large` one (`ui.draw_failure`).
     A tool error the agent recovered from is never red.
   - Older turns are one closed `layout.panel(f"whittle_turn_{node}")` each, headed by
     the prompt; past six, the oldest go into "N earlier turns".
@@ -1620,7 +1672,10 @@ never writes Blender data.
   Shift+Alt+N `whittle.next_stroke_type`, Shift+Alt+V `whittle.capture_view`,
   Shift+Alt+Enter `whittle.send_key`, which runs what Enter in the prompt box would
   (`operators.send_key_action`: Send between turns, Amend during one, Answer while Claude
-  asks, nothing when there is nothing to send). See `decisions.md`, Sketch keys.
+  asks, nothing when there is nothing to send). The key and Enter run the body on their own
+  operator (`operators.key_send`, `report_submit`, `report_amend`, `report_answer`), not as
+  a nested operator, whose error report Blender raises in the caller. See `decisions.md`,
+  Sketch keys.
 - **Composer**: reference chips packed into rows (a chip is `whittle.ref_menu` with the
   name and preview icon; a pinned one has a pressed `whittle.ref_pin` beside it); the
   prompt field (placeholder `shortcut.PLACEHOLDER`, `Ask Claude…`, in every state) with
@@ -1652,7 +1707,8 @@ never writes Blender data.
   Open Transcript (the start: Go Back to the Start and Compare With Current).
 - **Operators**: `whittle.branch_switch` (`node`: restore the newest restorable leaf
   under it, one undo step "Whittle: switch to <node>"), `whittle.retry` (`node`: a
-  folded failure is sent again as it is, a recorded one is branched first), plus
+  folded failure is sent again as it is, a recorded one is branched first; a `too_large`
+  turn is refused), plus
   `whittle.history_restore` / `history_branch` / `history_compare`,
   `whittle.compare_toggle`, `whittle.compare_end` (`keep`), `whittle.ghost_toggle`.
   Their bodies are the plain functions `switch_branch`, `retry`, `restore_node`,
@@ -1762,8 +1818,9 @@ aside, below). Nothing is ever written beside a `.blend`.
   `state_stamp(index_json, packed)`, the record (`read_record`, `update_record`), the
   claim (`take`, `release`, `in_use_elsewhere`), `find(cache_dir, file_id, blend)`
   (which cache an opened file uses, with copy-on-conflict), `cleanup()` by age,
-  `open_elsewhere(cache_dir, blend, skip)` (the same file open in another Blender) and
-  `install_id(user_dir)`.
+  `mark_open(cache_dir, blend)` and `unmark_open(cache_dir)` (this Blender's open mark),
+  `open_elsewhere(cache_dir, blend, skip)` (another Blender's mark on the same file, or its
+  claim on a cache that records the file) and `install_id(user_dir)`.
 - `addon/chats.py`: which cache the open file uses (`file_id()`, `root()`, `get()`: its
   `Chats`, read once per file; `current_folder()`), the `save_pre` /
   `save_post` / `load_post` work (`before_save`, `after_save`, `after_load`),
@@ -1787,6 +1844,7 @@ aside, below). Nothing is ever written beside a `.blend`.
 ### The cache folder
 
 ```
+<user dir>/cache/open-<key>.json           {"pid", "host", "path"}: a running Blender's mark (below)
 <user dir>/cache/<file id>/                the cache root, saved file or not
   cache.json                               {"format": "whittle.cache", "version": 1, "id",
                                             "path": the .blend (null while unsaved),
@@ -1832,7 +1890,15 @@ so an undo that drops the Text changes nothing. Which cache an opened file uses
 
 A file that never had a chat makes no cache. The claim is written when the cache is
 found and removed on `load_pre`, `exit_pre` and unregister; a crashed Blender's claim
-names a dead process and does not count.
+names a dead process and does not count. A Blender reads its hostname once
+(`caches._host` is memoized), so a rename while it runs, as macOS does when networks
+change, changes neither its claims nor its marks.
+
+**Open marks**: `open-<key>.json` beside the caches, `<key>` a hash of the host and pid: one
+per running Blender with a saved file open, cache or no cache. Written on `load_post`,
+`load_post_fail` and `save_post` (`chats._mark_open`), removed on `load_pre`, `exit_pre` and
+unregister (`chats.release`). A recovery file is not marked. `cleanup` clears a crashed
+Blender's; another machine's cannot be checked and lasts `MAX_AGE`.
 
 **chats.json** (`chats.write_index`, atomic like every JSON file, §8):
 
@@ -1874,7 +1940,8 @@ The payload lives on a holder datablock, a Text named `.whittle` (`use_fake_user
 a leading dot keeps it out of Blender's ID menus), and only **while the file is
 being saved and just after it is loaded**:
 
-- `save_pre` (`Chats.pack_all`): for each chat with a history (a `session.json`), if
+- `save_pre`: first `transcript.keep_out_of_file`, which makes a `Whittle Transcript` Text
+  an older Whittle left runtime data, so the save leaves it out. Then `Chats.pack_all`: for each chat with a history (a `session.json`), if
   its `fingerprint` differs from `packed/<id>.json`'s, pack it again into
   `packed/<id>.zip` (atomically) and record digest, fingerprint and size; a chat not
   unpacked since the file opened goes back as its zip came; an empty chat is only its
@@ -2011,10 +2078,12 @@ store-materialized resume, and a resume after the chat folder moved.
   (`created_uids` of its own tree): what another chat's agent made is the user's to
   that chat, and is never removed by it.
 - **Rename**: sets `title` and `title_custom` in `chat.json` and the index; an empty
-  title clears `title_custom` and puts back `chats.title_for` of the first turn.
+  title clears `title_custom` and puts back the automatic one (`Chats._auto_title`).
 - **Titles**: the agent accepting a chat's first turn (`turn_began` → `Chats.began`) sets
   the title from its prompt (or `Sketch of <first target>`) unless `title_custom`; a
-  title, once set, never changes by itself.
+  title, once set, never changes by itself. An automatic title rebuilt later, by a rename
+  back or from a chat's folder, reads the first target from that turn's `request.json`, so
+  it stays what it was; plain `Sketch` if the request is missing or unreadable.
 - **Undo**: `history.sync_from_scene` applies `history_node` only when
   `scene.whittle.chat` is the current chat (an empty one, from before a chat was
   named in the scene, counts as the current chat); undo never switches chats.
@@ -2060,13 +2129,14 @@ elsewhere, README Security) the default.
 
 The second Blender to open a file finds its cache claimed by a live process and gets a
 cache of its own (copy-on-conflict, above); both record the same path. The two never
-merge: whichever saves last is what the file stores. While another Blender's claim is
-live, the sidebar draws one dim line (`ui.ELSEWHERE_NOTE`): `addon/chats.open_elsewhere()`
+merge: whichever saves last is what the file stores. While another Blender has the file,
+the sidebar draws one dim line (`ui.ELSEWHERE_NOTE`): `addon/chats.open_elsewhere()`
 asks `caches.open_elsewhere(cache_dir, blend, skip=<this file's id>)`, true when another
-cache records the same file and is claimed by a live Blender (any process on another
-host counts, since it cannot be checked). It reads every cache's claim, so the answer
+live Blender's open mark names the same file, or another cache records it and is claimed
+by a live Blender, which may be on a recovered copy, not marked (any process on another
+host counts, since it cannot be checked). It reads every mark and claim, so the answer
 is kept for `ELSEWHERE_EVERY` (2 s) rather than read at every redraw. Both Blenders see
-the line, since each cache records the path.
+the line, with or without chats, since every Blender on a saved file has a mark.
 
 ### Tests
 
@@ -2083,7 +2153,8 @@ the line, since each cache records the path.
   `test_caches.py`: ids and stamps, the record, `find` (a moved file, a copy, a cache
   in use by a live, a dead or a foreign process, a file without an id), `cleanup` by
   age (never the open one or a live claim, the CLI's transcripts too), `install_id`,
-  `open_elsewhere` (a live, a dead and the other side's claim); `FolderSessionStore`
+  `open_elsewhere` (a live, a dead and the other side's claim; marks on a file with no
+  cache, a crashed Blender's, a hostname that changes while running); `FolderSessionStore`
   append/load/subkeys and path safety, and the SDK materializing a resume from it;
   the fake agent's store lines.
 - Blender side (`tests/blender/test_chats.py`): New Chat (a fresh session, its own
@@ -2094,7 +2165,8 @@ the line, since each cache records the path.
   recent, then an empty chat), and in bulk; the menu's rows, footer and Show N More;
   rename; a chat from another install (read-only, Send refused with its tooltip, New
   Chat available, Continue adopts it for good) and one without an origin (never asks);
-  the line while another Blender has the file; the payload on the holder only between `before_save` and `after_save`. `chats_file.py`, in a
+  the line while another Blender has the file, and marks through load, save and quit
+  (`test_cache.py`); an empty title bringing `Sketch of <target>` back; the payload on the holder only between `before_save` and `after_save`. `chats_file.py`, in a
   fresh Blender: a real save, the cache deleted, the file opened without the add-on
   (both chats in its data) and with it (rebuilt: chats, titles, nodes, thumbnails, and
   an old node restored), then the delete shrink test above; the folder holds only the

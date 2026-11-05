@@ -44,13 +44,16 @@ NO_KEY = "Add an Anthropic API key in Preferences to run Claude"
 # CLAUDE_CONFIG_DIR points at Whittle's own folder, where the CLI finds no
 # login, settings, hooks or MCP servers of the user's. The CLI's own usage
 # telemetry and error reports are off unless the user turns them on
-# (the "Send Claude Code usage data" preference).
+# (the "Send Claude CLI usage data" preference).
 STRIPPED_PREFIXES = ("ANTHROPIC_", "CLAUDE")
 NONESSENTIAL = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
 KEPT = {"ANTHROPIC_BASE_URL", NONESSENTIAL}
 
 
 class AgentState(StrEnum):
+    """The agent's lifecycle. LIVE_STATES have a process; NEEDS_SETUP and
+    NEEDS_KEY mean a start found something missing."""
+
     STOPPED = "stopped"
     STARTING = "starting"
     READY = "ready"
@@ -66,6 +69,9 @@ LIVE_STATES = (AgentState.STARTING, AgentState.READY, AgentState.BUSY, AgentStat
 
 
 class AgentProcess:
+    """The agent process and its Bridge, one run at a time: starts it, follows
+    its state, and stops it, going on to terminate and kill if need be."""
+
     def __init__(self, *, handlers: dict, on_event, fake_script: Path | None = None,
                  python: Path | None = None, agent_token: str | None = None,
                  use_timer: bool = True):
@@ -92,15 +98,22 @@ class AgentProcess:
 
     @property
     def is_fake(self) -> bool:
+        """Whether this runs a scripted fake agent, which needs no API key or
+        online access."""
         return self.fake_script is not None
 
     @property
     def alive(self) -> bool:
+        """Whether the agent is starting, running or on its way out."""
         return self.state in LIVE_STATES
 
     # -- lifecycle ------------------------------------------------------------
 
     def start(self, session_dir: Path) -> None:
+        """Spawns the agent in session_dir and starts waiting for its handshake.
+        A missing environment or key, no online access or a failed spawn set the
+        state and reason instead. Starting a live agent raises RuntimeError, and
+        an OSError preparing the session folder, socket or log propagates."""
         if self.alive:
             raise RuntimeError(f"agent is already {self.state}")
         self.reason = None
@@ -142,7 +155,7 @@ class AgentProcess:
         started = time.time()
         try:
             # Its own process group (a Job Object on Windows), so terminating
-            # or killing it reaches the Claude Code CLI it runs too.
+            # or killing it reaches the bundled Claude CLI it runs too.
             self.popen = subprocess.Popen(argv, cwd=session_dir, env=env, stdin=subprocess.DEVNULL,
                                           stdout=self._log_file, stderr=subprocess.STDOUT,
                                           **platforms.own_group())
@@ -218,6 +231,8 @@ class AgentProcess:
             self.fail("the agent did not complete the handshake in time")
 
     def tick_interval(self) -> float | None:
+        """Seconds between bridge ticks in this state, or None when the agent is
+        not live, which ends the timer."""
         return {
             AgentState.STARTING: 0.05,
             AgentState.READY: 0.2,
@@ -228,6 +243,8 @@ class AgentProcess:
     # -- bridge callbacks -----------------------------------------------------
 
     def on_handshake(self, hello: dict) -> None:
+        """The bridge accepted the agent's hello: it is ready, unless a stop came
+        first."""
         self.hello = hello
         if self.state == AgentState.STOPPING:
             # stop() came before the agent said hello, so the shutdown it would
@@ -238,6 +255,7 @@ class AgentProcess:
         self._set_state(AgentState.READY)
 
     def on_disconnect(self, reason: str) -> None:
+        """The connection dropped: a failure or crash, unless the agent is stopping."""
         if self.state == AgentState.STOPPING:
             return
         # EOF usually means the process is exiting; its exit code says more.
@@ -253,18 +271,24 @@ class AgentProcess:
             self.crash(reason)
 
     def set_busy(self, busy: bool) -> None:
+        """Marks a turn as running or over, if the agent is ready or busy."""
         if self.state in (AgentState.READY, AgentState.BUSY):
             self._set_state(AgentState.BUSY if busy else AgentState.READY)
 
     def fail(self, reason: str) -> None:
+        """Kills the agent and ends in FAILED: it could not start or broke the
+        protocol."""
         self._kill()
         self._finish(AgentState.FAILED, reason)
 
     def crash(self, reason: str) -> None:
+        """Kills the agent and ends in CRASHED: it stopped unexpectedly, or the
+        bridge failed."""
         self._kill()
         self._finish(AgentState.CRASHED, reason)
 
     def log_tail(self, n: int = 20) -> list[str]:
+        """The last n lines of the latest agent log; empty before there is one."""
         if self.log_path is None or not self.log_path.is_file():
             return []
         with open(self.log_path, encoding="utf-8", errors="replace") as f:

@@ -6,7 +6,7 @@ import logging
 import bpy
 
 from . import autotarget, chats, compare, enter, history, models, operators, prefs, previews, props, refs, setup, sketch, start, turn, ui
-from . import keys, shortcut, viewmarks
+from . import keys, shortcut, transcript, viewmarks
 
 log = logging.getLogger("whittle")
 
@@ -67,10 +67,12 @@ def _before_undo(*_args):
 @bpy.app.handlers.persistent
 def _after_undo(*_args):
     for step in (history.sync_from_scene,
+                 history.release_folded_strokes,
                  # A comparison is no undo step: an undo puts back a scene from
                  # before it, so it is over.
                  compare.forget,
                  sketch.after_undo,
+                 transcript.after_undo,
                  _tell_the_turn):
         try:
             step()
@@ -86,6 +88,10 @@ def _tell_the_turn():
 
 @bpy.app.handlers.persistent
 def _before_save(*_args):
+    try:
+        transcript.keep_out_of_file()
+    except Exception:
+        log.exception("could not keep the transcript out of the file")
     # Every chat goes into the file being written.
     try:
         chats.before_save()
@@ -130,6 +136,8 @@ HANDLERS = ((bpy.app.handlers.load_pre, _stop_agent), (bpy.app.handlers.exit_pre
 
 
 def register():
+    """Registers the classes and properties, the file and undo handlers, the Asset
+    Browser's menu entry and the keys, and finds the chats of a file already open."""
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     props.register_props()
@@ -166,6 +174,8 @@ def _remove_asset_entry():
 
 
 def unregister():
+    """Ends the sketch session, the agent and any running setup, and takes out
+    everything register added."""
     keys.unregister_keymap()
     shortcut.unregister_keymap()
     enter.unregister_keymap()

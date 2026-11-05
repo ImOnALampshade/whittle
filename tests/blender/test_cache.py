@@ -11,11 +11,13 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+from unittest import mock
 
 import bpy
 
 from tests.blender.helpers import FAKE_SCRIPTS, REPO, AgentTestCase, agent_python
 from whittle import caches
+from whittle.addon import chats, paths
 
 FAKE = str(FAKE_SCRIPTS / "history.json")
 DAY = 86400
@@ -48,6 +50,21 @@ class CacheFileTest(AgentTestCase):
         if lock_pid is not None:
             (folder / caches.LOCK_NAME).write_text(json.dumps({"pid": lock_pid, "host": caches._host()}))
         return folder
+
+    def test_two_blenders_see_each_other_on_a_file_without_chats(self):
+        blend = self.files / "plain.blend"
+        subprocess.run([bpy.app.binary_path, "-b", "--factory-startup", "--python-expr",
+                        f"import bpy; bpy.ops.wm.save_as_mainfile(filepath={str(blend)!r})"],
+                       capture_output=True, timeout=120, check=True)
+        self.assertFalse(self.open(blend)["elsewhere"], "nobody else has it")
+        # This Blender opens it too, and gets no cache: the file has no chats.
+        with mock.patch.object(paths, "blend_path", return_value=blend):
+            chats.after_load()
+            self.assertIsNone(chats.root())
+            self.assertTrue(self.open(blend)["elsewhere"], "a Blender with no cache still shows")
+            chats.release()
+            self.assertFalse(self.open(blend)["elsewhere"], "not once it closed the file")
+        self.assertEqual(list(self.cache.glob(caches.OPEN_MARKS)), [], "nobody has it open now")
 
     def test_a_files_life(self):
         blend = self.files / "a" / "scene.blend"

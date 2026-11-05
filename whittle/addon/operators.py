@@ -2,6 +2,7 @@
 """Operators: sketching, views, submitting, and driving the agent by hand."""
 
 import logging
+import os
 from pathlib import Path
 
 import bpy
@@ -9,7 +10,8 @@ from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 
 from .. import chats as chat_store
 from .. import formats
-from . import bundle, chats, compare, editors, history, prefs, sketch, targets, transcript, turn, views
+from . import bundle, chats, compare, editors, history, prefs, setup, sketch, targets, transcript, turn, views
+from .process import AgentState
 
 log = logging.getLogger("whittle")
 
@@ -20,7 +22,8 @@ def controller(fake_script: str = "") -> turn.TurnController:
     settings is stopped, so the next run starts one with the new settings and
     resumes the conversation from the history."""
     current = turn.current()
-    fake = Path(bpy.path.abspath(fake_script)) if fake_script else None
+    # Absolute before the agent gets it: the agent runs in the session folder.
+    fake = Path(os.path.abspath(bpy.path.abspath(fake_script))) if fake_script else None
     if current is not None and busy(current):
         return current
     if current is not None and current.process.fake_script != fake:
@@ -48,15 +51,29 @@ def run_bundle(context, fake_script: str = "") -> turn.TurnController:
     return ctl
 
 
+def _folded_prompt(ctl) -> str:
+    """The prompt of the folded turn the conversation shows, if it does."""
+    node = ctl.last_folded
+    tree = ctl.history.tree
+    if node is None or tree is None or node not in tree.nodes:
+        return ""
+    found = tree.node(node)
+    return found.prompt if found.folded and found.parent == tree.current else ""
+
+
 def submit_sketch(context, fake_script: str = "") -> tuple[turn.TurnController, str]:
     """Body of the Send operator, callable from tests. The prompt leaves the
     prompt box once the run is under way (the conversation shows it); the
-    controller puts it back if the run never starts."""
+    controller puts it back if the run never starts. A folded turn's prompt
+    is out of the box while its strokes wait there, so a blank box sends it
+    again with them, as Retry does."""
     if chats.current_foreign():
         raise RuntimeError(CHAT_FOREIGN)
     props = context.scene.whittle
     refs = [Path(bpy.path.abspath(r.path)) for r in props.refs if r.path]
     ctl = controller(fake_script or context.window_manager.whittle_fake_script)
+    if not props.prompt.strip():
+        props.prompt = _folded_prompt(ctl)
     text = props.prompt
     ctl.hold_prompt(context.scene, text)
     try:
@@ -101,13 +118,71 @@ def send_key_action(context) -> str | None:
     return None
 
 
+def needs_setup(ctl) -> bool:
+    """Whether the agent has found no environment to run in: Send waits for
+    the setup the attention box offers."""
+    return ctl is not None and ctl.process.state == AgentState.NEEDS_SETUP
+
+
+def report_submit(op, context, fake_script: str = "") -> set[str]:
+    """Send, reporting on `op`: the Send operator or a key's."""
+    try:
+        _ctl, node = submit_sketch(context, fake_script)
+    except (bundle.BundleError, RuntimeError, ValueError, OSError) as exc:
+        op.report({"ERROR"}, str(exc))
+        return {"CANCELLED"}
+    op.report({"INFO"}, f"Submitted turn {node}")
+    return {"FINISHED"}
+
+
+def report_amend(op, context) -> set[str]:
+    """Amend, reporting on `op`: the Amend operator or a key's."""
+    try:
+        number = amend(context)
+    except (RuntimeError, ValueError, bundle.BundleError, OSError) as exc:
+        op.report({"ERROR"}, str(exc))
+        return {"CANCELLED"}
+    ctl = turn.current()
+    sent = ctl is not None and ctl.running and not ctl.queued_amends
+    op.report({"INFO"}, f"Sent amendment {number}" if sent
+              else f"Amendment {number} goes in once the turn starts")
+    return {"FINISHED"}
+
+
+def report_answer(_op, context, text: str = "") -> set[str]:
+    """Answer in the shape SENDS wants: it reports nothing, so the operator
+    goes unused, and it cancels when no question took the answer."""
+    return {"FINISHED"} if answer(context, text) else {"CANCELLED"}
+
+
+# What Send, Amend and Answer run, for the keys that send without their buttons.
+SENDS = {"submit": report_submit, "amend": report_amend, "answer": report_answer}
+
+
+def key_send(op, context, action: str) -> set[str] | None:
+    """Runs `action` for a key as its button would, or returns None when its
+    poll refuses (the disabled button says why). Its body runs here, with `op`
+    the key's own operator, and not as a nested operator: Blender raises a
+    nested operator's error report in the caller, so the user would get a
+    Python traceback in place of the line."""
+    setup.recheck()
+    if not getattr(bpy.ops.whittle, action).poll():
+        return None
+    return SENDS[action](op, context)
+
+
 def interrupt(mode: str) -> None:
+    """Body of the Interrupt operator: "RESTORE" puts the target back once the
+    turn has ended, any other mode keeps the partial edit."""
     ctl = turn.current()
     if ctl is not None:
         ctl.interrupt(restore=mode == "RESTORE")
 
 
 def answer(context, text: str = "") -> bool:
+    """Body of the Answer operator: text, or else the typed answer, goes to
+    Claude's question. Returns whether it got there; only then does the
+    answer box clear."""
     ctl = turn.current()
     props = context.scene.whittle
     answered = ctl is not None and ctl.answer(text or props.ask_answer)
@@ -117,17 +192,26 @@ def answer(context, text: str = "") -> bool:
 
 
 def open_image(context, path: str):
+    """Body of the Open Image operator: path may be relative to the .blend."""
     return editors.show_image(context, bpy.path.abspath(path))
 
 
+def can_open_transcript() -> bool:
+    """Whether the active chat has a stored transcript for any of its nodes."""
+    hist = history.active()
+    return hist is not None and transcript.has_transcript(hist.session)
+
+
 def open_transcript(context):
-    ctl = turn.current()
-    if ctl is None:
-        raise RuntimeError("there is no session yet")
-    return transcript.open_transcript(ctl.session, context)
+    """Works from the stored chat: no controller is needed to read it."""
+    if not can_open_transcript():
+        raise RuntimeError("this chat has no turns yet")
+    return transcript.open_transcript(history.active().session, context)
 
 
 def remove_view(obj, view_id: int) -> None:
+    """Body of the Remove View operator: the view leaves the sketch, unless
+    strokes still use it."""
     if obj is None:
         raise RuntimeError("there is no sketch")
     if view_id in sketch.used_views(obj):
@@ -180,10 +264,14 @@ def history_idle(ctl) -> bool:
 
 
 def can_restore(hist, ctl, node: str) -> bool:
+    """Whether the scene can go back to the node now: history is idle and the
+    node has its snapshot on disk."""
     return hist is not None and history_idle(ctl) and hist.can_restore(node)
 
 
 def can_branch(hist, ctl, node: str) -> bool:
+    """Whether Edit & Resend can take the node again: a folded turn while the
+    scene is still at its parent, any other when its parent can be restored."""
     if hist is None or hist.tree is None or node not in hist.tree.nodes:
         return False
     found = hist.tree.node(node)
@@ -195,6 +283,8 @@ def can_branch(hist, ctl, node: str) -> bool:
 
 
 def can_compare(hist, ctl, node: str) -> bool:
+    """Whether the node can be shown in a comparison: it can be restored and
+    is not the current node."""
     return can_restore(hist, ctl, node) and node != hist.current
 
 
@@ -210,16 +300,25 @@ def switch_target(hist, node: str) -> str | None:
 
 
 def can_switch(hist, ctl, node: str) -> bool:
+    """Whether the scene can go to the branch at node now: history is idle and
+    the branch has a node to restore (switch_target)."""
     return history_idle(ctl) and switch_target(hist, node) is not None
+
+
+def too_large(hist, node: str) -> bool:
+    """The turn failed because its images were too big, so it wants changing
+    (Edit & Resend) rather than sending again."""
+    return hist is not None and hist.tree is not None and node in hist.tree.nodes and hist.tree.node(node).too_large
 
 
 def can_retry(hist, ctl, node: str) -> bool:
     """A failed turn can be sent again from where it started: a folded one
-    while the scene is still at its parent, a recorded one by branching."""
+    while the scene is still at its parent, a recorded one by branching.
+    Not one whose images were too big: they would fail the same way."""
     if hist is None or hist.tree is None or node not in hist.tree.nodes or not history_idle(ctl):
         return False
     found = hist.tree.node(node)
-    if found.status != "failed":
+    if found.status != "failed" or found.too_large:
         return False
     if found.folded:
         return hist.current == found.parent
@@ -284,6 +383,8 @@ def retry(context, node: str, fake_script: str = "") -> tuple[turn.TurnControlle
     found = hist.tree.node(node)
     if found.status != "failed":
         raise RuntimeError(f"{node} did not fail")
+    if found.too_large:
+        raise RuntimeError(f"the images of {node} were too big; change them and send it again")
     props = context.scene.whittle
     if found.folded:
         if hist.current != found.parent:
@@ -296,6 +397,8 @@ def retry(context, node: str, fake_script: str = "") -> tuple[turn.TurnControlle
 
 
 def compare_node(context, node: str) -> compare.Compare:
+    """Body of Compare With Current: the node shows in place of the scene,
+    until the comparison returned ends."""
     hist = _history_for(context)
     if node == hist.current:
         raise RuntimeError(f"the scene already shows {node}")
@@ -326,6 +429,7 @@ CHAT_NEW_ALREADY = "This chat is new already"
 CHAT_GONE = "This chat is no longer in the file"
 # Send's tooltip in a chat made by another install, until it is continued.
 CHAT_FOREIGN = "This chat was made on another machine: Continue it to send, or start a New Chat"
+SETUP_FIRST = "Set up Claude to send"
 
 
 def chat_blocker(ctl) -> str | None:
@@ -349,6 +453,7 @@ def can_new_chat(found, ctl) -> str | None:
 
 
 def can_switch_chat(found, ctl, chat: str) -> str | None:
+    """Why the chat cannot be switched to, or None."""
     if found is None or chat not in found:
         return CHAT_GONE
     return chat_blocker(ctl)
@@ -431,6 +536,7 @@ def delete_chat(context, chat: str) -> str | None:
     if current:
         _leave_chat(context.scene)
     found.delete(chat, chats.config_dir())
+    transcript.close(chat)
     if current:
         _show_chat(context.scene, found)
     return found.current
@@ -445,10 +551,12 @@ def delete_chats(context, which: str) -> list[str]:
     doomed = found.to_delete(which)
     for chat in doomed:
         found.delete(chat, chats.config_dir())
+        transcript.close(chat)
     return doomed
 
 
 def chat_summary(found, chat: str) -> str:
+    """The chat's turn count in words, for its tooltip and its delete dialog."""
     entry = found.entry(chat)
     return f"{entry.turns} turn{'' if entry.turns == 1 else 's'}"
 
@@ -458,6 +566,7 @@ def _in_view3d(context) -> bool:
 
 
 class WHITTLE_OT_sketch(bpy.types.Operator):
+    """The sidebar's Sketch button: it only starts a session, where the key toggles."""
     bl_idname = "whittle.sketch"
     bl_label = "Sketch"
     bl_description = "Draw on the Whittle Sketch object, with strokes placed on surfaces"
@@ -477,6 +586,7 @@ class WHITTLE_OT_sketch(bpy.types.Operator):
 
 
 class WHITTLE_OT_sketch_toggle(bpy.types.Operator):
+    """The Shift+Alt+D key: starts a sketch session, or ends the one running."""
     bl_idname = "whittle.sketch_toggle"
     bl_label = "Toggle Sketch Mode"
     bl_description = "Start sketching on the Whittle Sketch object, or stop"
@@ -523,6 +633,7 @@ STROKE_MEANINGS = {
 
 
 class WHITTLE_OT_stroke_type(bpy.types.Operator):
+    """A button of the sketch strip: sets the active stroke type."""
     bl_idname = "whittle.stroke_type"
     bl_label = "Stroke Type"
     bl_description = "Draw the next strokes as this type"
@@ -544,6 +655,7 @@ class WHITTLE_OT_stroke_type(bpy.types.Operator):
 
 
 class WHITTLE_OT_next_stroke_type(bpy.types.Operator):
+    """The Shift+Alt+N key: moves to the next stroke type and reports it."""
     bl_idname = "whittle.next_stroke_type"
     bl_label = "Next Stroke Type"
     bl_description = "Cycle the stroke type new strokes are drawn as"
@@ -558,6 +670,7 @@ class WHITTLE_OT_next_stroke_type(bpy.types.Operator):
 
 
 class WHITTLE_OT_capture_view(bpy.types.Operator):
+    """Capture View, from its button or Shift+Alt+V; it needs no sketch session."""
     bl_idname = "whittle.capture_view"
     bl_label = "Capture View"
     bl_description = "Record the current viewport as a sketch view; new strokes are tagged with it"
@@ -578,6 +691,8 @@ class WHITTLE_OT_capture_view(bpy.types.Operator):
 
 
 class WHITTLE_OT_submit(bpy.types.Operator):
+    """The Send button: disabled during a comparison, in a chat from another
+    install, before setup and while a turn runs."""
     bl_idname = "whittle.submit"
     bl_label = "Send"
     bl_description = "Send the prompt, the sketch and the references to Claude"
@@ -594,19 +709,20 @@ class WHITTLE_OT_submit(bpy.types.Operator):
         if chats.current_foreign():
             cls.poll_message_set(CHAT_FOREIGN)
             return False
-        return not busy(turn.current())
+        ctl = turn.current()
+        if needs_setup(ctl):
+            cls.poll_message_set(SETUP_FIRST)
+            return False
+        return not busy(ctl)
 
     def execute(self, context):
-        try:
-            _ctl, node = submit_sketch(context, self.fake_script)
-        except (bundle.BundleError, RuntimeError, ValueError, OSError) as exc:
-            self.report({"ERROR"}, str(exc))
-            return {"CANCELLED"}
-        self.report({"INFO"}, f"Submitted turn {node}")
-        return {"FINISHED"}
+        return report_submit(self, context, self.fake_script)
 
 
 class WHITTLE_OT_send_key(bpy.types.Operator):
+    """The Shift+Alt+Enter key: Send, Amend or Answer as the turn's state calls
+    for (send_key_action); unlike Enter in the prompt box, it also sends pending
+    strokes or references with no text."""
     bl_idname = "whittle.send_key"
     bl_label = "Send or Amend"
     bl_description = ("Send the prompt, the sketch and the references; while Claude works, amend the running "
@@ -617,15 +733,12 @@ class WHITTLE_OT_send_key(bpy.types.Operator):
         if action is None:
             # Nothing to send: the key does nothing, as Enter in a blank box.
             return {"CANCELLED"}
-        op = getattr(bpy.ops.whittle, action)
-        if not op.poll():
-            # Sending is not possible right now (a comparison, say); the
-            # sidebar's disabled button says why.
-            return {"CANCELLED"}
-        return op("EXEC_DEFAULT")
+        # None: sending is not possible right now (a comparison, say).
+        return key_send(self, context, action) or {"CANCELLED"}
 
 
 class WHITTLE_OT_clear_sketch(bpy.types.Operator):
+    """Empties the sketch once the user confirms."""
     bl_idname = "whittle.clear_sketch"
     bl_label = "Clear Sketch"
     bl_description = "Remove every stroke and view from the sketch"
@@ -644,6 +757,7 @@ class WHITTLE_OT_clear_sketch(bpy.types.Operator):
 
 
 class WHITTLE_OT_ref_add(bpy.types.Operator):
+    """Opens a file browser and adds the image chosen to the scene's references."""
     bl_idname = "whittle.ref_add"
     bl_label = "Add Reference"
     bl_description = "Attach a reference image to the next request"
@@ -680,6 +794,7 @@ class WHITTLE_OT_ref_remove(bpy.types.Operator):
 
 
 class WHITTLE_OT_run_bundle(bpy.types.Operator):
+    """The Development section's button: runs the bundle folder named there."""
     bl_idname = "whittle.run_bundle"
     bl_label = "Run Bundle"
     bl_description = "Send a request bundle from disk to the agent"
@@ -731,6 +846,8 @@ class WHITTLE_OT_agent_stop(bpy.types.Operator):
 
 
 class WHITTLE_OT_interrupt(bpy.types.Operator):
+    """Stops the running turn. The Stop menu sets mode; without one, a dialog
+    asks for it."""
     bl_idname = "whittle.interrupt"
     bl_label = "Interrupt"
     bl_description = "Stop the turn after the step that is running"
@@ -762,6 +879,8 @@ class WHITTLE_OT_interrupt(bpy.types.Operator):
 
 
 class WHITTLE_OT_amend(bpy.types.Operator):
+    """The Amend button: works from the submit until the turn ends, unless the
+    turn is being interrupted."""
     bl_idname = "whittle.amend"
     bl_label = "Amend"
     bl_description = "Send the amend text and any strokes drawn since the submit into the running turn"
@@ -772,19 +891,12 @@ class WHITTLE_OT_amend(bpy.types.Operator):
         return ctl is not None and ctl.can_amend
 
     def execute(self, context):
-        try:
-            number = amend(context)
-        except (RuntimeError, ValueError, bundle.BundleError, OSError) as exc:
-            self.report({"ERROR"}, str(exc))
-            return {"CANCELLED"}
-        ctl = turn.current()
-        sent = ctl is not None and ctl.running and not ctl.queued_amends
-        self.report({"INFO"}, f"Sent amendment {number}" if sent
-                    else f"Amendment {number} goes in once the turn starts")
-        return {"FINISHED"}
+        return report_amend(self, context)
 
 
 class WHITTLE_OT_answer(bpy.types.Operator):
+    """Answers Claude's question: with text from a choice's button, else with
+    the typed answer."""
     bl_idname = "whittle.answer"
     bl_label = "Answer"
     bl_description = "Answer the agent's question"
@@ -797,12 +909,11 @@ class WHITTLE_OT_answer(bpy.types.Operator):
         return ctl is not None and ctl.question is not None
 
     def execute(self, context):
-        if not answer(context, self.text):
-            return {"CANCELLED"}
-        return {"FINISHED"}
+        return report_answer(self, context, self.text)
 
 
 class WHITTLE_OT_open_image(bpy.types.Operator):
+    """Shows a render or a reference image from the sidebar, given its path."""
     bl_idname = "whittle.open_image"
     bl_label = "Open Image"
     bl_description = "Show this render in an Image Editor"
@@ -819,13 +930,14 @@ class WHITTLE_OT_open_image(bpy.types.Operator):
 
 
 class WHITTLE_OT_open_transcript(bpy.types.Operator):
+    """Fills the Whittle Transcript text from the stored chat and shows it."""
     bl_idname = "whittle.open_transcript"
     bl_label = "Open Transcript"
-    bl_description = "Write the session's full transcript into the Whittle Transcript text and show it"
+    bl_description = "Show this chat's full transcript in a Text Editor. It is a view: the file does not save it"
 
     @classmethod
     def poll(cls, context):
-        return turn.current() is not None
+        return can_open_transcript()
 
     def execute(self, context):
         try:
@@ -837,6 +949,7 @@ class WHITTLE_OT_open_transcript(bpy.types.Operator):
 
 
 class WHITTLE_OT_target_from_selection(bpy.types.Operator):
+    """Replace With Selection: the selection takes the target list's place."""
     bl_idname = "whittle.target_from_selection"
     bl_label = "From Selection"
     bl_description = "Make the selected objects the targets"
@@ -849,6 +962,7 @@ class WHITTLE_OT_target_from_selection(bpy.types.Operator):
 
 
 class WHITTLE_OT_target_add(bpy.types.Operator):
+    """Appends the selection to the target list, skipping what is listed already."""
     bl_idname = "whittle.target_add"
     bl_label = "Add Selected"
     bl_description = "Add the selected objects to the targets"
@@ -876,6 +990,7 @@ class WHITTLE_OT_target_remove(bpy.types.Operator):
 
 
 class WHITTLE_OT_target_clear(bpy.types.Operator):
+    """Empties the target list and drops the target collection."""
     bl_idname = "whittle.target_clear"
     bl_label = "Clear Targets"
     bl_description = "No targets: the agent makes new objects"
@@ -890,6 +1005,7 @@ class WHITTLE_OT_target_clear(bpy.types.Operator):
 
 
 class WHITTLE_OT_view_remove(bpy.types.Operator):
+    """The remove button on a sketch view's row."""
     bl_idname = "whittle.view_remove"
     bl_label = "Remove View"
     bl_description = "Forget this sketch view; refused while strokes use it"
@@ -907,6 +1023,7 @@ class WHITTLE_OT_view_remove(bpy.types.Operator):
 
 
 class WHITTLE_OT_view_snap(bpy.types.Operator):
+    """Snaps to a view, from its row in the sidebar or its mark in the viewport."""
     bl_idname = "whittle.view_snap"
     bl_label = "Snap to View"
     bl_description = "Move the viewport back to this sketch view; new strokes are tagged with it"
@@ -929,6 +1046,7 @@ class WHITTLE_OT_view_snap(bpy.types.Operator):
 
 
 class WHITTLE_OT_file_setting_reset(bpy.types.Operator):
+    """Drops this file's override of one session setting (For This File)."""
     bl_idname = "whittle.file_setting_reset"
     bl_label = "Use Default"
     bl_description = "Use the preferences' value in this file again"
@@ -953,6 +1071,8 @@ class _HistoryOperator:
         return hist is not None and hist.tree is not None and history_idle(turn.current())
 
     def run(self, context):
+        """Does the operator's work and returns the line to report, if any;
+        execute reports what it raises as an error."""
         raise NotImplementedError
 
     def execute(self, context):
@@ -967,6 +1087,7 @@ class _HistoryOperator:
 
 
 class WHITTLE_OT_history_restore(_HistoryOperator, bpy.types.Operator):
+    """Goes back to a node; the tooltip names it, since the conversation does not."""
     bl_idname = "whittle.history_restore"
     bl_label = "Go Back to This Turn"
     bl_description = ("Put the target back as it was at this turn; objects Claude made since are "
@@ -982,47 +1103,58 @@ class WHITTLE_OT_history_restore(_HistoryOperator, bpy.types.Operator):
         return f"{named}\n{cls.bl_description}" if named else cls.bl_description
 
     def run(self, context):
+        """Goes back to the node and says so."""
         restore_node(context, self.node)
         return f"Restored {self.node}"
 
 
 class WHITTLE_OT_history_branch(_HistoryOperator, bpy.types.Operator):
+    """Takes a turn again: goes back to before it and refills the prompt box."""
     bl_idname = "whittle.history_branch"
     bl_label = "Edit & Resend"
     bl_description = ("Another take on this turn: go back to before it and bring its prompt, strokes "
                       "and references back, so Send makes a new branch")
 
     def run(self, context):
+        """Takes the node's turn again and says what to do next."""
         branch_node(context, self.node)
         return "Edit the prompt and send it as a new branch"
 
 
 class WHITTLE_OT_history_compare(_HistoryOperator, bpy.types.Operator):
+    """Starts a comparison, which compare_toggle and compare_end carry on."""
     bl_idname = "whittle.history_compare"
     bl_label = "Compare With Current"
     bl_description = "Show this node in place of the current scene, and toggle between the two"
 
     def run(self, context):
+        """Starts comparing with the node and says so."""
         compare_node(context, self.node)
         return f"Showing {self.node}"
 
 
 class WHITTLE_OT_branch_switch(_HistoryOperator, bpy.types.Operator):
+    """Moves the scene to another branch, as one undo step."""
     bl_idname = "whittle.branch_switch"
     bl_label = "Switch Branch"
     bl_description = "Go to this branch: the scene as its newest turn left it"
 
     def run(self, context):
+        """Switches and reports the node restored, which may be a leaf below the
+        one given."""
         target = switch_branch(context, self.node)
         return f"Switched to {target}"
 
 
 class WHITTLE_OT_retry(_HistoryOperator, bpy.types.Operator):
+    """Sends a failed turn again. Its execute also reports the bundle errors
+    that sending can raise."""
     bl_idname = "whittle.retry"
     bl_label = "Retry"
     bl_description = "Send this failed turn's request again from where it started"
 
     def run(self, context):
+        """Sends the turn again and reports its new node."""
         _ctl, node = retry(context, self.node)
         return f"Sent again as {node}"
 
@@ -1038,6 +1170,7 @@ class WHITTLE_OT_retry(_HistoryOperator, bpy.types.Operator):
 
 
 class WHITTLE_OT_compare_toggle(bpy.types.Operator):
+    """The Swap button of a running comparison."""
     bl_idname = "whittle.compare_toggle"
     bl_label = "Toggle"
     bl_description = ("Switch between the scene as it was and the compared node. Saving the file "
@@ -1057,6 +1190,7 @@ class WHITTLE_OT_compare_toggle(bpy.types.Operator):
 
 
 class WHITTLE_OT_compare_end(bpy.types.Operator):
+    """Done or Keep This on a running comparison: keep says which scene stays."""
     bl_idname = "whittle.compare_end"
     bl_label = "End Comparison"
     bl_description = "Stop comparing"
@@ -1086,6 +1220,7 @@ class WHITTLE_OT_compare_end(bpy.types.Operator):
 
 
 class WHITTLE_OT_ghost_toggle(bpy.types.Operator):
+    """Shows or hides the ghost of the current node's parent."""
     bl_idname = "whittle.ghost_toggle"
     bl_label = "Ghost"
     bl_description = "Show the node before the current one as a wireframe ghost, or hide it"
@@ -1108,6 +1243,8 @@ class WHITTLE_OT_ghost_toggle(bpy.types.Operator):
 
 
 class WHITTLE_OT_chat_new(bpy.types.Operator):
+    """Refused while the current chat cannot be left or is still empty; the
+    disabled button says why."""
     bl_idname = "whittle.chat_new"
     bl_label = "New Chat"
     bl_description = ("Start an empty chat: a new conversation and history from the scene as it is, "
@@ -1130,6 +1267,7 @@ class WHITTLE_OT_chat_new(bpy.types.Operator):
 
 
 class WHITTLE_OT_chat_switch(bpy.types.Operator):
+    """A chat's title in the chat menu: that chat becomes current."""
     bl_idname = "whittle.chat_switch"
     bl_label = "Switch Chat"
     bl_description = ("Go back to this chat: its conversation, and its Claude session for the next "
@@ -1162,6 +1300,7 @@ class WHITTLE_OT_chat_switch(bpy.types.Operator):
 
 
 class WHITTLE_OT_chat_continue(bpy.types.Operator):
+    """Adopts a chat from another install, which lets this one send in it."""
     bl_idname = "whittle.chat_continue"
     bl_label = "Continue"
     bl_description = ("Continue this chat here. Its whole conversation goes to Claude with your next "
@@ -1181,6 +1320,7 @@ class WHITTLE_OT_chat_continue(bpy.types.Operator):
 
 
 class WHITTLE_OT_chat_rename(bpy.types.Operator):
+    """Rename This Chat: a dialog holding the current title, for a chat with turns."""
     bl_idname = "whittle.chat_rename"
     bl_label = "Rename Chat"
     bl_description = "Give this chat a title of your own; an empty one puts back the title from its first prompt"
@@ -1210,6 +1350,7 @@ class WHITTLE_OT_chat_rename(bpy.types.Operator):
 
 
 class WHITTLE_OT_chat_delete(bpy.types.Operator):
+    """Deletes a chat once the user confirms a dialog giving its turns and size."""
     bl_idname = "whittle.chat_delete"
     bl_label = "Delete Chat"
     bl_description = ("Delete this chat: its history, transcripts, renders and Claude session. "
@@ -1245,6 +1386,7 @@ DELETE_CHOICES = [("OTHERS", "All Other Chats", "Every chat but this one"),
 
 
 class WHITTLE_OT_chat_delete_many(bpy.types.Operator):
+    """Delete Other Chats: a dialog to pick which, showing what the choice takes."""
     bl_idname = "whittle.chat_delete_many"
     bl_label = "Delete Chats"
     bl_description = "Delete the other chats in this file, or those older than a week, a month or three months"

@@ -46,6 +46,7 @@ _OLD_STYLE = re.compile(r"^claude-(?P<major>\d+)(?:-(?P<minor>\d{1,2}))?-(?P<fam
 
 @dataclass(frozen=True)
 class Model:
+    """A model id read into its family and version."""
     id: str
     family: str
     version: tuple[int, int]
@@ -60,6 +61,7 @@ class Model:
 
     @property
     def full_name(self) -> str:
+        """The name with "Claude" in front: Claude Opus 5.5."""
         return f"Claude {self.name}"
 
 
@@ -111,6 +113,7 @@ class Catalog:
         return {family: models[1:] for family, models in self.families.items() if len(models) > 1}
 
     def find(self, model_id: str) -> Model | None:
+        """The menu's model with exactly this id, or None."""
         for models in self.families.values():
             for model in models:
                 if model.id == model_id:
@@ -185,11 +188,13 @@ def read_cache(path) -> tuple[list[str], str, float]:
 
 
 def write_cache(path, ids, source: str, fetched: float | None = None) -> None:
+    """Saves a report's ids, each once; fetched defaults to now."""
     formats.write_json_atomic(path, {"format": CACHE_FORMAT, "version": 1, "source": source,
                                      "fetched": time.time() if fetched is None else fetched,
                                      "models": list(dict.fromkeys(ids))})
 
 
 def load(path) -> Catalog:
+    """The catalog from the cache, the bundled list filling in the rest."""
     ids, source, fetched = read_cache(path)
     return catalog(ids, source=source, fetched=fetched)

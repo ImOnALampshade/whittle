@@ -53,6 +53,7 @@ def _on_active():
 
 
 def subscribe() -> None:
+    """Listens for the active object changing, in place of any earlier subscription."""
     bpy.msgbus.clear_by_owner(_OWNER)
     bpy.msgbus.subscribe_rna(key=(bpy.types.LayerObjects, "active"), owner=_OWNER, args=(),
                              notify=_on_active)
@@ -76,6 +77,7 @@ def _first_sync():
 
 
 def register() -> None:
+    """Adds the handlers and the subscription, and a first sync on the next timer tick."""
     for handlers, handler in HANDLERS:
         if handler not in handlers:
             handlers.append(handler)
@@ -87,6 +89,7 @@ def register() -> None:
 
 
 def unregister() -> None:
+    """Takes out the handlers, the subscription and a first sync still waiting."""
     for handlers, handler in HANDLERS:
         while handler in handlers:
             handlers.remove(handler)

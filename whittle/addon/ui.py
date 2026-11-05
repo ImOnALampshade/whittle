@@ -132,22 +132,29 @@ class Ctx:
 
     @property
     def props(self):
+        """The scene's Whittle properties."""
         return self.scene.whittle
 
     @property
     def busy(self) -> bool:
+        """Whether a turn is running or a run is waiting for the agent, as
+        operators.busy decides it (not the agent process's own state)."""
         return operators.busy(self.ctl)
 
     @property
     def tree(self):
+        """The history's tree, or None when there is no history yet or its
+        session.json could not be read."""
         return self.hist.tree if self.hist is not None else None
 
     def px(self, units: float) -> int:
+        """units (one is an icon button at UI scale 1) in pixels at this scale."""
         return int(units * UNIT * self.scale)
 
     # -- text measured with the UI font, so lines use the width they have --
 
     def measure(self, text: str) -> float:
+        """text's width in pixels."""
         blf.size(0, self.points * self.scale)
         return blf.dimensions(0, text)[0]
 
@@ -205,6 +212,8 @@ class Ctx:
         return cut.rstrip(" ,.;:·-") + "…"
 
     def lines(self, text: str, width: float, limit: int = 0) -> list[str]:
+        """text wrapped to width; past limit lines (when one is set), the last
+        line takes what is left, cut with an ellipsis."""
         lines = self.wrap(text, width)
         if limit and len(lines) > limit:
             lines = lines[:limit - 1] + [self.fit(" ".join(lines[limit - 1:]), width)]
@@ -212,6 +221,8 @@ class Ctx:
 
 
 def make_ctx(context, width: int | None = None) -> Ctx:
+    """The Ctx for drawing in context. Without a width, it is what the region
+    leaves for a label's text."""
     scale = (context.preferences.system.ui_scale if context.preferences else 1.0) or 1.0
     if width is None:
         region = context.region
@@ -458,6 +469,7 @@ def _wrapped(layout, text: str, ctx: Ctx, width: int, *, icon: str = "NONE", lim
 # -- header and the agent popover ------------------------------------------------
 
 def agent_state(ctl) -> AgentState:
+    """The agent process's state; stopped when there is no controller."""
     return ctl.process.state if ctl is not None else AgentState.STOPPED
 
 
@@ -518,6 +530,8 @@ def draw_file_settings(layout, scene) -> None:
 
 
 def draw_agent(layout, ctl, scene=None) -> None:
+    """The agent popover: the state and why it stopped, model, effort, where
+    chats are kept, this file's settings, Start or Stop and the Preferences."""
     state = agent_state(ctl)
     # Every line here has an icon or a blank one, so the text lines up in one
     # column with Model, Effort and For This File.
@@ -838,6 +852,8 @@ def draw_switcher(layout, node: str | None, ctx: Ctx) -> bool:
 
 
 def draw_turn_menu_button(layout, turn: conversation.Turn, ctx: Ctx) -> None:
+    """The ⋯ that opens a turn's menu, disabled while the turn runs or when it
+    is not in the history."""
     sub = layout.row(align=True)
     sub.enabled = ctx.tree is not None and turn.node in ctx.tree.nodes and not turn.running
     sub.operator("whittle.turn_menu", text="", icon="THREE_DOTS", emboss=False).node = turn.node or ""
@@ -920,6 +936,7 @@ def _group_header(group) -> tuple[str, str]:
 
 
 def thumbnail_scale(ctx: Ctx) -> float:
+    """The scale of a turn's thumbnail at this width, within THUMBNAIL_SCALE."""
     low, high = THUMBNAIL_SCALE
     return max(low, min(high, ctx.width / (UNIT * ctx.scale) * THUMBNAIL_PER_UNIT))
 
@@ -940,6 +957,9 @@ def _render_row(layout, path: str) -> None:
 
 
 def draw_tool_group(layout, group, ctx: Ctx, key: str, first_call: int, footer: str = "") -> None:
+    """A run of thinking and tool calls as one closed panel: thinking is dim,
+    each call a closed panel of its own with its renders below it. key and
+    first_call keep the panels' names apart; footer is a dim last line."""
     text, icon = _group_header(group)
     header, body = layout.panel(f"whittle_tools_{key}", default_closed=True)
     header.label(text=ctx.fit(text, ctx.width - ctx.px(2.2)), icon=icon)
@@ -1063,15 +1083,20 @@ def draw_turn_body(layout, turn: conversation.Turn, ctx: Ctx, *, last: bool = Fa
 
 def draw_failure(layout, turn: conversation.Turn, ctx: Ctx, *, retry: bool) -> None:
     """A failed turn's end: its reason in red, one line (two at most), with
-    Retry at the right of the first."""
+    Retry at the right of the first, or Edit when sending the same request
+    again would fail the same way."""
     end = ctx.px(3.6) if retry else 0
     # A split leaves a gap between its parts, and a label pads its text.
     room = ctx.width - end - ICON_PX * ctx.scale - (ctx.px(0.8) if retry else 0)
     lines = ctx.lines(" ".join((turn.failure or "Failed").split()), room, 2)
     if retry:
         left, right = _split_end(layout.row(), ctx, end)
-        right.enabled = operators.can_retry(ctx.hist, ctx.ctl, turn.node)
-        right.operator("whittle.retry", text="Retry", icon="FILE_REFRESH").node = turn.node
+        if operators.too_large(ctx.hist, turn.node):
+            right.enabled = operators.can_branch(ctx.hist, ctx.ctl, turn.node)
+            right.operator("whittle.history_branch", text="Edit", icon="GREASEPENCIL").node = turn.node
+        else:
+            right.enabled = operators.can_retry(ctx.hist, ctx.ctl, turn.node)
+            right.operator("whittle.retry", text="Retry", icon="FILE_REFRESH").node = turn.node
     else:
         left = layout.row()
     col = left.column(align=True)
@@ -1081,6 +1106,7 @@ def draw_failure(layout, turn: conversation.Turn, ctx: Ctx, *, retry: bool) -> N
 
 
 def draw_expanded(layout, turn: conversation.Turn, ctx: Ctx, *, last: bool = False) -> None:
+    """A turn in full: its bubble, then its body."""
     draw_bubble(layout, turn, ctx)
     draw_turn_body(layout, turn, ctx, last=last)
 
@@ -1098,6 +1124,9 @@ def draw_collapsed(layout, turn: conversation.Turn, ctx: Ctx) -> None:
 
 
 def draw_conversation(layout, conv: conversation.Conversation, ctx: Ctx) -> None:
+    """The turns: the oldest under one closed panel, the next as closed panels,
+    the latest in full with a folded or running turn after them, then Return
+    to Latest and, unless the attention box is up, the notes outside a turn."""
     path = conv.path_turns
     extra = [t for t in conv.turns if t.folded or t.running]
     expanded = path[-EXPANDED_TURNS:] if path else []
@@ -1137,8 +1166,9 @@ def stroke_summary(obj, ctl) -> str:
     """The sketch's strokes in a few words, or "" when there is nothing to
     say (the row is then left out). Outside a turn it also counts strokes
     an earlier turn was sent with that are still shown (one that was
-    stopped or failed keeps them) and views without strokes, so Clear and
-    the view list stay reachable whenever the viewport shows something."""
+    stopped, or failed after changing the scene, keeps them) and views
+    without strokes, so Clear and the view list stay reachable whenever the
+    viewport shows something."""
     counts = sketch.stroke_counts(obj) if obj is not None else {}
     pending = counts.get(0, 0)
     if ctl is not None and getattr(ctl, "running", False):
@@ -1283,8 +1313,11 @@ def draw_references(layout, ctx: Ctx) -> None:
 
 
 def can_send(ctx: Ctx) -> bool:
+    """Whether Send is enabled: nothing stands in the way (a comparison, a running
+    or waiting turn, setup, a chat not yet continued here) and there is a prompt,
+    a reference or a pending stroke to send."""
     props = ctx.props
-    if ctx.comparing is not None or ctx.busy or agent_state(ctx.ctl) == AgentState.NEEDS_SETUP:
+    if ctx.comparing is not None or ctx.busy or operators.needs_setup(ctx.ctl):
         return False
     if foreign(ctx):
         return False
@@ -1347,6 +1380,7 @@ def draw_composer(layout, ctx: Ctx) -> None:
 # -- the whole panel -----------------------------------------------------------------
 
 def draw_main(layout, ctx: Ctx) -> None:
+    """The panel body, from the attention box down to the prompt box."""
     conv = conversation.build(ctx.hist, ctx.ctl)
     ctx.attention = draw_attention(layout, ctx, conv)
     draw_elsewhere(layout, ctx)
@@ -1366,6 +1400,7 @@ def draw_main(layout, ctx: Ctx) -> None:
 # -- chats ------------------------------------------------------------------------
 
 def chat_title(found) -> str:
+    """The current chat's title, or the new chat's when there is no current one."""
     if found is None or found.current is None or found.current not in found:
         return chat_store.NEW_TITLE
     return found.entry(found.current).title
@@ -1593,6 +1628,8 @@ def turn_render(hist, node: str) -> str | None:
 
 
 def draw_turn_menu(layout, hist, ctl, node: str) -> None:
+    """A node's menu, with what applies to it: the start offers only Go Back
+    and Compare, and a folded turn offers neither."""
     tree = hist.tree if hist is not None else None
     if tree is None or node not in tree.nodes:
         layout.label(text="This turn is not in the history")
@@ -1625,6 +1662,7 @@ def draw_turn_menu(layout, hist, ctl, node: str) -> None:
 
 
 def draw_ref_menu(layout, index: int) -> None:
+    """A reference's menu: pin it, place it in the scene, open it or remove it."""
     refs = bpy.context.scene.whittle.refs
     pinned = index < len(refs) and refs[index].pinned
     layout.operator("whittle.ref_pin", text="Unpin" if pinned else "Pin to Every Request",
@@ -1660,6 +1698,7 @@ class WHITTLE_PT_main(_Panel, bpy.types.Panel):
         draw_chat_title(self.layout, make_ctx(context))
 
     def draw_header_preset(self, context):
+        """The right end of the header: the agent indicator."""
         draw_indicator(self.layout, turn.current())
 
     def draw(self, context):
@@ -1765,6 +1804,8 @@ class WHITTLE_OT_turn_menu(bpy.types.Operator):
 
 
 class WHITTLE_OT_ref_menu(bpy.types.Operator):
+    """A reference's menu. An operator rather than a Menu so the index it is
+    for travels as a property."""
     bl_idname = "whittle.ref_menu"
     bl_label = "Reference"
     bl_description = "Pin this reference, place it in the scene, open it, or remove it"
@@ -1846,6 +1887,7 @@ class WHITTLE_OT_link_menu(bpy.types.Operator):
 
 
 class WHITTLE_OT_copy_code(bpy.types.Operator):
+    """A code block's copy button; the text travels as a property."""
     bl_idname = "whittle.copy_code"
     bl_label = "Copy Code"
     bl_description = "Copy this code block to the clipboard"

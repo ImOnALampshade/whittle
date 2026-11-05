@@ -25,11 +25,14 @@ from .process import AgentState
 log = logging.getLogger("whittle")
 
 UNREGISTER_WAIT = 2.0
+# Set Up's line when the environment it was offered for turned up on its own.
+FOUND = "The agent environment is ready"
 
 _current: VenvSetup | None = None
 
 
 def venv_dir() -> Path:
+    """The private venv's folder: the preference, else venv in the user folder."""
     folder = prefs.get().venv_dir
     if folder:
         return Path(bpy.path.abspath(folder)).resolve()
@@ -37,14 +40,17 @@ def venv_dir() -> Path:
 
 
 def lock_path() -> Path:
+    """The lock the extension ships."""
     return Path(__file__).resolve().parent.parent / venv.LOCK_NAME
 
 
 def base_python() -> Path:
+    """Blender's own Python, which the venv is made from."""
     return Path(sys.executable)
 
 
 def current() -> VenvSetup | None:
+    """The latest setup in this Blender session, running or finished."""
     return _current
 
 
@@ -91,6 +97,17 @@ def begin(*, reinstall: bool = False, dry_run: bool = False) -> VenvSetup:
     return setup
 
 
+def recheck() -> bool:
+    """Clears a NEEDS_SETUP that no longer holds, as when another Blender set
+    the environment up, and returns whether it did. Only what the user just
+    pressed asks, so a redraw never reads the venv."""
+    ctl = turn.current()
+    if ctl is None or ctl.process.state != AgentState.NEEDS_SETUP or paths.agent_python() is None:
+        return False
+    ctl.process.clear_setup()
+    return True
+
+
 def _finished(setup: VenvSetup) -> None:
     if setup.state == "done" and not setup.dry_run:
         log.info("agent environment ready: %s", setup.venv)
@@ -104,6 +121,8 @@ def _finished(setup: VenvSetup) -> None:
 
 
 def cancel(wait: float = 0.0) -> None:
+    """Stops a running setup and the timer. The running step is asked to end;
+    with wait, it gets that long to exit before it is killed."""
     if _current is not None:
         _current.cancel(wait=wait)
     _stop_timer()
@@ -140,6 +159,7 @@ def _stop_timer() -> None:
 
 
 def timer_registered() -> bool:
+    """Whether the timer that drives the install is registered."""
     return bpy.app.timers.is_registered(_timer)
 
 
@@ -179,12 +199,15 @@ def describe() -> tuple[str, str]:
 
 
 def install_summary(system: str = sys.platform) -> str:
+    """The confirmation dialog's message: what is downloaded, and where to."""
     pins = venv.read_pins(lock_path(), system)
     return (f"Download {len(pins)} pinned packages incl. {venv.SDK} {pins.get(venv.SDK)} "
             f"from PyPI into {venv_dir()}")
 
 
 class WHITTLE_OT_venv_install(bpy.types.Operator):
+    """Sets up or reinstalls the venv once the user confirms the download;
+    a dry run only logs the commands, without asking."""
     bl_idname = "whittle.venv_install"
     bl_label = "Set Up Agent Environment"
     bl_description = ("Make the agent's private Python environment and install its exactly pinned, "
@@ -210,6 +233,9 @@ class WHITTLE_OT_venv_install(bpy.types.Operator):
     def invoke(self, context, event):
         if self.dry_run:
             return self.execute(context)
+        if not self.reinstall and recheck():
+            self.report({"INFO"}, FOUND)
+            return {"FINISHED"}
         title = "Reinstall Agent Environment" if self.reinstall else "Set Up Agent Environment"
         return context.window_manager.invoke_confirm(
             self, event, title=title, message=install_summary(),
@@ -230,6 +256,8 @@ class WHITTLE_OT_venv_install(bpy.types.Operator):
 
 
 class WHITTLE_OT_venv_cancel(bpy.types.Operator):
+    """Stops the running setup without waiting for its step to exit; only
+    offered while one runs."""
     bl_idname = "whittle.venv_cancel"
     bl_label = "Cancel Setup"
     bl_description = "Stop setting up the agent environment"

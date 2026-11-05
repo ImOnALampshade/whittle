@@ -14,8 +14,8 @@ problem or idea before a large change saves everyone time.
   descriptions) follows [docs/prompting.md](docs/prompting.md).
 - You need Blender 5.2 and the development venv described in the README. Whittle is
   developed on Linux x64; the scripts (`run_tests.sh`, `build.sh`, `screens.sh`,
-  `gui_checks.sh`) are POSIX shell, and `screens.sh` and `gui_checks.sh` need Linux with
-  KDE's `kwin_wayland`. Windows and Apple silicon
+  `gui_checks.sh`, `docs.sh`, `docs_shots.sh`) are POSIX shell, and `screens.sh`,
+  `gui_checks.sh` and `docs_shots.sh` need Linux with KDE's `kwin_wayland`. Windows and Apple silicon
   Macs are supported but untested: a report of what works there is a welcome
   contribution.
   You do not need an API key: the offline suite and the screenshots use a scripted fake
@@ -31,7 +31,10 @@ problem or idea before a large change saves everyone time.
   For a change to sketching, undo, start points, saving, the preferences or anything else
   the GUI checks cover (`tests/gui/catalog.py`), run `./gui_checks.sh` too.
 - Keep `README.md` and `docs/` in step with what you change (`docs/progress.md` lists
-  what exists and the known gaps).
+  what exists and the known gaps). That includes the documentation site, `docs/site/`: a
+  change to what a user sees or does belongs on its guide page. Check it with
+  `./docs.sh --strict`, and reshoot a page whose pictures changed with `./docs_shots.sh
+  <page-slug>` (README, Documentation).
 - New source files start with `# SPDX-License-Identifier: GPL-3.0-or-later`.
 - Commit messages: an imperative subject line, then a short body saying why.
 

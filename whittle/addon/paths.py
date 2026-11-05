@@ -16,6 +16,8 @@ PACKAGE = __package__.rpartition(".")[0]
 
 
 def user_dir() -> Path:
+    """Whittle's user folder, made if missing: WHITTLE_USER_DIR, else the extension's
+    user folder, else, when not running as an extension, one in the system temp folder."""
     override = os.environ.get("WHITTLE_USER_DIR")
     if override:
         path = Path(override)
@@ -104,6 +106,7 @@ def agents_dir() -> Path:
 
 
 def logs_dir() -> Path:
+    """Where the agent's and the setup's logs go, made if missing."""
     path = user_dir() / "logs"
     path.mkdir(parents=True, exist_ok=True)
     return path

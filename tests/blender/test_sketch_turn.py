@@ -70,7 +70,7 @@ class SketchTurnTest(AgentTestCase):
         ctl.run_sketch("Carve a slot.", targets=[self.crate])
         pump(ctl, lambda: ctl.process.state == AgentState.CRASHED, 15, "the crash")
         self.assertTrue(ctl.last_finished["is_error"])
-        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [1, 1])
+        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [0, 0], "folded, so pending again")
         self.assertEqual(len(views.load_views(self.obj.data)), 3)
 
         second = self.make_controller("sketch_turn.json")
@@ -131,6 +131,11 @@ class SketchTurnTest(AgentTestCase):
             ctl.run_sketch("Carve.", targets=[self.crate])
         with self.assertRaisesRegex(Exception, "not found"):
             ctl.run_sketch("Carve.", targets=[self.crate], refs=["/nonexistent/whittle-ref.png"])
+        big = ctl.session.root / "big.png"
+        big.write_bytes(b"x" * 64)
+        with mock.patch.object(formats, "REQUEST_IMAGE_BYTES", 32):
+            with self.assertRaisesRegex(Exception, "fewer or smaller"):
+                ctl.run_sketch("Carve.", targets=[self.crate], refs=[big])
         self.assertFalse((ctl.session.root / "nodes").exists() and any((ctl.session.root / "nodes").iterdir()))
         self.assertEqual([t for _l, _v, t, _n in self.strokes()], [0, 0])
 

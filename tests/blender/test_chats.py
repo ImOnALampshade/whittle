@@ -19,8 +19,8 @@ from tests.blender.sketch_helpers import add_stroke
 from tests.blender.ui_helpers import RecordingLayout
 from whittle import caches
 from whittle import chats as chat_store
-from whittle import tree
-from whittle.addon import chats, conversation, history, operators, paths, turn, ui
+from whittle import formats, tree
+from whittle.addon import chats, conversation, history, operators, paths, sketch, transcript, turn, ui
 
 
 def scene_state() -> dict:
@@ -201,6 +201,22 @@ class SwitchTest(ChatCase):
         addon._after_undo()
         self.assertEqual(history.active().current, a1, "the current chat's own undo still works")
 
+    def test_undo_keeps_a_transcript_only_while_its_chat_lives(self):
+        from whittle import addon
+
+        a, _a_turns, b, _b1 = self.two_chats()
+        text = transcript.open_transcript(formats.SessionDir(self.store.folder(a)))
+        addon._after_undo()
+        self.assertIn(transcript.TEXT_NAME, bpy.data.texts, "its chat is still here")
+        del text[transcript.CHAT_PROP]
+        addon._after_undo()
+        self.assertIn(transcript.TEXT_NAME, bpy.data.texts, "an older Whittle's Text names no chat")
+        # An undo step from before the delete gives the Text back.
+        operators.delete_chat(bpy.context, b)
+        text[transcript.CHAT_PROP] = b
+        addon._after_undo()
+        self.assertNotIn(transcript.TEXT_NAME, bpy.data.texts, "its chat is gone and stays gone")
+
     def test_switching_waits_while_comparing(self):
         a, (a1, a2), b, b1 = self.two_chats()
         operators.compare_node(bpy.context, "n0000")
@@ -210,6 +226,67 @@ class SwitchTest(ChatCase):
         from whittle.addon import compare
 
         compare.active().end(self.scene, keep=False)
+
+
+class FoldedStrokesTest(ChatCase):
+    """A folded turn's turn-start undo step holds its strokes with the turn's
+    stamp, and background Blender cannot undo: the tests stamp them by hand."""
+
+    def setUp(self):
+        super().setUp()
+        self.fake = str(FAKE_SCRIPTS / "fold_second.json")
+
+    def fold(self) -> str:
+        """A turn to keep the chat, then one that folds."""
+        self.send("Scale it.")
+        _ctl, node = self.send("")
+        self.assertTrue(history.active().tree.node(node).folded)
+        return node
+
+    def test_undo_after_a_chat_change_leaves_a_folded_turns_strokes_pending(self):
+        from whittle import addon
+
+        node = self.fold()
+        a = self.store.current
+        operators.new_chat(bpy.context)
+        new = self.store.current
+        self.assertIsNone(turn.current())
+        sketch.stamp_strokes(self.obj, turn.node_number(node))
+        self.props.chat = a
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 1})
+        self.assertEqual(self.store.current, new, "chats are not undone")
+
+    def test_a_folded_number_is_only_that_chats(self):
+        from whittle import addon
+
+        node = self.fold()
+        a = self.store.current
+        number = turn.node_number(node)
+        operators.new_chat(bpy.context)
+        b = self.store.current
+        self.fake = str(FAKE_SCRIPTS / "history.json")
+        self.send("Make it bigger.")
+        _ctl, kept = self.send("Add a lid.")
+        self.assertEqual(kept, node, "numbers start again in each chat")
+        self.assertFalse(history.active().tree.node(kept).folded)
+
+        # This chat's turn with the same number kept its strokes: the fold
+        # in the other chat is not theirs.
+        add_stroke(self.obj, "free", STROKE, view=1, radius=0.01)
+        sketch.stamp_strokes(self.obj, number)
+        self.assertEqual(self.props.chat, b)
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {number: 1})
+
+        # From the other way round: a step of the second chat, then of the first.
+        operators.switch_chat(bpy.context, a)
+        self.props.chat = b
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {number: 1})
+        self.props.chat = a
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 1})
 
 
 class DeleteTest(ChatCase):
@@ -253,7 +330,10 @@ class DeleteTest(ChatCase):
         self.assertEqual(delete_count(bpy.ops.whittle.chat_delete_many, "QUARTER"), 1)
         self.assertEqual(store.listed(), [store.current, b])
         self.assertEqual(operators.delete_chats(bpy.context, "MONTH"), [])
+        text = transcript.open_transcript(formats.SessionDir(store.folder(b)))
+        self.assertTrue(text.is_runtime_data)
         self.assertEqual(operators.delete_chats(bpy.context, "OTHERS"), [b])
+        self.assertNotIn(transcript.TEXT_NAME, bpy.data.texts, "the view ends with its chat")
         self.assertEqual(store.listed(), [store.current])
         self.assertFalse(bpy.ops.whittle.chat_delete_many.poll(), "no other chats")
 
@@ -340,6 +420,14 @@ class RenameTest(ChatCase):
         self.assertEqual(self.store.entry(chat).title, "Crate")
         self.assertEqual(operators.rename_chat(bpy.context, ""), "Make the crate bigger")
 
+    def test_a_chat_that_began_with_only_a_sketch_gets_its_title_back(self):
+        self.send("")
+        chat = self.store.current
+        title = self.store.entry(chat).title
+        self.assertTrue(title.startswith("Sketch of "), title)
+        operators.rename_chat(bpy.context, "Crate")
+        self.assertEqual(operators.rename_chat(bpy.context, ""), title)
+
 
 class ForeignChatTest(ChatCase):
     """A chat made by another install reads, but sends nothing until
@@ -419,6 +507,36 @@ class ElsewhereTest(ChatCase):
             self.assertFalse(chats.open_elsewhere(now=time.monotonic() + 2 * chats.ELSEWHERE_EVERY),
                              "only while the other claim is live")
 
+    def test_a_blender_shows_itself_while_its_file_is_open(self):
+        blend = self.user_dir / "scene.blend"
+        blend.write_bytes(b"BLENDER")
+        cache_dir = self.user_dir / "cache"
+
+        def seen() -> bool:
+            with mock.patch.object(caches.os, "getpid", return_value=os.getppid()):
+                return caches.open_elsewhere(cache_dir, blend)
+
+        chats.reset()
+        with mock.patch.object(paths, "blend_path", return_value=blend):
+            chats.after_load()
+            self.assertIsNone(chats.root(), "a file without chats has no cache")
+            self.assertTrue(seen(), "and shows all the same")
+            chats.release()
+            self.assertFalse(seen(), "closing it lets go")
+            chats.load_failed()
+            self.assertTrue(seen(), "a failed open keeps the file")
+            chats.reset()
+            self.assertFalse(seen())
+            chats.after_save(str(blend))
+            self.assertTrue(seen(), "saved under a new name, the file is this one")
+        recovery = self.user_dir / "quit.blend"
+        recovery.write_bytes(b"BLENDER")
+        with mock.patch.object(paths, "blend_path", return_value=recovery), \
+                mock.patch.object(paths, "is_recovery_file", return_value=True):
+            chats.after_load()
+        self.assertFalse(seen())
+        self.assertEqual(list(cache_dir.glob(caches.OPEN_MARKS)), [], "a recovery file is not the file")
+
 
 class SaveTest(ChatCase):
     def test_the_payload_is_in_the_data_only_while_saving(self):
@@ -474,6 +592,42 @@ class SaveTest(ChatCase):
     def test_a_file_without_chats_gets_no_holder(self):
         chats.before_save(self.scene)
         self.assertNotIn(chats.HOLDER, bpy.data.texts)
+
+
+class TranscriptFileTest(ChatCase):
+    """Open Transcript and the saved file, in a fresh Blender:
+    tests/blender/transcript_file.py does the steps."""
+
+    def test_the_transcript_is_a_view_of_the_stored_chat(self):
+        blend = self.user_dir / "saved" / "scene.blend"
+        blend.parent.mkdir()
+        env = {**os.environ, "WHITTLE_USER_DIR": str(self.user_dir), "WHITTLE_AGENT_PYTHON": str(agent_python())}
+        out = subprocess.run([bpy.app.binary_path, "-b", "--factory-startup", "--python",
+                              str(REPO / "tests" / "blender" / "transcript_file.py"), "--", str(blend),
+                              str(FAKE_SCRIPTS / "history.json")],
+                             capture_output=True, text=True, timeout=240, env=env)
+        line = next((l for l in out.stdout.splitlines() if l.startswith("RESULT ")), None)
+        self.assertIsNotNone(line, out.stdout[-3000:] + out.stderr[-3000:])
+        r = json.loads(line[len("RESULT "):])
+        self.assertEqual(r["errors"], [])
+        self.assertFalse(r["before_any_chat"], "nothing to show")
+        self.assertFalse(r["new_chat_without_turns"], "a chat without turns has nothing to show")
+        self.assertTrue(r["shown"])
+        self.assertGreaterEqual(r["users"], 2, "the space holds a user of the Text")
+        self.assertEqual(r["saved"], [], "the file does not carry it, shown in a Text Editor or not")
+        self.assertEqual(r["after_save"], {"open": True, "space": True}, "saving leaves the view open")
+        self.assertEqual(r["after_switch"], {"controller": False, "can_open": True, "a": True, "b": False},
+                         "it shows the switched-to chat, with no controller")
+        self.assertEqual(r["reopened"], {"texts": [], "space": False, "controller": False, "can_open": True,
+                                         "operator": ["FINISHED"], "shown": True})
+        self.assertEqual(r["save_chats_off"], {"texts": [], "bytes": False})
+        self.assertTrue(r["deleted_another"])
+        self.assertEqual(r["deleted_it"], {"open": False, "space": False}, "the view ends with its chat")
+        self.assertEqual(r["deleted_then_undone"], {"open": False, "space": False}, "chats are never undone")
+        self.assertFalse(r["deleted_then_redone"])
+        self.assertEqual(r["older_file"], {"texts": ["Whittle Transcript"], "bytes": True},
+                         "the bytes check sees a Text the file does carry")
+        self.assertEqual(r["older_file_saved_again"], {"texts": [], "bytes": False})
 
 
 class FileTest(ChatCase):

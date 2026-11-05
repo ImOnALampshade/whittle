@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Claude Agent SDK runner. The only module that imports claude_agent_sdk."""
+"""The Claude Agent SDK runner. The only module that imports claude_agent_sdk at module level."""
 
 import asyncio
 import base64
@@ -13,6 +13,7 @@ import urllib.request
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    CLIJSONDecodeError,
     ClaudeSDKClient,
     ResultMessage,
     SystemMessage,
@@ -39,13 +40,34 @@ MCP_TOOL_TIMEOUT_MS = "86400000"
 API_URL = "https://api.anthropic.com"
 MODELS_TIMEOUT = 10.0
 MODELS_PAGES = 5
+# The most the Messages API takes in one request (it answers 413 above that).
+API_REQUEST_BYTES = 32 * 1024 * 1024
+# The longest line the SDK reads from the CLI; a longer one ends the session.
+# Images are what make lines long: a tool result's frame holds their base64
+# twice, so a request at the API's limit is a 64 MiB frame, and the transcript
+# mirror's frames batch lines on top of that. The CLI recompresses big images
+# but not many of them, so nothing smaller bounds it. It is a limit, not an
+# allocation. A frame holds what the CLI would send, after that shrinking, so
+# above this limit the API would refuse the request anyway. The other way, a
+# tool result on its way to the CLI, is bounded by formats.REQUEST_IMAGE_BYTES.
+MAX_FRAME_BYTES = 4 * API_REQUEST_BYTES
+# Whole in the two lines beside Edit at the sidebar's default width, the most
+# a turn's reason gets; the rest of the advice is in the docs.
+IMAGES_TOO_LARGE = "Images too big: send fewer or smaller"
+CLI_STOPPED = "the agent CLI stopped"
+# How the CLI words a request the API refused for its size or its images.
+SIZE_REFUSALS = ("Request too large", "Image was too large")
 
 
 def inline_skills_from_env() -> bool:
+    """WHITTLE_INLINE_SKILLS is set, to anything but 0."""
     return os.environ.get("WHITTLE_INLINE_SKILLS", "") not in ("", "0")
 
 
 def build_options(params: dict, servers: dict, *, inline_skills: bool) -> ClaudeAgentOptions:
+    """The SDK options for a session, from its start_session params. With
+    inline_skills the recipes are in the system prompt, so there is no plugin
+    and no Skill tool."""
     settings = params.get("settings") or {}
     kwargs = dict(
         system_prompt=prompt.build(settings, inline_skills=inline_skills),
@@ -75,6 +97,7 @@ def build_options(params: dict, servers: dict, *, inline_skills: bool) -> Claude
              "CLAUDE_CODE_THINKING_DISPLAY_UPDATES": "1",
              "CLAUDE_AGENT_SDK_CLIENT_APP": f"whittle/{__version__}"},
         stderr=lambda line: log.debug("cli: %s", line.rstrip()),
+        max_buffer_size=MAX_FRAME_BYTES,
         max_turns=settings.get("max_turns"),
         max_budget_usd=settings.get("max_budget_usd"),
         # The chat's own transcript store: the SDK mirrors every transcript
@@ -175,6 +198,18 @@ def _tool_result_text(content) -> str:
         return "\n".join(b.get("text", "") for b in content
                          if isinstance(b, dict) and b.get("type") == "text")
     return ""
+
+
+def frame_too_long(exc: Exception | None) -> bool:
+    """The SDK gave up on a line longer than MAX_FRAME_BYTES. It raises the
+    same error for a line that is not JSON, which is not about the images."""
+    return isinstance(exc, CLIJSONDecodeError) and "maximum buffer size" in str(exc)
+
+
+def refused_for_size(result: ResultMessage) -> bool:
+    """The API refused the request for its size or its images: a 413, or the
+    CLI's wording for one."""
+    return result.is_error and (result.api_error_status == 413 or (result.result or "").startswith(SIZE_REFUSALS))
 
 
 NARRATION = "narration"
@@ -328,6 +363,8 @@ class SdkRunner:
     # -- Runner API -----------------------------------------------------------
 
     async def start_session(self, params: dict) -> None:
+        """Stops any session and starts one, returning once the SDK has
+        connected. A failed connect sends an error event and raises BridgeCallError."""
         await self._stop_session("session restarted")
         options = build_options(params, build_servers(self.ctx), inline_skills=self.inline_skills)
         self.session_id = params.get("resume")
@@ -349,6 +386,8 @@ class SdkRunner:
 
     async def submit(self, turn_id: str, bundle_dir: str, prompt_text: str, context=(),
                      model: str | None = None, effort: str | None = None) -> None:
+        """Starts a turn: queues its query for the session task and returns.
+        Refused without an open session or while a turn runs."""
         if not self._session_open():
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is not None:
@@ -376,6 +415,8 @@ class SdkRunner:
 
     async def amend(self, turn_id: str, text: str, bundle_dir: str | None,
                     number: int | None = None) -> None:
+        """Queues an amendment for the next tool result or a follow-up query to
+        carry. Refused unless the turn is running."""
         if not self._session_open():
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is None or turn_id != self.turn_id:
@@ -383,6 +424,7 @@ class SdkRunner:
         self.ctx.queue_amend(number, text, bundle_dir)
 
     async def interrupt(self, turn_id: str) -> None:
+        """Queues an interrupt; a turn that is not running is ignored."""
         if self.turn_id != turn_id or not self._session_open():
             return
         self._interrupt_requested = True
@@ -390,6 +432,7 @@ class SdkRunner:
         self._commands.put_nowait(("interrupt", None))
 
     async def close(self) -> None:
+        """Stops the session and cancels a models report still running."""
         await self._stop_session("agent shutting down")
         if self._models_task is not None and not self._models_task.done():
             self._models_task.cancel()
@@ -477,11 +520,12 @@ class SdkRunner:
             self._alive = False
         if failure is not None:
             await self._event(Event.ERROR, {"code": "stream_failed", "message": str(failure)})
+        reason = IMAGES_TOO_LARGE if frame_too_long(failure) else CLI_STOPPED
         # The stream ending means the CLI is gone; nothing more can run in this session.
         if self.turn_id is not None:
-            await self._finish_turn(error="the agent CLI stopped")
+            await self._finish_turn(error=reason)
         # Blender has to start a new session before its next submit.
-        await self._event(Event.STATUS, {"state": SESSION_ENDED, "detail": "the agent CLI stopped"})
+        await self._event(Event.STATUS, {"state": SESSION_ENDED, "detail": reason})
         commands.put_nowait(("stop", None))
 
     async def _handle(self, msg) -> None:
@@ -535,6 +579,8 @@ class SdkRunner:
             return
         results = self._turn_results
         r = results[-1] if results else None
+        if error is None and r is not None and refused_for_size(r):
+            error = IMAGES_TOO_LARGE
         errors = [e for res in results for e in (res.errors or [])]
         if error:
             errors.append(error)
@@ -561,6 +607,8 @@ class SdkRunner:
                             else int((time.monotonic() - self._turn_start) * 1000)),
             "result_text": (r.result or "") if r else "",
             "errors": errors,
+            # Sending the same images again would fail the same way.
+            "too_large": error == IMAGES_TOO_LARGE,
             "amends_undelivered": undelivered,
             "message_uuid": self._last_uuid,
         })

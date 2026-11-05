@@ -211,6 +211,17 @@ class SessionFileTest(unittest.TestCase):
         self.assert_invalid(broken(lambda o: o["nodes"]["n0001"].update(status="complete")), "folded")
         self.assert_invalid(broken(lambda o: o.update(current="n0001")), "current", "folded")
 
+    def test_too_large_round_trips_and_may_be_missing(self):
+        t = build(("n0001", "n0000"), n0001=("S", "u1"))
+        t.finish("n0001", status="failed", too_large=True)
+        tree.write_session(self.path, t)
+        again, _ = tree.read_session(self.path)
+        self.assertTrue(again.node("n0001").too_large)
+        older = tree.to_json(t)
+        for node in older["nodes"].values():
+            del node["too_large"]
+        self.assertFalse(tree.from_json(older).node("n0001").too_large)
+
     def test_missing_and_bad_json(self):
         with self.assertRaises(formats.FormatError):
             tree.read_session(self.path)

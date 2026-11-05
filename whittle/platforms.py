@@ -61,6 +61,7 @@ def marker_applies(marker: str, platform: str = sys.platform) -> bool:
 
 
 def is_windows(platform: str = sys.platform) -> bool:
+    """Whether platform takes the Windows branch; all others are POSIX."""
     return platform == WINDOWS
 
 
@@ -106,6 +107,7 @@ class _IoCounters(ctypes.Structure):
 
 
 class ExtendedLimits(ctypes.Structure):
+    """The limits set on a Job Object; only its kill-on-close flag is used."""
     # JOBOBJECT_EXTENDED_LIMIT_INFORMATION
     _fields_ = [("BasicLimitInformation", _BasicLimits),
                 ("IoInfo", _IoCounters),
@@ -133,31 +135,39 @@ class Kernel32:
         self._close = _bind(dll.CloseHandle, boolean, [handle])
 
     def create_job(self) -> int | None:
+        """A new, unnamed Job Object's handle."""
         return self._create_job(None, None)
 
     def kill_on_close(self, job: int) -> bool:
+        """Makes the job kill every process in it when its last handle closes."""
         limits = ExtendedLimits()
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         return bool(self._set_job(job, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
                                   ctypes.byref(limits), ctypes.sizeof(limits)))
 
     def assign(self, job: int, process: int) -> bool:
+        """Puts the process (a handle, not a pid) into the job."""
         return bool(self._assign(job, process))
 
     def terminate_job(self, job: int, code: int) -> bool:
+        """Ends every process in the job, with code as their exit code."""
         return bool(self._terminate_job(job, code))
 
     def open_process(self, access: int, pid: int) -> int | None:
+        """A handle on pid with the access rights asked for."""
         return self._open(access, False, pid)
 
     def exit_code(self, process: int) -> int | None:
+        """The process's exit code (STILL_ACTIVE while it runs), or None."""
         code = ctypes.c_uint32()
         return code.value if self._exit_code(process, ctypes.byref(code)) else None
 
     def close(self, handle: int) -> None:
+        """Lets go of a handle; a job's last one going sets off kill_on_close."""
         self._close(handle)
 
     def last_error(self) -> int:
+        """The error code of this thread's last failed call."""
         return ctypes.get_last_error()
 
 
@@ -229,12 +239,15 @@ class ProcessTree:
             self._join_job(kernel)
 
     def terminate(self) -> None:
+        """Asks the tree to stop: SIGTERM to the group, or on Windows kill()."""
         if is_windows(self.platform):
             self.kill()
         else:
             self._signal(signal.SIGTERM)
 
     def kill(self) -> None:
+        """Stops the tree at once: SIGKILL to the group, or on Windows the job,
+        falling back to taskkill when there is none or it fails."""
         if not is_windows(self.platform):
             self._signal(signal.SIGKILL)
             return
@@ -356,6 +369,7 @@ def live_agent_starts(folder, *, alive=None, platform: str = sys.platform) -> li
     The records of agents that are gone, and unreadable ones, are removed."""
     if alive is None:
         def alive(pid):
+            """The default probe: pid_alive on this platform."""
             return pid_alive(pid, platform)
     starts = []
     try:

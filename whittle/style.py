@@ -21,6 +21,7 @@ NO_STYLE_NOTES = "none."
 
 
 def palette_text(palette: str) -> str:
+    """The palette for the system prompt: as typed, else NO_PALETTE."""
     return palette.strip() or NO_PALETTE
 
 
@@ -31,4 +32,5 @@ def bevel_text(bevel_style: str) -> str:
 
 
 def notes_text(style_notes: str) -> str:
+    """The style notes for the system prompt: as typed, else NO_STYLE_NOTES."""
     return style_notes.strip() or NO_STYLE_NOTES

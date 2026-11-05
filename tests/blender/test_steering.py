@@ -348,6 +348,19 @@ class ControllerTest(SteeringTestCase):
         self.assertFalse(ctl.process.alive)
         self.assertEqual(other.process.fake_script, FAKE_SCRIPTS / "stream.json")
 
+    def test_a_relative_fake_script_is_made_absolute_before_the_agent_starts(self):
+        """The agent runs in the session folder, where a relative path names
+        nothing: it means Blender's working folder."""
+        ctl = self.make_controller("ping.json")
+        turn.set_current(ctl)
+        self.addCleanup(turn.set_current, None)
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(FAKE_SCRIPTS.parent)
+        self.assertIs(operators.controller("fake/ping.json"), ctl, "the same script, so the same agent")
+        other = operators.controller("fake/../fake/stream.json")
+        self.controllers.append(other)
+        self.assertEqual(other.process.fake_script, FAKE_SCRIPTS / "stream.json")
+
 
 class AskTest(SteeringTestCase):
     def test_ask_and_answer(self):

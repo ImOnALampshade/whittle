@@ -32,10 +32,13 @@ SETTINGS_KEYS = ("self_check_rounds", "poly_budget", "style_notes", "palette", "
 
 
 class BundleError(Exception):
+    """A request bundle cannot be written; the message says why."""
     pass
 
 
 def ensure_uid(obj) -> str:
+    """The object's whittle_uid, which restoring matches objects by; an object
+    without a usable one gets a new one."""
     uid = obj.get(UID_PROP)
     if not isinstance(uid, str) or not uid:
         uid = uuid.uuid4().hex
@@ -44,6 +47,7 @@ def ensure_uid(obj) -> str:
 
 
 def target_entries(objects) -> list[dict]:
+    """The request's target list: each object's uid, name and type."""
     return [{"uid": ensure_uid(o), "name": o.name, "type": o.type} for o in objects]
 
 
@@ -117,9 +121,19 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def check_refs(paths) -> None:
+    """Refuses reference images that are missing, or more than a request can carry."""
     missing = [str(p) for p in paths if not Path(p).is_file()]
     if missing:
         raise BundleError(f"reference image not found: {', '.join(missing)}")
+    check_image_size(paths)
+
+
+def check_image_size(paths) -> None:
+    """Refuses a request whose images are more than the agent could be handed."""
+    total = sum(Path(p).stat().st_size for p in paths if Path(p).suffix.lower() in formats.IMAGE_TYPES)
+    if total > formats.REQUEST_IMAGE_BYTES:
+        raise BundleError(f"Images too big ({total / 2**20:.0f} MB, limit "
+                          f"{formats.REQUEST_IMAGE_BYTES / 2**20:.0f} MB): send fewer or smaller")
 
 
 def copy_refs(paths, dest_dir: Path) -> list[str]:
@@ -199,6 +213,7 @@ def write_bundle(dest, *, scene, sketch_obj, node: str, parent: str | None, prom
             render.render(scene, view.camera, "overlay", render_size, folder / "overlay.png",
                           aspect=view.aspect, sketch=sketch_obj, targets=list(targets),
                           strokes_out=folder / "strokes.png", keep_strokes=stroke_filter)
+        check_image_size([*(tmp / "refs").glob("*"), *(tmp / "views").glob("*/overlay.png")])
         formats.read_bundle(tmp)
         os.rename(tmp, dest)
     except BaseException as exc:

@@ -21,6 +21,8 @@ CHAR_PX = 7.0
 
 @dataclass
 class Entry:
+    """One item of the transcript: a run of text, a tool call with its result, a
+    turn's end or a note."""
     id: int
     # text | thinking | tool | turn | note | warning | error | answer | amend | submit | stopping
     kind: str
@@ -86,6 +88,8 @@ def _first_line(text: str) -> str:
 
 
 class Stream:
+    """The transcript's entries, built from agent events and local notes; past
+    maxlen the oldest go."""
     def __init__(self, maxlen: int = MAX_ENTRIES):
         self._entries: deque[Entry] = deque()
         self._maxlen = maxlen
@@ -144,13 +148,17 @@ class Stream:
         return None
 
     def note(self, text: str, kind: str = "note", turn_id: str | None = None) -> Entry:
+        """Adds an entry of Blender's own, not from an agent event."""
         return self._add(kind, text, turn_id)
 
     def entries(self, last: int | None = None) -> list[Entry]:
+        """The entries, oldest first, or only the last few."""
         items = list(self._entries)
         return items[-last:] if last else items
 
     def lines(self, last: int = 15) -> list[str]:
+        """The last entries as short plain lines, with a tool call's status unless
+        it is ok."""
         out = []
         for entry in self.entries(last):
             text = _first_line(entry.text)
@@ -160,32 +168,37 @@ class Stream:
         return out
 
     def images(self) -> list[str]:
+        """The image paths of every tool result still held."""
         return [path for entry in self._entries for path in entry.images]
 
 
 def turn_status(data: dict) -> str:
+    """A turn_finished event's outcome: interrupted, failed or done."""
     if data.get("interrupted"):
         return "interrupted"
     return "failed" if data.get("is_error") else "done"
 
 
 FAILURES = {
-    "error_max_turns": "Claude ran out of steps",
-    "error_max_budget_usd": "the turn reached its budget",
     "error_during_execution": "Claude stopped with an error",
     "session_ended": "the session ended",
+    # An API failure reaches us as an error result of subtype success.
+    "success": "Claude stopped with an error",
 }
 REASON_CHARS = 120
 
 
 def failure_reason(data: dict) -> str:
     """Why a turn failed, in a few words: its first error line, else what
-    its subtype means."""
+    its subtype means, else what the CLI gave as its result."""
     errors = [e for e in data.get("errors") or [] if isinstance(e, str) and e.strip()]
+    subtype = data.get("subtype") or ""
+    text = str(data.get("result_text") or "")
+    if not errors and text.strip() and subtype in ("", "success"):
+        errors = [text]
     if errors:
         reason = _first_line(errors[0])
         return reason if len(reason) <= REASON_CHARS else reason[:REASON_CHARS - 1] + "…"
-    subtype = data.get("subtype") or ""
     return FAILURES.get(subtype, subtype.replace("_", " ") or "unknown error")
 
 
@@ -202,6 +215,8 @@ def local_entry(stream: "Stream", name: str, data: dict, turn_id: str | None) ->
         return stream.note(text or "(new strokes only)", kind="amend", turn_id=turn_id)
     if name == "answer":
         return stream.note(data.get("answer") or "", kind="answer", turn_id=turn_id)
+    if name == "warning":
+        return stream.note(data.get("text") or "", kind="warning", turn_id=turn_id)
     if name == "interrupt":
         how = "the turn start will be restored" if data.get("mode") == "restore" else "keeping the changes"
         # Its own kind: the running turn's phase line and the stopped turn's
@@ -227,11 +242,13 @@ def entries_from_records(records: list[dict], turn_id: str | None = None) -> lis
 
 
 class TranscriptWriter:
+    """Appends a turn's records to its transcript.jsonl, one JSON object per line."""
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def write(self, msg: dict) -> None:
+        """Writes msg as it is, as one compact line, reopening the file each time."""
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(json.dumps(msg, ensure_ascii=False, separators=(",", ":")) + "\n")
 

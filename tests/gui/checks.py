@@ -606,6 +606,94 @@ def undo_turn(stage: GuiStage):
     expect_equal(bpy.context.scene.whittle.history_node, node, "the node the scene shows")
 
 
+# a folded turn's strokes through undo ------------------------------------------
+
+FOLDS = {"steps": [say("Looking."), {"call": "inspect", "params": {"query": "summary"}, "expect": "ok"}],
+         "finish": {"subtype": "error_during_execution", "is_error": True, "result": ""}}
+STROKE = [(-0.2, -0.25, 0.4), (0.0, -0.25, 0.3), (0.2, -0.25, 0.2)]
+LATER_STROKE = [(0.25, -0.1, 0.4), (0.25, 0.0, 0.3), (0.25, 0.1, 0.2)]
+
+
+def sketch_a_crate(stage: GuiStage):
+    stage.crate()
+    stage.look((math.radians(70), 0.0, math.radians(20)), distance=3.0, location=(0.0, 0.0, 0.3))
+    yield from stage.settle()
+    yield from start_sketching(stage)
+
+
+def undo_and_redo(stage: GuiStage):
+    """Ctrl+Z to the step before the folded turn, Ctrl+Shift+Z back onto its
+    turn-start step, which still holds the strokes' stamp."""
+    yield from stage.press("Z", ctrl=True)
+    yield from stage.settle()
+    yield from stage.press("Z", ctrl=True, shift=True)
+    yield from stage.settle()
+
+
+def expect_pending(what: str) -> None:
+    from whittle.addon import sketch
+
+    expect_equal(sketch.stroke_counts(sketch_object()), {0: 1}, f"the strokes {what}")
+
+
+def fold_and_undo(stage: GuiStage, *, leave_draw_mode: bool):
+    from whittle.addon import sketch
+
+    script = stage.script("fold_undo", [FOLDS, {"steps": [say("Done.")], "finish": done("Done.")}])
+    yield from sketch_a_crate(stage)
+    yield from draw(stage, STROKE)
+    if leave_draw_mode:
+        sketch.end_session(None)
+        yield Until(lambda: sketch.current_session() is None, "sketch mode to end")
+        yield from stage.settle()
+    node = stage.submit("", script)
+    yield stage.finished(node)
+    expect(stage.history().tree.node(node).folded, f"{node} did not fold")
+    expect_pending("after the fold")
+    yield from undo_and_redo(stage)
+    expect_pending("after an undo and a redo onto the turn's start")
+    if leave_draw_mode:
+        bpy.data.objects["Crate"].location.x += 0.1
+        bpy.ops.ed.undo_push(message="A later step")
+    else:
+        yield from draw(stage, LATER_STROKE)
+    yield from stage.press("Z", ctrl=True)
+    yield from stage.settle()
+    expect_pending("after undoing a later step")
+    expect(operators.can_retry(stage.history(), stage.ctl, node), f"{node} cannot be retried")
+    _ctl, again = operators.retry(bpy.context, node, str(script))
+    yield stage.finished(again)
+    expect_equal(stage.history().tree.node(again).status, "complete", "the retried turn")
+
+
+@phase("fold_undo")
+def fold_undo(stage: GuiStage):
+    yield from fold_and_undo(stage, leave_draw_mode=False)
+
+
+@phase("fold_undo_object")
+def fold_undo_object(stage: GuiStage):
+    yield from fold_and_undo(stage, leave_draw_mode=True)
+
+
+@phase("fold_undo_chat")
+def fold_undo_chat(stage: GuiStage):
+    script = stage.script("fold_undo_chat", [
+        {"steps": [say("Moving."), exec_("move", "bpy.data.objects['Crate'].location.x += 0.1")],
+         "finish": done("Moved.")}, FOLDS])
+    yield from sketch_a_crate(stage)
+    first = stage.submit("Move the crate.", script)
+    yield stage.finished(first)
+    yield from draw(stage, STROKE)
+    node = stage.submit("", script)
+    yield stage.finished(node)
+    expect(stage.history().tree.node(node).folded, f"{node} did not fold")
+    operators.new_chat(bpy.context)
+    yield from stage.settle()
+    yield from undo_and_redo(stage)
+    expect_pending("after an undo and a redo in another chat")
+
+
 def select_crate(stage: GuiStage):
     """The crate scene, the crate selected by a click in the viewport: the
     user's last undo step, as it would be before a turn."""
@@ -1084,6 +1172,46 @@ def shortcut(stage: GuiStage, text: str):
     yield from stage.type_text(text)
     yield from stage.key("RET")
     yield 0.2
+
+
+@phase("send_key_errors")
+def send_key_errors(stage: GuiStage):
+    python = os.environ["WHITTLE_AGENT_PYTHON"]
+
+    def state():
+        return stage.ctl.process.state if stage.ctl is not None else None
+
+    def expect_prompt_kept(what: str):
+        expect("lid" in stage.props.prompt, f"the prompt {what}: {stage.props.prompt!r}")
+
+    stage.crate()
+    stage.props.prompt = "Add a lid."
+    yield from send_key(stage)
+    yield Until(lambda: state() == "needs_key", "Shift+Alt+Enter to find no API key")
+    expect_prompt_kept("after Shift+Alt+Enter with no key")
+    yield from shortcut(stage, "Add a lid.")
+    yield from stage.settle()
+    expect_equal(state(), "needs_key", "the agent after Enter with no key")
+    expect_prompt_kept("after Enter with no key")
+
+    os.environ["WHITTLE_AGENT_PYTHON"] = str(stage.work / "no-such-python")
+    yield from send_key(stage)
+    yield Until(lambda: state() == "needs_setup", "Shift+Alt+Enter to find no environment")
+    expect_prompt_kept("after Shift+Alt+Enter with no environment")
+    yield from send_key(stage)
+    yield from shortcut(stage, "Add a lid.")
+    yield from stage.settle()
+    expect_equal(state(), "needs_setup", "the agent after the keys while Send is dim")
+    expect_prompt_kept("after the keys while Send is dim")
+
+    os.environ["WHITTLE_AGENT_PYTHON"] = python
+    script = stage.script("send_key_errors", [{"steps": [say("Done.")], "finish": done("Done.")}])
+    bpy.context.window_manager.whittle_fake_script = str(script)
+    yield from send_key(stage)
+    yield Until(lambda: stage.ctl is not None and (stage.ctl.last_finished or {}).get("turn_id"),
+                "the key to find the environment and send")
+    log = (stage.work / "phase-0.log").read_text(errors="replace")
+    expect("Traceback" not in log, "a key's error came out as a Python traceback")
 
 
 @phase("shortcut")
@@ -1852,7 +1980,7 @@ def preferences_defaults(stage: GuiStage):
                  "the Defaults box's fields")
     expect_equal([r["prop"] for r in in_box(page, "Files") if r["kind"] == "prop"], ["store_chats"],
                  "the Files box's fields")
-    expect(not p.usage_data, "Send Claude Code usage data is on by default")
+    expect(not p.usage_data, "Send Claude CLI usage data is on by default")
     yield from shoot_preferences(stage, "preferences-defaults", "Defaults")
     popover = Spy(ui.WHITTLE_PT_agent)
 

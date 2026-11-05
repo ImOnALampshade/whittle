@@ -30,6 +30,9 @@ MODAL_WAIT = 10.0
 
 
 class BridgeError(Exception):
+    """An error reply: a handler raises it to answer the agent's call with this
+    code, message and optional detail."""
+
     def __init__(self, code: str, message: str, detail: str | None = None):
         super().__init__(f"{code}: {message}")
         self.code = str(code)
@@ -46,6 +49,9 @@ ResultCallback = Callable[[bool, dict], None]
 
 
 class Bridge:
+    """The Blender end of one agent connection: checks the handshake, moves
+    messages both ways and runs the agent's calls on the main thread."""
+
     def __init__(self, process, listener: socket.socket, token: str,
                  handlers: dict[str, Handler], on_event: Callable[[dict], None]):
         self.process = process
@@ -71,18 +77,23 @@ class Bridge:
     # -- public API -----------------------------------------------------------
 
     def call(self, method: str, params: dict, on_result: ResultCallback | None = None) -> str:
+        """Queues a call in the outbox and returns its id; flush or the next tick
+        sends it. on_result gets (ok, data or error) when the result arrives, or
+        (False, error) from fail_pending if the agent ends first."""
         call_id = self._ids.next()
         self.pending[call_id] = on_result
         self._send(protocol.call(call_id, method, params))
         return call_id
 
     def resolve(self, call_id: str, data: dict) -> bool:
+        """Answers a Deferred call. False when that call is no longer waiting."""
         if self.deferred.pop(call_id, None) is None:
             return False
         self._reply(call_id, data)
         return True
 
     def fail_deferred(self, code: str, message: str) -> None:
+        """Answers every call still Deferred with this error."""
         for call_id in list(self.deferred):
             del self.deferred[call_id]
             self._send(protocol.err(call_id, code, message))
@@ -92,6 +103,9 @@ class Bridge:
         self.interrupted = value
 
     def tick(self) -> float | None:
+        """One pass: accepts and reads the agent, polls its process, runs queued
+        calls and sends what waits. Returns the seconds until the next tick, or
+        None to stop ticking."""
         if self.closed:
             return None
         self.ticks += 1
@@ -107,6 +121,8 @@ class Bridge:
         return self._interval()
 
     def flush(self) -> None:
+        """Sends as much of the outbox as the socket takes now. A failed send
+        counts as a lost connection."""
         while self._outbox and self.sock is not None:
             try:
                 sent = self.sock.send(self._outbox)
@@ -119,12 +135,16 @@ class Bridge:
             del self._outbox[:sent]
 
     def fail_pending(self, code: str, message: str) -> None:
+        """Fails this side's calls the agent never answered: each callback gets
+        this error."""
         pending, self.pending = self.pending, {}
         for on_result in pending.values():
             if on_result is not None:
                 on_result(False, protocol.error_body(code, message))
 
     def close(self) -> None:
+        """Closes both sockets and drops queued and deferred calls unanswered.
+        Closing twice is harmless."""
         if self.closed:
             return
         self.closed = True
@@ -141,6 +161,8 @@ class Bridge:
 
     @property
     def busy(self) -> bool:
+        """Whether calls wait in the queue or bytes in the outbox, which makes the
+        bridge tick faster."""
         return bool(self.queue or self._outbox)
 
     # -- handshake and reading ----------------------------------------------
@@ -348,6 +370,8 @@ _timer: Callable[[], float | None] | None = None
 
 
 def start_timer(bridge: Bridge) -> None:
+    """Drives bridge.tick() from a Blender timer that survives file loads,
+    replacing any timer already running."""
     global _timer
     stop_timer()
 
@@ -373,6 +397,7 @@ def start_timer(bridge: Bridge) -> None:
 
 
 def stop_timer() -> None:
+    """Unregisters the bridge's timer, if there is one."""
     global _timer
     if _timer is not None and bpy.app.timers.is_registered(_timer):
         bpy.app.timers.unregister(_timer)
@@ -380,4 +405,6 @@ def stop_timer() -> None:
 
 
 def timer_registered() -> bool:
+    """Whether the timer is still running: False after stop_timer, and also once
+    its tick has stopped itself, which clears the timer."""
     return _timer is not None and bpy.app.timers.is_registered(_timer)

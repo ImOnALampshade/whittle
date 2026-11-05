@@ -133,6 +133,15 @@ class FakeRunnerTest(FakeRunnerCase):
         data = await self.finished()
         self.assertTrue(data["is_error"])
 
+    async def test_finish_reports_its_cost(self):
+        runner = self.runner([{"steps": [], "finish": {"cost": 0.25}}, {"steps": []}])
+        await runner.start_session({})
+        await runner.submit("n0001", "/b", "")
+        self.assertEqual((await self.finished())["cost_usd"], 0.25)
+        await runner.submit("n0002", "/b", "")
+        second = await self.blender.wait_event("turn_finished", where=lambda d: d["turn_id"] == "n0002")
+        self.assertEqual(second["data"]["cost_usd"], 0.0, "no cost means none")
+
     async def test_fail_exits_with_code_3(self):
         runner = self.runner([{"steps": [{"fail": "boom"}, {"say": "never"}]}])
         await runner.start_session({})

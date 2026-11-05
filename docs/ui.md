@@ -187,7 +187,14 @@ Restart and Retry, the turn the crash ended shows a dim `Interrupted` (`PAUSE`) 
 While the box is shown, the conversation's notes from outside any turn (a run that did
 not start) are left out: the box says why.
 
-While the environment needs setting up, Send is disabled.
+While the environment needs setting up, Send is disabled (tooltip `Set up Claude to send`).
+Enter and Shift+Alt+Enter follow the button: they do nothing, but look for the environment
+first (`setup.recheck`), so one that has appeared since, set up in another Blender say, is
+found. `Set Up…` looks first too: with the environment there it reports `The agent
+environment is ready`, with no download dialog. Changing Agent Python or Environment Folder
+in the preferences clears the box, as adding a key clears the key box, and the next start
+looks again. A redraw never reads the environment, so after a setup in another Blender the
+button stays dim until one of those.
 
 "No API key": a start found no key (the agent's `needs_key` state, architecture §2
 Authentication) and none has been added since; Send stays enabled and tries again.
@@ -425,12 +432,19 @@ failure):
   the right of its first line
   (`whittle.retry`: a recorded failure is branched then sent; a folded one never left
   its parent, so its prompt goes back in the box if it is empty and its pending strokes
-  and references are sent as they are).
+  and references are sent as they are). A turn whose images were too big (`too_large` on
+  its node) has `Edit` there instead (`whittle.history_branch`, `GREASEPENCIL`): the same
+  request would fail the same way. Its reason, `Images too big: send fewer or smaller`, fits
+  those 2 lines at the default width; the fuller advice is in the docs site. Images over
+  `formats.REQUEST_IMAGE_BYTES` never make a turn: Send, Retry or an amendment reports
+  `Images too big (N MB, limit 180 MB): send fewer or smaller` and nothing is sent.
 - **A failed turn that changed nothing** is folded in the tree (never current). It still
   shows after its parent while it is the latest thing that happened in this Blender
   session, with its failure and `Retry`; it disappears at the next send or when Blender
   restarts. Its prompt does not go back into the prompt box (the bubble shows it, and
-  Retry or ⋯ → Edit & Resend bring it back).
+  Retry or ⋯ → Edit & Resend bring it back). Its strokes are pending again, so Send works
+  with a blank box: it carries that turn's prompt with them, as Retry does, while the
+  conversation shows the turn. A typed prompt replaces it.
 
 **A collapsed turn** (older turns of the path): one
 `layout.panel(f"whittle_turn_{node}", default_closed=True)` whose header is the prompt
@@ -514,8 +528,9 @@ types are a `row(align=True)` of their own, then the active type's name (dim):
 material here`).
 
 **Stroke count**, only when there is something to count: outside a turn, the pending
-strokes, the strokes an earlier turn was sent with that are still shown (a stopped or
-failed sketch turn keeps them), and the stored views (`3 strokes · 2 views`, `1 stroke
+strokes, the strokes an earlier turn was sent with that are still shown (a stopped turn,
+or one that failed after changing the scene, keeps them; a folded turn's are pending
+again), and the stored views (`3 strokes · 2 views`, `1 stroke
 sent · 1 view`, `1 view`), so Clear and the view list are in reach whenever the
 viewport shows something; during a turn, the strokes it was sent with and those
 drawn since (`3 sent · 1 new`), left out when both are zero. It is the header of
@@ -548,7 +563,7 @@ mode, Draw Mode included; listed and rebindable in Preferences → Keymap under 
 | Shift+Alt+D | `whittle.sketch_toggle` | Toggle Sketch Mode: starts sketching, or stops |
 | Shift+Alt+N | `whittle.next_stroke_type` | the next stroke type (free → add → carve → crease → region → note) |
 | Shift+Alt+V | `whittle.capture_view` | Capture View |
-| Shift+Alt+Enter | `whittle.send_key` | as Enter in the prompt box: Send between turns, Amend while Claude works (with typed text or new strokes), Answer while Claude asks (with an answer typed); nothing when there is nothing to send |
+| Shift+Alt+Enter | `whittle.send_key` | Send between turns (unlike Enter in the box, also with strokes or a reference and no text), Amend while Claude works (with typed text or new strokes), Answer while Claude asks (with an answer typed); nothing when there is nothing to send |
 
 ### 3.9 Composer
 
@@ -788,7 +803,7 @@ nothing. The current chat is never included.
 `Rename`) with the title field, filled with the current title.
 
 **A chat made on another machine** (someone else's file, or the user's own from
-another computer; architecture §14) shows read-only until continued: its conversation
+another computer; architecture §14) has Send disabled until continued: its conversation
 and history as usual, and above the sketch row a small box (`ui.draw_foreign`):
 
 ```
@@ -809,6 +824,10 @@ sketch and references can still be prepared. **Continue** (`whittle.chat_continu
 for files you trust) marks the chat as continued here, for good: the box goes and Send
 works. New Chat in the chat menu stays available. Chats from files saved before
 Whittle recorded where a chat was made never ask.
+
+Going back in the chat's history stays allowed before Continue, though it changes the
+scene: the gate exists to stop text going to Claude from a chat this install did not
+start, and looking through the chat helps the user decide.
 
 **The same file open in another Blender** (each keeps its own copy of the chats): while
 the other Blender has it open, one dim line with `INFO` at the top of the panel, under
@@ -868,8 +887,8 @@ names it (`Opus 5.5 ▾`) and opens the model menu. A new chat starts on the add
 **Model** preference (`claude-opus-5-5` unless changed); a chat's first turn keeps the
 model it was sent with, so changing the preference later moves only chats that have no
 turn yet. Changing a chat's model applies from its next turn, in the same Claude
-session (the conversation carries on); the button is hidden while a turn runs, and the
-menu's items say why they are disabled while Claude asks.
+session (the conversation carries on); the button is hidden while a turn runs, which
+includes while Claude asks.
 
 Each chat also has an effort, how much Claude thinks: Low, Medium or High, picked in
 the same menu. A new chat runs at High; a change applies from the chat's next turn, in
@@ -1219,6 +1238,10 @@ Switched to an older chat (the scene was left as the last chat had it):
 | Open Render | `whittle.open_image` (the turn's last render; hidden without one) | `IMAGE_DATA` |
 | Open Transcript | `whittle.open_transcript` | `TEXT` |
 
+Open Transcript reads the stored chat, so it needs no running agent and is dim only in a
+chat with no turns. Its tooltip: `Show this chat's full transcript in a Text Editor. It is a
+view: the file does not save it`.
+
 The start's menu has Go Back to the Start and Compare With Current. A folded turn's menu has
 Edit & Resend (which only puts its prompt back in the box: the scene never left its
 parent and its strokes are still pending) and Open Transcript.
@@ -1252,7 +1275,7 @@ Added for the chat sidebar:
 | Id | Label | Does |
 |---|---|---|
 | `whittle.branch_switch` | Switch Branch | `node`: restore the newest leaf under it; undo step |
-| `whittle.retry` | Retry | `node`: resend a failed turn's request from its parent (branch then send; a folded turn just sends); restarts a stopped agent on the way |
+| `whittle.retry` | Retry | `node`: resend a failed turn's request from its parent (branch then send; a folded turn just sends); restarts a stopped agent on the way; refuses a `too_large` turn |
 | `whittle.turn_menu` | Turn | `node`: opens the turn's ⋯ menu (§5) |
 | `whittle.ref_menu` | Reference | `index`: opens the reference's ⋯ menu (§5) |
 
@@ -1273,7 +1296,7 @@ Added for sketching (§3.8):
 |---|---|---|
 | `whittle.sketch_toggle` | Toggle Sketch Mode | Shift+Alt+D: `whittle.sketch` or `whittle.sketch_stop`, whichever applies; undo step |
 | `whittle.view_snap` | Snap to View | `id`: moves the viewport to the view and makes it current; no undo step, like Blender's view operators |
-| `whittle.send_key` | Send or Amend | Shift+Alt+Enter: runs what Enter in the prompt box would (`operators.send_key_action`): `whittle.submit` between turns, `whittle.amend` during a turn, `whittle.answer` while Claude asks; nothing when there is nothing to send |
+| `whittle.send_key` | Send or Amend | Shift+Alt+Enter: runs what Enter in the prompt box would (`operators.send_key_action`): the body of `whittle.submit` between turns, of `whittle.amend` during a turn, of `whittle.answer` while Claude asks (`operators.key_send`, after their polls); nothing when there is nothing to send |
 
 `WindowManager.whittle_show_view_markers` (BoolProperty, `SKIP_SAVE`, default on) holds
 whether the view markers show while sketching.
@@ -1322,7 +1345,7 @@ Changed:
 
 - `whittle.submit` keeps its id; the button text is `Send` / `Send as Branch` (or
   `Branch`). It clears `prompt` when the turn is accepted, and a dropped run puts it
-  back. Its poll explains a comparison with `poll_message_set`.
+  back. Its poll explains a comparison and a missing environment with `poll_message_set`.
 - `whittle.history_branch` on a folded turn only puts its prompt back
   (`operators.can_branch` allows it while the scene is at its parent).
 - `whittle.stroke_type` has a per-type `description`.
@@ -1365,6 +1388,10 @@ before the undo (`undo_pre`) they get one (`Whittle: <node> so far`); Ctrl+Shift
 them back. A second Ctrl+Z with no edit since goes on past the turn's start. Ctrl+Z during a comparison ends it without
 touching the scene (the undo put back a scene from before it). An undo that takes the
 sketch out of Draw Mode ends the sketch session.
+
+A folded turn pushes no step of its own, and its turn-start step still holds the turn's
+stamp on the strokes. After an undo or redo onto it they are pending again, also after a
+chat change: the folded turns of the chat the step belongs to count.
 
 Chats are not undone: New Chat, a switch, a rename and a delete push no undo step, and
 Ctrl+Z never changes the current chat. An undo step that holds another chat's node
@@ -1481,6 +1508,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `interrupted` | thumbnail, then one dim "Stopped, changes kept" |
 | `error_turn` | 4.9; recovered error not red; the failure one red line (wrapped at most once) with Retry beside it |
 | `folded_failure` | a failed turn that changed nothing: shown with Retry, no tree node, prompt box empty, no start row |
+| `too_large` | the reason in red (wrapped at most once) with Edit, not Retry, beside it |
 | `crashed` | one red line with Restart and Retry; the turn ends with a dim "Interrupted", without its own Retry |
 | `setup_needed` | neutral box with Set Up…; Send disabled; no repeated note |
 | `key_needed` | neutral box `Add an API key to start` with its dim line, Preferences… and Get a Key; the prompt still in the box; no repeated note |
@@ -1519,5 +1547,5 @@ the popup's first item.
 General checks on every shot: no text clipped by Blender's own `...` at 280 px (Whittle
 shortens with `…` at a word's end), except inside a one-line text field; nothing said
 twice (a draft, a busy sign, a list and its heading); no row wider than the sidebar;
-text lines use the width they have; red only in `error_turn`, `folded_failure` and
-`crashed`.
+text lines use the width they have; red only in `error_turn`, `folded_failure`,
+`too_large` and `crashed`.

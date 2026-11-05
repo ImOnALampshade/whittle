@@ -250,8 +250,9 @@ session can start from the scene, from nothing, from a primitive or from an asse
 
 - `whittle/venv.py` (stdlib): reads the lock (31 pins with hashes, `pywin32` for Windows only), the venv's status
   (`missing`, `ready`, `stale`, `broken`, `foreign`) from its `whittle-venv.json` marker,
-  the create / install / verify commands (`pip install --isolated --require-hashes
-  --only-binary :all: --no-deps -r requirements.lock`, never an upgrade), a scrubbed
+  the create / install / verify commands (`pip install --isolated --no-cache-dir --index-url
+  https://pypi.org/simple --require-hashes --only-binary :all: --no-deps -r
+  requirements.lock`, never an upgrade), a scrubbed
   environment, and `VenvSetup`, which runs them as subprocesses with a timeout each,
   cancel, a log, and a dry run. Tested under `.venv/bin/python` with a fake process and
   clock plus one real-subprocess run that installs nothing (`tests/agent/test_venv.py`).
@@ -357,8 +358,22 @@ these are fixed, each with a regression test.
   (`folded: true`) with their request and transcript, but hidden from the tree, never
   current, and not restorable or branchable; the next submit forks the conversation at
   the parent, so the agent never sees the failed exchange. A failed turn that did edit
-  the scene is still a node. The model is described in `architecture.md` §6
-  (`test_history.OutcomeTest`, `test_tree`).
+  the scene is still a node. A fold unstamps its strokes, also after an undo or redo onto
+  its turn-start step (`history.release_folded_strokes`, the GUI checks `fold_undo`,
+  `fold_undo_object` and `fold_undo_chat`), and Send on a blank box carries its prompt. The
+  model is described in `architecture.md` §6 (`test_history.OutcomeTest`, `test_tree`).
+- **Images too big for a request** never end a turn with a bare stop: the SDK's read limit
+  is 128 MiB, a request over 180 MiB of images is refused when its bundle is written, and a
+  turn that fails for size says so and offers Edit in place of Retry (architecture §5 Image
+  limits, `test_runner`, `test_bundle`, `test_sidebar`, screenshot `too_large`).
+- **The resume warning stays** on the turn it belongs to, stored as a `warning` record, also
+  when the resumed session ends before taking its run's turn (`test_history_sessions`).
+- **The transcript is a view**: Open Transcript reads the stored chat, with no controller, and
+  its Text is runtime data that no file keeps and that ends with its chat, undo included
+  (`tests/blender/transcript_file.py`, `test_chats`).
+- **Keys report errors as lines**: Shift+Alt+Enter and Enter run the send body on their own
+  operator, follow Send's poll, and look again for an environment that has appeared
+  (`test_keys.SendRoutesTest`, the GUI check `send_key_errors`).
 - **Compare → End and Toggle back to live** put the target list back as it was, found
   by `whittle_uid` (`test_compare.CompareTest.test_end_keeps_the_target_list`).
 - **Prompt-only requests**: a request with no strokes and no views says so plainly in
@@ -398,9 +413,9 @@ shot in a GUI Blender without a person at the keyboard.
   item shows as hovered (a menu keeps its last hovered item lit when the pointer moves onto
   nothing, and lets go of it when the window loses focus; the popup stays open), and the
   window is shot again and cropped to what changed.
-- `tests/screens/scenarios.py`: 23 states (empty, start, prompt_typed, prompt_only_done,
+- `tests/screens/scenarios.py`: 24 states (empty, start, prompt_typed, prompt_only_done,
   sketching, streaming, conversation, branched, branch_edit, asking, interrupted,
-  error_turn, folded_failure, crashed, setup_needed, key_needed, comparing, manual_targets,
+  error_turn, folded_failure, too_large, crashed, setup_needed, key_needed, comparing, manual_targets,
   long_session, history_popover, turn_menu, references, developer), reached through
   `operators.submit_sketch`, `branch_node`, `compare_node`, `interrupt`, `targets`,
   `sketch.start_session` and the controller's state, never through the layout, with fake
@@ -446,10 +461,11 @@ timer).
 - `tests/gui/checks.py`: `GuiStage` (the screenshot stage plus simulated keys, clicks,
   drags and typing, `button()` running an operator as a sidebar button does, in the
   sidebar region with an undo step, File-menu saves and opens, and the fake agent's log)
-  and 26 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
-  `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `undo_compare`,
+  and 30 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
+  `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `fold_undo`,
+  `fold_undo_object`, `fold_undo_chat`, `undo_compare`,
   `modal_wait`, `save_as`, `recover_autosave`, `recover_last_session`,
-  `crash_keeps_chats`, `dirty_flag`, `send_key`, `shortcut`, `auto_targets`, `branch_undo`,
+  `crash_keeps_chats`, `dirty_flag`, `send_key`, `send_key_errors`, `shortcut`, `auto_targets`, `branch_undo`,
   `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`, `preferences_key`,
   `preferences_environment`, `preferences_defaults`. Each says what it confirms in the
   catalog. The preference checks open the Preferences through Preferences… as the
@@ -589,12 +605,13 @@ its own conversation, history tree and Claude session; the panel shows the curre
 - **SDK transcripts** go into each chat's `sdk/` through a `SessionStore`
   (`agent/store.py`), so a chat resumes after the file moved or on another machine.
 - **Chats from another machine**: each chat records the install that made it (a
-  random id in Whittle's user folder). Another install's chat opens read-only with a
+  random id in Whittle's user folder). Another install's chat opens with a
   `Continue this chat?` box: Send is disabled with a tooltip until Continue, which is
   stored with the chat so it never asks again; New Chat stays available. Chats from
   before the marker never ask.
 - **The same file in two Blenders** keeps a cache in each, as before, and while the
-  other's claim is live the sidebar has one dim line saying the chats won't merge.
+  other has the file, which its open mark says (or its claim on a recovered copy), the
+  sidebar has one dim line saying the chats won't merge, with or without chats.
 - **No migration**: the code for earlier development layouts (a single-session folder,
   `<name>.whittle/` beside a file and its `.replaced-<time>/` copies, the user folder's
   `caches/<sha1>/` and `dev-sessions/`) was removed.
@@ -621,6 +638,19 @@ its own conversation, history tree and Claude session; the panel shows the curre
   `tests/blender/test_models.py` (the Effort section, a switch between turns with the
   fake agent).
 
+**The documentation site** (`docs/site/`, README Documentation). A Sphinx site of 27 pages:
+a home page, quickstart, walkthrough, 14 guides, 6 development pages and 4 of API reference
+autodoc builds from the docstrings.
+- `docs.sh` builds it offline from `.venv-docs/`, a docs-only venv from
+  `docs/site/requirements.lock`, with Blender and the SDK mocked. `--strict` makes warnings
+  errors, `--out` keeps a build wholly in one folder. None of it is in the zip.
+- `docs_shots.sh` shoots the committed screenshots from a spec per page
+  (`docs/site/shots/`; `tests/docshots/` runs them, sharing `tests/screens/steps.py` with the
+  scenarios). Each Blender has a hidden session and folders of its own, within a
+  machine-wide number of slots, so pages can be shot side by side.
+- Tests: `tests/agent/test_docs_site.py` (every module documented, every page reachable,
+  every image and shot on its page), `test_docshots.py`.
+
 **CI and releases** (README, CI and releases; decisions, Continuous integration).
 - `.github/workflows/`: `ci.yml`, `release.yml` and the shared `test.yml`.
   `.github/scripts/`: `fetch_blender.py`, `release_tag.py` and the `timeout` shim.
@@ -639,6 +669,8 @@ timeout 300 blender -b --factory-startup --python-exit-code 1 --python tests/ble
 ./gui_checks.sh                 # the GUI checks (real GUI Blenders, hidden), ~4 minutes
 ./gui_checks.sh undo_turn       # one of them; its logs are in build/gui-checks/undo_turn/
 WHITTLE_GUI=1 ./run_tests.sh    # the offline suite, then the GUI checks
+./docs.sh --strict              # the documentation site, warnings as errors
+./docs_shots.sh --all           # its screenshots (real GUI Blenders, hidden)
 ```
 
 With `-k`, a side where nothing matches exits 5 (unittest's "no tests ran", which
@@ -705,6 +737,29 @@ them at each save. Nothing is written beside the `.blend`.
   platform, even where pip installs the same 30 packages, so each one needs **Reinstall**.
   CI's Blender bundles Python 3.13, so it can only exercise the cp313 wheel of 311; the
   cp314 wheel is not exercised by CI.
+- **Found while writing the documentation site**. The site describes what happens today, so
+  a fix here also changes its page:
+  - **A system-wide pip config** still reaches setup through `extra-index-url`, `find-links`
+    and `no-index`, which no pip flag undoes, and its `no-index` makes setup fail. Decided, not
+    open (decisions.md, Agent process): the code stays, so a proxy or CA set only in pip.conf
+    keeps working, and the hashes are the protection.
+
+- **Found while fixing those**:
+  - **Big images under the request limit** can still end the session: many small ones the CLI
+    does not recompress go over the read limit. The user gets the images reason and Edit, not a
+    bare stop, but the add-on cannot predict what the CLI will shrink.
+  - **Stamps carry no chat**: a step made in chat A that holds strokes stamped by chat B's kept
+    failure, with the number of a fold in A, shows them as pending after an undo. Harmless, since
+    the next send stamps every visible stroke.
+  - **After a setup in a second Blender** the Send button stays dim until Enter,
+    Shift+Alt+Enter, Set Up… or Start Agent, because a poll never reads the venv.
+  - **The resume warning, between a refused submit and the next Send**, is not in the sidebar:
+    the refused turn's entry sits after it. It comes back on the next turn the agent takes.
+  - **A transcript Text from an older Whittle** stays until a save with Whittle enabled, and
+    autosave and crash recovery files, which run no `save_pre`, could still carry it.
+  - **A crash, then a new hostname**, leaves an open mark or claim that reads as another
+    machine's, so the second-Blender line shows until it ages out after 30 days.
+
 - **The chats' cache**:
   - A chat's conversation resumes through its transcript store when its cwd changed
     (a copy's fresh cache); that a real CLI resumes and forks from a
@@ -846,7 +901,7 @@ them at each save. Nothing is written beside the `.blend`.
 - **Folded turns** keep their request on disk; Edit & Resend on one only puts its prompt
   back (the scene never left its parent). Send takes the prompt out of the box and a
   fold does not put it back (the folded turn shows it), and a failed turn keeps its
-  strokes. A folded turn shows in the conversation only in the Blender
+  strokes (a folded one's are pending again, and Send on a blank box carries its prompt). A folded turn shows in the conversation only in the Blender
   session that ran it. A turn that failed after only reading the scene folds even if
   the user edited the target meanwhile: the user's edit stays in the scene.
 - **Settings restart**: a changed setting is noticed when an operator next looks up the
@@ -977,3 +1032,7 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     would, and check that the palette and bevel style reach `request.json`:
     `preferences_defaults`). Click into Bevel Style: none, subtle and chunky are offered,
     and other text can be typed.
+14. **Images too big**: attach references that come to more than 180 MB and Send: an error
+    says how big they are, nothing is sent, the prompt and chips stay, and the next turn takes
+    the same number. With `too_large.json`, Send: the turn ends with its reason in red and
+    **Edit** in Retry's place; Edit brings the request back to change.

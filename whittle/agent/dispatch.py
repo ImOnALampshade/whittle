@@ -11,17 +11,33 @@ from .connection import BridgeCallError
 
 
 class Runner(Protocol):
-    async def start_session(self, params: dict) -> None: ...
+    """What the dispatcher calls on a runner: SdkRunner, or FakeRunner with --fake."""
+
+    async def start_session(self, params: dict) -> None:
+        """Starts a session from session_params' result, replacing any live one."""
+        ...
     async def submit(self, turn_id: str, bundle_dir: str, prompt: str,
                      context: tuple[str, ...] = (), model: str | None = None,
-                     effort: str | None = None) -> None: ...
+                     effort: str | None = None) -> None:
+        """Starts a turn and returns; the turn reports through events."""
+        ...
     async def amend(self, turn_id: str, text: str, bundle_dir: str | None,
-                    number: int | None) -> None: ...
-    async def interrupt(self, turn_id: str) -> None: ...
-    async def close(self) -> None: ...
+                    number: int | None) -> None:
+        """Adds to the running turn without stopping it; number names the amendment
+        in the events about it."""
+        ...
+    async def interrupt(self, turn_id: str) -> None:
+        """Asks the turn to stop; a turn that is not running is ignored."""
+        ...
+    async def close(self) -> None:
+        """Stops whatever is running before the agent exits."""
+        ...
 
 
 def require(params: dict, key: str, types, *, default=..., optional: bool = False):
+    """A call's parameter, type-checked (a bool does not pass as an int). A
+    missing one, or a null one when optional, gives the default, else None
+    when optional; otherwise it is a bad request."""
     if key not in params or (optional and params[key] is None):
         if default is not ...:
             return default
@@ -39,6 +55,7 @@ def _as_tuple(types) -> tuple:
 
 
 def require_effort(params: dict, **kwargs) -> str | None:
+    """The effort parameter, one of EFFORTS; keywords go to require."""
     effort = require(params, "effort", str, **kwargs)
     if effort is not None and effort not in EFFORTS:
         raise BridgeCallError(ErrorCode.BAD_REQUEST, f"parameter 'effort' must be one of {', '.join(EFFORTS)}")
@@ -69,7 +86,10 @@ def session_params(params: dict) -> dict:
 
 
 def make_dispatcher(runner: Runner, shutdown: asyncio.Event):
+    """The handler for Connection.set_handler, which serves Blender's calls on
+    runner and sets shutdown when Blender asks for it."""
     async def dispatch(method: str, params: dict) -> dict:
+        """Answers one call; a BridgeCallError goes back as its error result."""
         if method == Method.PING:
             return {"time": time.time()}
         if method == Method.SHUTDOWN:

@@ -50,6 +50,8 @@ SKETCH_FRAME = -1048574
 
 
 def find_sketch_object():
+    """The sketch object, or None; an object of that name that is not Grease
+    Pencil does not count."""
     obj = bpy.data.objects.get(SKETCH_NAME)
     if obj is not None and obj.type == "GREASEPENCIL":
         return obj
@@ -57,6 +59,8 @@ def find_sketch_object():
 
 
 def ensure_sketch_object(scene):
+    """The sketch object, made if missing, linked into the scene and holding the
+    stroke material."""
     obj = find_sketch_object()
     if obj is None:
         gp = bpy.data.grease_pencils.new(SKETCH_NAME)
@@ -82,6 +86,8 @@ def _stroke_material():
 
 
 def ensure_layer(gp, stroke_type: str):
+    """(layer, drawing) for a stroke type, made if missing: the layer tinted in
+    the type's colour and unlit, the drawing its sketch key's."""
     layer = gp.layers.get(stroke_type)
     if layer is None:
         layer = gp.layers.new(stroke_type, set_active=False)
@@ -126,6 +132,7 @@ def ensure_sketch_layers(scene):
 # -- the active stroke type ---------------------------------------------------
 
 def active_type(obj) -> str:
+    """The stroke type new strokes go on: the active layer's, else 'free'."""
     layer = obj.data.layers.active
     return layer.name if layer is not None and layer.name in LAYER_TYPES else "free"
 
@@ -140,6 +147,8 @@ def set_active_type(obj, stroke_type: str) -> None:
 
 
 def next_type(obj) -> str:
+    """The stroke type after the active one, wrapping at the end; nothing is
+    made active."""
     i = LAYER_TYPES.index(active_type(obj))
     return LAYER_TYPES[(i + 1) % len(LAYER_TYPES)]
 
@@ -148,6 +157,9 @@ def next_type(obj) -> str:
 
 @dataclass
 class SketchStroke:
+    """One stroke as read from a drawing: where it lives (layer, drawing and
+    index there), its view, turn and amendment tags (0 for none), and its
+    per-point values."""
     layer: str
     drawing: object
     index: int
@@ -232,6 +244,7 @@ def read_strokes(obj) -> list[dict]:
 # -- tagging ------------------------------------------------------------------
 
 def ensure_int_attribute(drawing, name: str):
+    """The drawing's per-stroke INT attribute of that name, added if missing."""
     attr = drawing.attributes.get(name)
     if attr is None:
         attr = drawing.attributes.new(name, "INT", "CURVE")
@@ -255,11 +268,15 @@ def _set_where(obj, name: str, value: int, predicate, *, include_hidden: bool = 
 
 
 def untagged(obj) -> list[tuple[object, int]]:
+    """(drawing, stroke index) of every stroke with no view yet, hidden ones
+    included."""
     return [(drawing, i) for _layer, drawing in _type_layers(obj, True)
             for i, v in enumerate(_curve_ints(drawing, VIEW_ATTRIBUTE)) if v == 0]
 
 
 def tag_strokes(obj, view_id: int, *, only_untagged: bool = True) -> int:
+    """Tags strokes with the view: only those with none yet, or all of them when
+    only_untagged is off. Returns how many changed."""
     return _set_where(obj, VIEW_ATTRIBUTE, view_id,
                       (lambda v: v == 0) if only_untagged else (lambda v: True))
 
@@ -294,7 +311,7 @@ def stamp_strokes(obj, turn_number: int) -> int:
 
 def unstamp_strokes(obj, turn_number: int) -> int:
     """Marks the strokes stamped with this turn as unsent again, hidden ones
-    included, for a run that never reached the agent."""
+    included, for a run that never reached the agent or a turn that folded."""
     return _stamp(obj, lambda t, a: t == turn_number, 0, 0)
 
 
@@ -319,6 +336,7 @@ def stroke_counts(obj) -> dict[int, int]:
 
 
 def pending_count(obj) -> int:
+    """Visible strokes not sent yet; 0 when there is no sketch object."""
     return stroke_counts(obj).get(0, 0) if obj is not None else 0
 
 
@@ -372,6 +390,8 @@ def _write_attribute(drawing, name: str, values) -> None:
 
 
 def remove_turn_strokes(obj, turn_number: int) -> int:
+    """Deletes the strokes stamped with this turn, hidden ones included; returns
+    how many went."""
     removed = 0
     for _layer, drawing in _type_layers(obj, True):
         hits = [i for i, v in enumerate(_curve_ints(drawing, TURN_ATTRIBUTE)) if v == turn_number]
@@ -392,6 +412,7 @@ def view_depth(obj, view: formats.View) -> float | None:
 
 
 def used_views(obj) -> set[int]:
+    """Ids of the views that strokes are tagged with, hidden strokes included."""
     return {v for _layer, drawing in _type_layers(obj, True)
             for v in _curve_ints(drawing, VIEW_ATTRIBUTE) if v}
 
@@ -422,6 +443,8 @@ def ensure_region_fills(obj) -> int:
 
 
 def clear_strokes(obj) -> None:
+    """Deletes every stroke on every layer and key, and the stored views with
+    them."""
     for layer in obj.data.layers:
         for frame in layer.frames:
             if len(frame.drawing.strokes):
@@ -517,6 +540,8 @@ class SketchSession:
         return self._scene
 
     def enter(self, context) -> None:
+        """Starts sketching: the sketch becomes the active object in Draw Mode with
+        the user's tool settings saved and replaced, and the watcher starts."""
         obj = ensure_sketch_layers(self.scene)
         view_layer = context.view_layer
         current = view_layer.objects.active
@@ -553,6 +578,9 @@ class SketchSession:
             bpy.app.handlers.depsgraph_update_post.append(self._handler)
 
     def exit(self, context=None, *, from_timer: bool = False) -> None:
+        """Stops sketching, if it is on: the watcher goes, the saved tool settings
+        come back, and the sketch leaves Draw Mode for the object active before
+        it. from_timer says the session's own timer is calling, which ends itself."""
         if not self.active:
             return
         self.active = False
@@ -684,10 +712,13 @@ _session: SketchSession | None = None
 
 
 def current_session() -> SketchSession | None:
+    """The session sketching now, or None."""
     return _session if _session is not None and _session.active else None
 
 
 def start_session(context, **kwargs) -> SketchSession:
+    """Ends any running session and starts one in the context's scene; keyword
+    arguments go to SketchSession."""
     global _session
     end_session(context)
     _session = SketchSession(context.scene, **kwargs)
@@ -716,6 +747,8 @@ def after_undo() -> None:
 
 
 def end_session(context=None) -> None:
+    """Ends the running session, if any. It is forgotten even when leaving
+    cleanly fails, which is only logged."""
     global _session
     session, _session = _session, None
     if session is not None:

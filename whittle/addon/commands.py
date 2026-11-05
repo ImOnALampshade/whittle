@@ -20,6 +20,9 @@ INSPECT_QUERIES = ("summary", "object", "materials", "node_groups", "scene")
 
 @dataclass
 class CommandContext:
+    """What the handlers share with the turn controller: callables that ask
+    about the running turn, and this turn's record of what it did."""
+
     session: formats.SessionDir
     turn_id: Callable[[], str | None] = lambda: None
     bundle: Callable[[], formats.Bundle | None] = lambda: None
@@ -55,6 +58,8 @@ class CommandContext:
             self.namespace = execution.ExecNamespace(self.targets)
 
     def reset_turn(self) -> None:
+        """Clears the turn's record (objects added, notes, checkpoints and edit
+        count) as a new turn begins."""
         self.added.clear()
         self.notes.clear()
         self.checkpoints = 0
@@ -87,11 +92,16 @@ class CommandContext:
         return found
 
     def take_notes(self) -> list[str]:
+        """Empties the notes waiting for the agent and returns them, so each goes
+        out once."""
         notes, self.notes = self.notes, []
         return notes
 
 
 def require(params: dict, key: str, types, *, optional: bool = False, default=None):
+    """Returns params[key], raising a bad-request BridgeError when it is missing
+    or of the wrong type; if optional, a missing one gives default. A bool
+    does not pass as an int."""
     value = params.get(key)
     if value is None:
         if optional:
@@ -104,6 +114,7 @@ def require(params: dict, key: str, types, *, optional: bool = False, default=No
 
 
 def build_handlers(ctx: CommandContext) -> dict:
+    """The bridge's handlers, one for each method the agent calls, bound to ctx."""
     return {
         Method.EXEC: lambda p: handle_exec(ctx, p),
         Method.INSPECT: lambda p: handle_inspect(ctx, p),
@@ -117,6 +128,10 @@ def build_handlers(ctx: CommandContext) -> dict:
 # -- exec ---------------------------------------------------------------------
 
 def handle_exec(ctx: CommandContext, params: dict) -> dict:
+    """Runs the agent's Python in the scene and records the objects it added,
+    first taking the turn's objects out of Edit Mode or any other mode. A mode
+    on an unrelated object, such as the sketch, stays. Failures in that code
+    come back in the result."""
     code = require(params, "code", str)
     ctx.before_edit()
     ctx.edits += 1
@@ -266,6 +281,7 @@ def _scene_info() -> dict:
 
 
 def handle_inspect(ctx: CommandContext, params: dict) -> dict:
+    """Answers a read-only query about the file (see INSPECT_QUERIES)."""
     result = _inspect(ctx, params)
     result["notes"] = ctx.take_notes()
     return result
@@ -292,6 +308,8 @@ def _inspect(ctx: CommandContext, params: dict) -> dict:
 # -- render -------------------------------------------------------------------
 
 def handle_render(ctx: CommandContext, params: dict) -> dict:
+    """Renders a sketch view or a given camera into the session folder, after
+    checking the parameters."""
     mode = require(params, "mode", str)
     if mode not in formats.RENDER_MODES:
         raise BridgeError(ErrorCode.BAD_REQUEST,
@@ -356,6 +374,8 @@ def _running_turn(ctx: CommandContext) -> str:
 
 
 def handle_checkpoint(ctx: CommandContext, params: dict) -> dict:
+    """Saves the turn's targets and the objects it made, for
+    handle_restore_checkpoint later in the same turn."""
     label = require(params, "label", str, optional=True, default="")
     turn = _running_turn(ctx)
     number = ctx.checkpoints + 1
@@ -371,6 +391,7 @@ def handle_checkpoint(ctx: CommandContext, params: dict) -> dict:
 
 
 def handle_restore_checkpoint(ctx: CommandContext, params: dict) -> dict:
+    """Puts a checkpoint's objects back and removes what the agent made since."""
     checkpoint = require(params, "checkpoint_id", str)
     _running_turn(ctx)
     state = ctx.checkpoint_state.get(checkpoint)
@@ -396,6 +417,8 @@ def handle_restore_checkpoint(ctx: CommandContext, params: dict) -> dict:
 
 
 def handle_ask(ctx: CommandContext, params: dict):
+    """Puts the agent's question to the user and defers the answer. With nobody
+    there to answer, replies at once with unattended set."""
     question = require(params, "question", str)
     choices = require(params, "choices", list, optional=True, default=[])
     if not ctx.attended():

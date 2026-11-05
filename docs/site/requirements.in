@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# What the documentation site needs directly. requirements.lock pins these and
+# everything they pull in, with hashes. Nothing here ships in the extension.
+sphinx==9.2.0
+sphinx-book-theme==1.4.0
+myst-parser==5.1.0

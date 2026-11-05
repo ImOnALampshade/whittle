@@ -37,11 +37,13 @@ def id_collections() -> tuple[str, ...]:
 
 @dataclass
 class Snapshot:
+    """A snapshot on disk: its .blend and the manifest beside it."""
     blend: Path
     manifest: dict
 
     @property
     def names(self) -> list[str]:
+        """The names the objects had when the snapshot was written."""
         return [o["name"] for o in self.manifest["objects"]]
 
 
@@ -73,6 +75,8 @@ LOOSE = ("materials", "node_groups")
 
 
 def manifest_for(objects, scene=None, loose=()) -> dict:
+    """The manifest of a snapshot of these objects, listing any loose materials
+    and node groups no object uses. Objects without a whittle_uid get one."""
     scene = scene or bpy.context.scene
     entries, materials, groups = [], [], []
     for obj in objects:
@@ -117,6 +121,8 @@ def write(blend: Path, objects, scene=None, *, loose=()) -> Snapshot:
 
 
 def read(blend: Path) -> Snapshot:
+    """The snapshot at blend with its manifest; FormatError when either is missing
+    or the manifest is bad."""
     blend = Path(blend)
     if not blend.is_file():
         raise formats.FormatError(f"{blend}: missing")

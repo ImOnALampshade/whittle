@@ -21,10 +21,13 @@ LABEL_CHARS = 60
 
 
 def now_iso() -> str:
+    """Local time to the second, with its UTC offset."""
     return time.strftime("%Y-%m-%dT%H:%M:%S%z")
 
 
 def label_for(prompt: str) -> str:
+    """A node's label: the prompt's first line, cut at LABEL_CHARS, or (sketch
+    only) when it has none."""
     first = next((line.strip() for line in prompt.splitlines() if line.strip()), "")
     if not first:
         return "(sketch only)"
@@ -33,6 +36,8 @@ def label_for(prompt: str) -> str:
 
 @dataclass
 class Node:
+    """One node of the history: a turn, or the root, the start every turn grows
+    from."""
     id: str
     parent: str | None
     children: list[str] = field(default_factory=list)
@@ -61,8 +66,12 @@ class Node:
     # place in the SDK conversation), but folded into its parent, so it is
     # never current, never shown and never has children.
     folded: bool = False
+    # A failed turn whose images were too big to send: sending it again as
+    # it was would fail the same way.
+    too_large: bool = False
 
     def to_json(self) -> dict:
+        """The node as session.json stores it."""
         return asdict(self)
 
 
@@ -74,15 +83,19 @@ _NODE_SPEC = {
     "created_uids": list,
 }
 # Keys a session.json written before they existed may lack.
-_OPTIONAL_SPEC = {"continued_session": (str, None), "folded": bool}
+_OPTIONAL_SPEC = {"continued_session": (str, None), "folded": bool, "too_large": bool}
 
 
 class TreeError(ValueError):
+    """A history operation that cannot be done, such as one on a node that
+    does not exist."""
     pass
 
 
 @dataclass
 class Tree:
+    """A chat's history: its nodes by id, the root, and current, the node the
+    scene is at."""
     root: str
     current: str
     nodes: dict[str, Node]
@@ -90,11 +103,13 @@ class Tree:
 
     @classmethod
     def new(cls, root_id: str = "n0000", label: str = ROOT_LABEL) -> "Tree":
+        """A tree of just its root, complete and current."""
         stamp = now_iso()
         root = Node(id=root_id, parent=None, created=stamp, status="complete", label=label)
         return cls(root=root_id, current=root_id, nodes={root_id: root}, created=stamp)
 
     def node(self, node_id: str) -> Node:
+        """The node with this id; TreeError when there is none."""
         try:
             return self.nodes[node_id]
         except KeyError:
@@ -132,6 +147,8 @@ class Tree:
             self.current = node.parent
 
     def finish(self, node_id: str, **values) -> Node:
+        """Sets a turn's outcome on the node: any field but its id, parent,
+        children and created. TreeError on an unknown field or status."""
         node = self.node(node_id)
         known = {f.name for f in fields(Node)} - {"id", "parent", "children", "created"}
         unknown = set(values) - known
@@ -203,6 +220,7 @@ class Tree:
         return out
 
     def all_created_uids(self) -> set[str]:
+        """The whittle_uid of every object any turn created, on any branch."""
         return {uid for node in self.nodes.values() for uid in node.created_uids}
 
     def latest_in_session(self, session_id: str) -> str | None:
@@ -224,12 +242,16 @@ class Tree:
 # -- session.json --------------------------------------------------------------
 
 def to_json(tree: Tree) -> dict:
+    """The tree as session.json stores it."""
     return {"format": SESSION_FORMAT, "version": formats.VERSION, "created": tree.created,
             "root": tree.root, "current": tree.current,
             "nodes": {node_id: node.to_json() for node_id, node in tree.nodes.items()}}
 
 
 def validate_session(obj: dict, where: str = "session.json") -> None:
+    """Raises FormatError unless obj is a well-formed session.json: its nodes'
+    fields, parents that exist, children that name their node as parent, and
+    a root and current that exist, current not folded."""
     formats._check_header(obj, where, SESSION_FORMAT)
     formats._check(obj, where, {"created": str, "root": str, "current": str, "nodes": dict})
     nodes = obj["nodes"]
@@ -266,6 +288,8 @@ def validate_session(obj: dict, where: str = "session.json") -> None:
 
 
 def from_json(obj: dict) -> Tree:
+    """The Tree in a session.json object, validated first. Keys an older file
+    lacks take Node's defaults."""
     validate_session(obj)
     nodes = {node_id: Node(**{f.name: data[f.name] for f in fields(Node) if f.name in data})
              for node_id, data in obj["nodes"].items()}
@@ -285,6 +309,7 @@ def read_session(path) -> tuple[Tree, list[str]]:
 
 
 def write_session(path, tree: Tree) -> None:
+    """Validates the tree, then writes it to path atomically."""
     obj = to_json(tree)
     validate_session(obj, str(path))
     formats.write_json_atomic(path, obj)
@@ -294,6 +319,9 @@ def write_session(path, tree: Tree) -> None:
 
 @dataclass(frozen=True)
 class SessionPlan:
+    """How a submit reaches its conversation, from session_plan: keep the live
+    SDK client, or restart it on a fresh session or on one resumed or forked,
+    at resume_at when that is set."""
     # False: the live SDK client already ends at this node.
     restart: bool
     resume: str | None = None

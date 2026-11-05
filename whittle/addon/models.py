@@ -28,10 +28,12 @@ _loaded: tuple[tuple, store.Catalog] | None = None
 
 
 def cache_path():
+    """The cached model list, in Whittle's user folder."""
     return paths.user_dir() / store.CACHE_NAME
 
 
 def catalog() -> store.Catalog:
+    """The models the menu offers: the cached list over the bundled one."""
     global _loaded
     path = cache_path()
     try:
@@ -107,6 +109,7 @@ def blocker(ctl) -> str | None:
 
 
 def source_line(found: store.Catalog, now: float | None = None) -> str:
+    """The menu's last line: where the list came from and how long ago."""
     if not found.source:
         return BUILT_IN
     now = time.time() if now is None else now
@@ -199,6 +202,7 @@ def draw_older_models(layout, current: str, found: store.Catalog) -> None:
 
 
 class WHITTLE_MT_models(bpy.types.Menu):
+    """The menu on the composer's model button."""
     bl_idname = "WHITTLE_MT_models"
     bl_label = "Model"
     bl_description = MENU_DESCRIPTION
@@ -208,6 +212,7 @@ class WHITTLE_MT_models(bpy.types.Menu):
 
 
 class WHITTLE_MT_models_older(bpy.types.Menu):
+    """The Older Models submenu of the model menu."""
     bl_idname = "WHITTLE_MT_models_older"
     # No title: a menu's title rule spans only its first column, and the
     # family names head the columns.
@@ -219,6 +224,8 @@ class WHITTLE_MT_models_older(bpy.types.Menu):
 
 
 class WHITTLE_OT_chat_model(bpy.types.Operator):
+    """Sets the current chat's model; with no model given it asks for an id
+    in a dialog."""
     bl_idname = "whittle.chat_model"
     bl_label = "Model"
     bl_description = "Run this chat on this model from its next turn"
@@ -266,6 +273,8 @@ class WHITTLE_OT_chat_model(bpy.types.Operator):
 
 
 class WHITTLE_OT_chat_effort(bpy.types.Operator):
+    """Sets the current chat's effort, making a chat if the file has none; not
+    during a turn."""
     bl_idname = "whittle.chat_effort"
     bl_label = "Effort"
     bl_description = "How much Claude thinks in this chat, from its next turn"
@@ -300,6 +309,7 @@ class WHITTLE_OT_chat_effort(bpy.types.Operator):
 
 
 class WHITTLE_OT_default_model(bpy.types.Operator):
+    """Sets the Model preference; the current chat is left as it is."""
     bl_idname = "whittle.default_model"
     bl_label = "Use for New Chats"
     bl_description = "Make this the model new chats start with (the add-on's Model preference)"

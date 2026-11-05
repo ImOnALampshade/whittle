@@ -57,6 +57,16 @@ CHECKS = {
     "undo_turn": Check(
         "Ctrl+Z pressed in the viewport while a turn runs takes the scene back to the turn's "
         "start, the conversation warns, and the agent is told with its next call's result."),
+    "fold_undo": Check(
+        "A turn sent with strokes alone fails without changing anything: Ctrl+Z and Ctrl+Shift+Z "
+        "back onto its turn-start step, and a stroke drawn and undone after it, leave its strokes "
+        "pending, in Draw Mode, and Retry sends them."),
+    "fold_undo_object": Check(
+        "The same with the sketch ended, in Object Mode: undoing a later step leaves the folded "
+        "turn's strokes pending, and Retry sends them."),
+    "fold_undo_chat": Check(
+        "A turn folds, New Chat, then Ctrl+Z and Ctrl+Shift+Z onto its turn-start step: the undo "
+        "step belongs to the earlier chat, whose fold still releases the strokes."),
     "undo_compare": Check(
         "Ctrl+Z pressed during a comparison ends it without touching the scene the undo put back."),
     "modal_wait": Check(
@@ -95,6 +105,11 @@ CHECKS = {
     "send_key": Check(
         "Shift+Alt+Enter over the viewport: with nothing typed it sends nothing; a typed prompt is "
         "sent between turns; while a turn runs it amends the turn once there is text to amend with."),
+    "send_key_errors": Check(
+        "With no API key, Shift+Alt+Enter and Enter report it as an error line, not a Python "
+        "traceback: the prompt stays and the box asks for a key. With no agent environment the "
+        "first press does the same and the next do nothing, as Send is dim; once an environment "
+        "is there, the key finds it and sends."),
     "auto_targets": Check(
         "With Auto on, clicking another object in the viewport makes it the target; clicking empty "
         "space keeps the active one; sketching keeps it; with Auto off a click leaves the list."),
@@ -136,7 +151,7 @@ CHECKS = {
         "Cancel, and Cancel leaves it cancelled and the folder Whittle's to rebuild."),
     "preferences_defaults": Check(
         "The Preferences' Model for New Chats starts the next new chat on that model and leaves "
-        "older chats on theirs. Send Claude Code usage data restarts an idle agent, whose "
+        "older chats on theirs. Send Claude CLI usage data restarts an idle agent, whose "
         "environment holds CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC only while it is off. The "
         "Defaults box has all six session settings; Triangle Budget, Palette, Bevel Style and Style "
         "Notes show in the agent popover's For This File as (default) and reach the session and "

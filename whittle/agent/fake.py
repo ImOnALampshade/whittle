@@ -2,14 +2,15 @@
 """A scripted stand-in for the SDK agent, so the real process, socket and
 Blender handlers can be exercised end to end at no cost. Stdlib only.
 
-Script format: {"turns": [{"steps": [...], "finish": {...}}, ...]}, plus an
-optional top-level "resume_fails": true that refuses every start_session with
-a resume, as the CLI does when it cannot find the session, and an optional
-"models": {"models": [ids], "source": "api" | "cli"} reported (as the
-models event) when the first session starts, as the real runner reports what
-the account offers. Each submit plays
-the next turn; a turn with "refuse": "<code>" answers its submit with that
-error instead of starting. Steps:
+Script format: {"turns": [{"steps": [...], "finish": {...}}, ...]}, where
+finish may give the turn's "subtype", "is_error", "result" and "cost" (in USD,
+0 by default), plus an optional top-level "resume_fails": true that refuses
+every start_session with a resume, as the CLI does when it cannot find the
+session, and an optional "models": {"models": [ids], "source": "api" | "cli"}
+reported (as the models event) when the first session starts, as the real
+runner reports what the account offers. Each submit plays the next turn; a
+turn with "refuse": "<code>" answers its submit with that error instead of
+starting. Steps:
   {"say": text}
   {"call": method, "params": {...}, "expect": "ok" | "error:<code>",
    "delay": seconds}         announce the call, then wait (cut short by an
@@ -78,6 +79,8 @@ def _new_id(prefix: str) -> str:
 
 
 class FakeRunner:
+    """Plays a script (see the module docstring) where SdkRunner would run Claude."""
+
     def __init__(self, connection, script_path, *, exit=os._exit):
         self.conn = connection
         self.script = json.loads(Path(script_path).read_text(encoding="utf-8"))
@@ -99,6 +102,8 @@ class FakeRunner:
         self._models_reported = False
 
     async def start_session(self, params: dict) -> None:
+        """Starts a fake session, first stopping a turn still playing. With
+        resume_fails in the script a resume is refused."""
         if self._task is not None and not self._task.done():
             self._interrupt()
             await self._task
@@ -129,6 +134,8 @@ class FakeRunner:
 
     async def submit(self, turn_id: str, bundle_dir: str, prompt: str, context=(),
                      model: str | None = None, effort: str | None = None) -> None:
+        """Starts playing the script's next turn, unless that turn refuses. With no
+        turns left the turn finishes with an error."""
         if self.session is None:
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is not None:
@@ -156,6 +163,7 @@ class FakeRunner:
 
     async def amend(self, turn_id: str, text: str, bundle_dir: str | None,
                     number: int | None = None) -> None:
+        """Holds an amendment for the next call's result or the end of the steps."""
         if self.session is None:
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is None or turn_id != self.turn_id:
@@ -164,6 +172,7 @@ class FakeRunner:
         self._amend_arrived.set()
 
     async def interrupt(self, turn_id: str) -> None:
+        """Cuts the turn short; a turn that is not running is ignored."""
         if self.turn_id == turn_id:
             self._interrupt()
             await self._event(Event.STATUS, {"state": "interrupting", "detail": None})
@@ -173,6 +182,7 @@ class FakeRunner:
         self._interrupt_event.set()
 
     async def close(self) -> None:
+        """Cancels a turn still playing."""
         if self._task is not None and not self._task.done():
             self._task.cancel()
             try:
@@ -219,11 +229,12 @@ class FakeRunner:
             "subtype": finish.get("subtype", "success" if turn else "error_during_execution"),
             "is_error": bool(finish.get("is_error", turn is None)),
             "interrupted": self._interrupted,
-            "cost_usd": 0.0,
+            "cost_usd": finish.get("cost", 0.0),
             "num_turns": len(steps),
             "duration_ms": int((time.monotonic() - start) * 1000),
             "result_text": finish.get("result", ""),
-            "errors": errors,
+            "errors": errors + finish.get("errors", []),
+            "too_large": bool(finish.get("too_large")),
             "amends_undelivered": undelivered,
             "message_uuid": _new_id("fake-msg-"),
         })

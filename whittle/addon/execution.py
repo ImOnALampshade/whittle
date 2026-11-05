@@ -32,6 +32,7 @@ class WhittleHelper:
         self._targets = targets
 
     def targets(self) -> list:
+        """The turn's target objects, in a list of its own."""
         return list(self._targets())
 
     def mesh_report(self, obj, evaluated: bool = True) -> dict:
@@ -78,6 +79,8 @@ class ExecNamespace:
 
 
 def run(code: str, ns: ExecNamespace) -> dict:
+    """Runs code in ns and returns its stdout (cut at STDOUT_LIMIT), any error
+    and the scene diff. An error in the code is reported, not raised."""
     ns.runs += 1
     before = summarize_objects()
     out = io.StringIO()
@@ -121,6 +124,8 @@ def _r(values) -> list:
 
 
 def summarize_object(obj) -> dict:
+    """The fields of obj that scene_diff compares: transform, parent, modifiers,
+    materials, data and, on meshes, element counts."""
     summary = {
         "type": obj.type,
         "location": _r(obj.location),
@@ -138,10 +143,13 @@ def summarize_object(obj) -> dict:
 
 
 def summarize_objects() -> dict[str, dict]:
+    """A summary of every object in the file, by name."""
     return {obj.name: summarize_object(obj) for obj in bpy.data.objects}
 
 
 def scene_diff(before: dict, after: dict) -> dict:
+    """Compares two sets of summaries: the names added and removed, and which
+    fields changed on the objects in both."""
     added = sorted(set(after) - set(before))
     removed = sorted(set(before) - set(after))
     changed = []

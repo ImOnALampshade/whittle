@@ -16,6 +16,7 @@ outline where a latch should go, a red slot to carve into the lid, a yellow line
 lid's edge, a blue region on the side and a grey arrow. Beside it the Whittle sidebar shows
 the earlier turns with their renders and the next prompt, ready to send](docs/images/hero.png)
 
+The documentation site's source is in [docs/site/](docs/site/index.md) (Documentation, below).
 See [docs/design.md](docs/design.md) for the original design, [docs/architecture.md](docs/architecture.md)
 for how it is built, [docs/decisions.md](docs/decisions.md) for the choices behind it,
 [docs/ui.md](docs/ui.md) for the sidebar, and [docs/progress.md](docs/progress.md) for what
@@ -76,7 +77,7 @@ no Windows Arm wheel. On Linux arm64 every pin that applies has an aarch64 or pu
 Python 3.13 and 3.14 whose hash is in the lock (checked against PyPI), but no one has run it yet.
 
 What differs on Windows: setup steps and the agent run without a console window; the
-agent and the Claude Code CLI it starts share a Job Object, so stopping the agent (or
+agent and the Claude CLI it starts share a Job Object, so stopping the agent (or
 Blender crashing) ends the CLI too; and a stop is graceful only through Whittle's own
 shutdown message, since Windows has no terminate signal. A killed agent leaves the
 SDK's `claude-resume-*` folder in the temp folder; the next agent start removes
@@ -109,16 +110,19 @@ pick a shorter **Environment Folder**.
    the agent cannot start for lack of it.)
 
    - **What it downloads**: the 30 packages pinned in `requirements.lock` (31 on Windows, with `pywin32`), among them
-     Anthropic's `claude-agent-sdk` 0.2.167, whose wheel bundles the Claude Code CLI that
-     runs the agent. They come from PyPI only, as prebuilt wheels.
+     Anthropic's `claude-agent-sdk` 0.2.167, whose wheel bundles the Claude CLI that
+     runs the agent. They come from PyPI, as prebuilt wheels.
    - **How**: Whittle makes a venv from Blender's own Python (`sys.executable -I -m venv`), then
      runs
-     `pip install --isolated --disable-pip-version-check --no-input --progress-bar raw --require-hashes --only-binary :all: --no-deps -r requirements.lock`
+     `pip install --isolated --disable-pip-version-check --no-input --no-cache-dir --index-url https://pypi.org/simple --progress-bar raw --require-hashes --only-binary :all: --no-deps -r requirements.lock`
      inside it. Every file must match a hash in the lock, nothing is built from source (so no
      package's setup code runs), and nothing beyond the lock is resolved. `PIP_*`, `PYTHON*`,
-     `UV_*`, `VIRTUAL_ENV` and `CONDA_*` variables are dropped for these steps, so no
-     configuration can point pip at another index. Proxies (`HTTPS_PROXY`) and `SSL_CERT_*`
-     are kept.
+     `UV_*`, `VIRTUAL_ENV` and `CONDA_*` variables are dropped for these steps, and `--isolated`
+     skips your own pip config, so neither can point pip at another index. `--index-url`
+     overrides the index a system-wide pip config names, so a mirror set there does not apply
+     and setup fails where pypi.org is blocked. That config's proxy and CA still apply, and so do
+     its `extra-index-url`, `find-links` and `no-index`, which no flag undoes; the hashes hold
+     either way. Proxies (`HTTPS_PROXY`) and `SSL_CERT_*` are kept.
    - **Slow connections**: the `claude-agent-sdk` wheel is about 114 MB. The status line shows
      its download progress, and the install is only stopped if no data arrives for 5 minutes
      (or after 3 hours in all), so a slow but working connection gets there.
@@ -163,7 +167,7 @@ capable and the most expensive per token, Haiku the cheapest, and each self-chec
 sends renders back to the model. Set spending limits in the Console.
 
 **Model for New Chats** is the model a new chat starts on, `claude-opus-5-5` by default;
-it offers the models your key can use and takes any other model id. The **Defaults** box
+it suggests the models last reported for your key and the ones Whittle knows, and takes any other model id. The **Defaults** box
 sets what every session starts with: the triangle budget, self-check rounds and render
 size, and the style Claude works to: a **Palette** (a short list of colours, such as
 "weathered oak, dark iron"), a **Bevel Style** (none, subtle or chunky, or your own words)
@@ -243,8 +247,8 @@ Blenders gets a cache in each, and a quiet line in the sidebar says their chats 
 merge.
 
 A chat that was made on another machine (someone else's file, or your own from another
-computer) opens read-only, with a box asking **Continue this chat?**: Send stays disabled
-until you press **Continue**, and **New Chat** is there instead. You are asked once per
+computer) opens with a box asking **Continue this chat?**: Send stays disabled until you
+press **Continue**, and **New Chat** is there instead. You are asked once per
 chat; chats from files saved before Whittle recorded this never ask. The mark is a random
 id Whittle keeps for its install in its user folder (`install.json`); it names no person
 or machine.
@@ -255,10 +259,10 @@ or machine.
 ## Privacy and safety
 
 Whittle talks to Anthropic's API only, with your key, while the agent runs: a model
-listing when it starts, then the turns. The bundled Claude Code CLI can also send
+listing when it starts, then the turns. The bundled Claude CLI can also send
 Anthropic its own usage telemetry and error reports; Whittle turns that off by running it
 with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. **Preferences → Add-ons → Whittle →
-Send Claude Code usage data** (off by default) turns it back on, unless Blender's own
+Send Claude CLI usage data** (off by default) turns it back on, unless Blender's own
 environment sets that variable. What a turn sends:
 
 - your prompts, amendments and answers to Claude's questions, and the reference images
@@ -309,6 +313,7 @@ they contain by hand (the dev venv's Python is `.venv\Scripts\python.exe` there)
   PY=/path/to/blender-5.2/5.2/python/bin/python3.13
   "$PY" -I -m venv .venv
   .venv/bin/python -m pip install --isolated --disable-pip-version-check --no-input \
+      --no-cache-dir --index-url https://pypi.org/simple \
       --require-hashes --only-binary :all: --no-deps -r agent_env/requirements.lock
   ```
 
@@ -347,12 +352,13 @@ Environment variables Whittle reads:
 | `WHITTLE_SCREENS_VISIBLE` | `1` makes `screens.sh` show its windows on your desktop (Sidebar screenshots). |
 | `WHITTLE_GUI` | `1` makes `run_tests.sh` run the GUI checks too (GUI checks). |
 | `WHITTLE_GUI_VISIBLE` | `1` makes `gui_checks.sh` show its windows on your desktop (GUI checks). |
+| `WHITTLE_DOCSHOTS_SLOTS` | How many Blenders `docs_shots.sh` runs at once across the machine (Documentation). |
 
 
 ### Sidebar screenshots
 
 ```sh
-./screens.sh                       # every scenario, about 1.5 minutes
+./screens.sh                       # every scenario, several minutes
 ./screens.sh conversation asking   # only these
 ./screens.sh --docs                # the README's images, into docs/images/
 ```
@@ -436,6 +442,32 @@ The live tests call the real API with `ANTHROPIC_API_KEY` (a few US cents per ru
 to that key): they use `claude-haiku-5-5` with a tiny prompt, and `run_tests.sh` adds
 `--online-mode` to Blender for them.
 
+## Documentation
+
+The documentation site is a Sphinx project in `docs/site/`: a quickstart, a walkthrough, a
+guide per topic, the development pages and an API reference generated from the source. None
+of it ships in the extension. It has a venv of its own, `.venv-docs/` (gitignored), made from
+its own hash-pinned lock, `docs/site/requirements.lock`; the build needs neither Blender nor
+the network.
+
+```sh
+python3 -m venv .venv-docs
+.venv-docs/bin/pip install --require-hashes --only-binary :all: --no-deps -r docs/site/requirements.lock
+./docs.sh                      # the site, into build/docs/html
+./docs.sh --strict             # every page rebuilt, warnings are errors
+./docs.sh --out DIR            # html and doctrees wholly in DIR
+./docs_shots.sh guides-undo    # a page's screenshots; add shot names for only those
+./docs_shots.sh --all          # every page's, about 6 minutes
+./docs_shots.sh --list         # every shot; --check validates the specs. Neither launches Blender
+```
+
+Each page's screenshots come from a spec, `docs/site/shots/<page-slug>.py`, where the slug
+is the page's name with `/` as `-`, and land in `docs/site/images/<page-slug>/`. They are
+committed. `docs/site/shots/README.md` is the guide to writing a spec. `docs_shots.sh` runs
+from `.venv` and needs `kwin_wayland`: every Blender gets a hidden session of its own and
+folders of its own under `build/docs-shots/`. `WHITTLE_DOCSHOTS_SLOTS` sets how many run at
+once; each holds GPU memory, and shots fail if the card runs out. [Development setup and testing](docs/site/develop/setup-and-testing.md) has the details.
+
 ## CI and releases
 
 GitHub Actions runs on GitHub's free standard runners and needs no secrets.
@@ -481,7 +513,7 @@ them first.
   `github:` or VCS references.
 - The install only runs after you confirm the dialog, never during a turn (so the agent's own
   Python can never start one), and never from background Blender.
-- The bundled Claude Code CLI is run as Anthropic ships it, unmodified.
+- The bundled Claude CLI is run as Anthropic ships it, unmodified.
 - A change to `agent_env/requirements.lock` (or its packaged copy) in a diff that should not
   touch dependencies is a red flag: stop and look at it.
 - Whittle never publishes anything.
