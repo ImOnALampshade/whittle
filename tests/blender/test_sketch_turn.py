@@ -70,7 +70,7 @@ class SketchTurnTest(AgentTestCase):
         ctl.run_sketch("Carve a slot.", targets=[self.crate])
         pump(ctl, lambda: ctl.process.state == AgentState.CRASHED, 15, "the crash")
         self.assertTrue(ctl.last_finished["is_error"])
-        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [1, 1])
+        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [0, 0], "folded, so pending again")
         self.assertEqual(len(views.load_views(self.obj.data)), 3)
 
         second = self.make_controller("sketch_turn.json")

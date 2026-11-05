@@ -475,15 +475,19 @@ class TurnController:
         succeeds, unsent."""
         shutil.rmtree(self.session.node_dir(node), ignore_errors=True)
         if unstamp:
-            obj = sketch.find_sketch_object()
-            if obj is not None:
-                try:
-                    sketch.unstamp_strokes(obj, node_number(node))
-                except (ReferenceError, RuntimeError) as exc:
-                    log.warning("could not unstamp the strokes of %s: %s", node, exc)
+            self._unstamp_strokes(node)
         # The next run takes the freed number, so node ids stay contiguous.
         if self._next_node == node_number(node) + 1:
             self._next_node = node_number(node)
+
+    def _unstamp_strokes(self, node: str) -> None:
+        obj = sketch.find_sketch_object()
+        if obj is None:
+            return
+        try:
+            sketch.unstamp_strokes(obj, node_number(node))
+        except (ReferenceError, RuntimeError) as exc:
+            log.warning("could not unstamp the strokes of %s: %s", node, exc)
 
     def _continued_session(self) -> str | None:
         """The SDK session a submit now carries on: the one the session just
@@ -964,6 +968,10 @@ class TurnController:
         if from_sketch and node is not None and completed:
             self._clear_sent_strokes(node)
             self._clear_sent_refs()
+        elif from_sketch and node is not None and folded:
+            # No node holds this request any more: its strokes wait for the
+            # next send, as its references do. No undo step: nothing changed.
+            self._unstamp_strokes(node)
         self._sent_refs = []
         self._accepted = False
         self._started = False

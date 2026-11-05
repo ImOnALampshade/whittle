@@ -48,15 +48,29 @@ def run_bundle(context, fake_script: str = "") -> turn.TurnController:
     return ctl
 
 
+def _folded_prompt(ctl) -> str:
+    """The prompt of the folded turn the conversation shows, if it does."""
+    node = ctl.last_folded
+    tree = ctl.history.tree
+    if node is None or tree is None or node not in tree.nodes:
+        return ""
+    found = tree.node(node)
+    return found.prompt if found.folded and found.parent == tree.current else ""
+
+
 def submit_sketch(context, fake_script: str = "") -> tuple[turn.TurnController, str]:
     """Body of the Send operator, callable from tests. The prompt leaves the
     prompt box once the run is under way (the conversation shows it); the
-    controller puts it back if the run never starts."""
+    controller puts it back if the run never starts. A folded turn's prompt
+    is out of the box while its strokes wait there, so a blank box sends it
+    again with them, as Retry does."""
     if chats.current_foreign():
         raise RuntimeError(CHAT_FOREIGN)
     props = context.scene.whittle
     refs = [Path(bpy.path.abspath(r.path)) for r in props.refs if r.path]
     ctl = controller(fake_script or context.window_manager.whittle_fake_script)
+    if not props.prompt.strip():
+        props.prompt = _folded_prompt(ctl)
     text = props.prompt
     ctl.hold_prompt(context.scene, text)
     try:

@@ -427,6 +427,38 @@ def invalidate() -> None:
     _cache.clear()
 
 
+def _history_of_scene(scene) -> History | None:
+    """The history of the chat the scene's undo step was made in, which may
+    not be the current one: chats are not undone."""
+    from . import chats
+
+    found = active()
+    chat = scene.whittle.chat
+    if found is not None and chat in ("", found.chat):
+        return found
+    store = chats.get()
+    if not chat or store is None or chat not in store:
+        return None
+    return get(store.folder(chat))
+
+
+def release_folded_strokes(scene=None) -> None:
+    """After undo or redo: a folded turn's strokes are pending, but its
+    turn-start step, which either can land on, holds them with the turn's
+    stamp. Numbers repeat across chats, so only the folded turns of the chat
+    the step was made in count."""
+    scene = scene or bpy.context.scene
+    obj = sketch.find_sketch_object()
+    if scene is None or not hasattr(scene, "whittle") or obj is None:
+        return
+    found = _history_of_scene(scene)
+    if found is None or found.tree is None:
+        return
+    for node in found.tree.nodes.values():
+        if node.folded:
+            sketch.unstamp_strokes(obj, formats.node_number(node.id))
+
+
 def sync_from_scene(scene=None, *, reason: str = "undo") -> str | None:
     """After undo, redo or a file load: the current node follows the scene's
     mirror of it, since the scene is what the next turn starts from. Returns

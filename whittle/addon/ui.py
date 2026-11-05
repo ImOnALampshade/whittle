@@ -1142,8 +1142,9 @@ def stroke_summary(obj, ctl) -> str:
     """The sketch's strokes in a few words, or "" when there is nothing to
     say (the row is then left out). Outside a turn it also counts strokes
     an earlier turn was sent with that are still shown (one that was
-    stopped or failed keeps them) and views without strokes, so Clear and
-    the view list stay reachable whenever the viewport shows something."""
+    stopped, or failed after changing the scene, keeps them) and views
+    without strokes, so Clear and the view list stay reachable whenever the
+    viewport shows something."""
     counts = sketch.stroke_counts(obj) if obj is not None else {}
     pending = counts.get(0, 0)
     if ctl is not None and getattr(ctl, "running", False):

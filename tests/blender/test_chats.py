@@ -228,6 +228,67 @@ class SwitchTest(ChatCase):
         compare.active().end(self.scene, keep=False)
 
 
+class FoldedStrokesTest(ChatCase):
+    """A folded turn's turn-start undo step holds its strokes with the turn's
+    stamp, and background Blender cannot undo: the tests stamp them by hand."""
+
+    def setUp(self):
+        super().setUp()
+        self.fake = str(FAKE_SCRIPTS / "fold_second.json")
+
+    def fold(self) -> str:
+        """A turn to keep the chat, then one that folds."""
+        self.send("Scale it.")
+        _ctl, node = self.send("")
+        self.assertTrue(history.active().tree.node(node).folded)
+        return node
+
+    def test_undo_after_a_chat_change_leaves_a_folded_turns_strokes_pending(self):
+        from whittle import addon
+
+        node = self.fold()
+        a = self.store.current
+        operators.new_chat(bpy.context)
+        new = self.store.current
+        self.assertIsNone(turn.current())
+        sketch.stamp_strokes(self.obj, turn.node_number(node))
+        self.props.chat = a
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 1})
+        self.assertEqual(self.store.current, new, "chats are not undone")
+
+    def test_a_folded_number_is_only_that_chats(self):
+        from whittle import addon
+
+        node = self.fold()
+        a = self.store.current
+        number = turn.node_number(node)
+        operators.new_chat(bpy.context)
+        b = self.store.current
+        self.fake = str(FAKE_SCRIPTS / "history.json")
+        self.send("Make it bigger.")
+        _ctl, kept = self.send("Add a lid.")
+        self.assertEqual(kept, node, "numbers start again in each chat")
+        self.assertFalse(history.active().tree.node(kept).folded)
+
+        # This chat's turn with the same number kept its strokes: the fold
+        # in the other chat is not theirs.
+        add_stroke(self.obj, "free", STROKE, view=1, radius=0.01)
+        sketch.stamp_strokes(self.obj, number)
+        self.assertEqual(self.props.chat, b)
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {number: 1})
+
+        # From the other way round: a step of the second chat, then of the first.
+        operators.switch_chat(bpy.context, a)
+        self.props.chat = b
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {number: 1})
+        self.props.chat = a
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 1})
+
+
 class DeleteTest(ChatCase):
     def test_delete_another_chat_and_the_current_one(self):
         a, (a1, a2), b, b1 = self.two_chats()

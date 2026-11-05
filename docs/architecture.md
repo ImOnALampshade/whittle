@@ -562,7 +562,11 @@ the sketch being drawn on, is left alone.
   edited since the last step: Ctrl+Z during a turn then lands exactly on its start (or
   on a step the user made during it), and Ctrl+Shift+Z brings the edits back. With no
   edit since, nothing is pushed, so a second Ctrl+Z goes on past the start. Ctrl+Z
-  during a turn tells the agent with `UNDO_NOTE` on its next result.
+  during a turn tells the agent with `UNDO_NOTE` on its next result. A folded turn's
+  turn-start step still holds the turn's stamp on the strokes, so after an undo or redo
+  `history.release_folded_strokes`, a step of `addon._after_undo` that needs no
+  controller, makes them pending again. Numbers repeat across chats, so it reads only the
+  folded turns of the chat the landed step names (`scene.whittle.chat`).
 
 ### Render (`addon/render.py`)
 
@@ -936,7 +940,9 @@ ghost) and `addon/snapshot.py`, on top of `formats.SessionDir`.
   panel do not count them), and Restore, Branch and Compare refuse them. They still
   count for `latest_in_session`: the conversation went past the parent with the failed
   exchange, so the next submit from the parent forks at the parent's message
-  (`live_node` is cleared) and the agent never sees the failure. `session.json`
+  (`live_node` is cleared) and the agent never sees the failure. No node holds its
+  request any more, so its strokes go back to pending (`TurnController._finish`), and Send
+  on a blank box carries its prompt with them (`operators.submit_sketch`). `session.json`
   validation refuses a folded node that is current, not `failed`, or has children; an
   older file without the key reads as not folded. Why fold rather than delete: the
   node's SDK session must keep counting, or a later plan would resume a conversation
@@ -981,7 +987,10 @@ ghost) and `addon/snapshot.py`, on top of `formats.SessionDir`.
 - **Undo**: `scene.whittle.history_node` is saved in Blender's undo steps; an
   `undo_post`/`redo_post` handler (`history.sync_from_scene`) copies it back into
   `session.json`'s `current`. An empty mirror (a scene from before the first turn)
-  means the root; a node the tree lacks changes nothing and logs a warning.
+  means the root; a node the tree lacks changes nothing and logs a warning. The same
+  handler, `addon._after_undo`, also runs `history.release_folded_strokes` (§5) and
+  `transcript.after_undo`, which drops a transcript Text an undo step brought back when its
+  chat is gone: undo steps hold the Text, but chats are never undone.
 - **File load**: restores write `session.json` at once, but the mirror reaches disk only
   when the `.blend` is saved, so after `load_post` clears the cache it runs
   `sync_from_scene` too: the reopened scene decides the current node, and with it the

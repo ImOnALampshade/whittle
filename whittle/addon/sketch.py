@@ -294,7 +294,7 @@ def stamp_strokes(obj, turn_number: int) -> int:
 
 def unstamp_strokes(obj, turn_number: int) -> int:
     """Marks the strokes stamped with this turn as unsent again, hidden ones
-    included, for a run that never reached the agent."""
+    included, for a run that never reached the agent or a turn that folded."""
     return _stamp(obj, lambda t, a: t == turn_number, 0, 0)
 
 

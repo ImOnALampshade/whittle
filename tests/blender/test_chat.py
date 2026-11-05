@@ -240,6 +240,7 @@ class RetryTest(ChatTurnCase):
         self.assertTrue(hist.tree.node(node).folded)
         self.assertEqual(self.ctl.last_folded, node)
         self.assertEqual(self.props.prompt, "", "the folded turn shows its prompt; Retry brings it back")
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 1}, "a folded turn's strokes are pending again")
         conv = conversation.build(hist, self.ctl)
         self.assertEqual([(t.node, t.folded) for t in conv.turns], [(node, True)])
         self.assertTrue(operators.can_retry(hist, self.ctl, node))
@@ -249,6 +250,8 @@ class RetryTest(ChatTurnCase):
         ctl, again = operators.retry(bpy.context, node, self.fake)
         self.assertNotEqual(again, node)
         self.assertIsNone(self.ctl.last_folded, "a new run clears the folded turn")
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("Add a lid.", 1))
         self.wait(self.ctl, again)
         self.assertEqual(hist.tree.node(again).parent, hist.tree.node(node).parent)
         found = hist.tree.node(again)
@@ -264,6 +267,96 @@ class RetryTest(ChatTurnCase):
         self.assertEqual(hist.tree.siblings(third), [again, third])
         with self.assertRaises(RuntimeError):
             operators.retry(bpy.context, third, self.fake)
+
+    def test_retry_turns_sent_with_strokes_alone(self):
+        hist = self.ctl.history
+        node = self.send("")
+        self.wait(self.ctl, node)
+        self.assertTrue(hist.tree.node(node).folded)
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 1})
+        self.assertEqual(operators.send_key_action(bpy.context), "submit", "Send has something to send")
+
+        ctl, again = operators.retry(bpy.context, node, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("", 1))
+        self.wait(self.ctl, again)
+
+        # This one edited the crate, so it keeps its node and its stamp, and
+        # Retry brings its strokes back from its request.
+        found = hist.tree.node(again)
+        self.assertEqual((found.status, found.folded), ("failed", False))
+        self.assertEqual(sketch.stroke_counts(self.obj), {turn.node_number(again): 1})
+        ctl, third = operators.retry(bpy.context, again, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(third))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("", 1))
+        self.wait(self.ctl, third)
+        self.assertEqual(hist.tree.node(third).status, "complete")
+        self.assertEqual(sketch.stroke_counts(self.obj), {}, "the strokes went with the finished turn")
+
+    def test_send_on_a_blank_box_carries_the_folded_turns_prompt(self):
+        hist = self.ctl.history
+        node = self.send("Add a lid.")
+        self.wait(self.ctl, node)
+        self.assertEqual(self.props.prompt, "")
+        self.assertEqual(operators.send_key_action(bpy.context), "submit")
+
+        # Send is lit by the pending strokes, and the box is blank only
+        # because the folded turn shows the prompt.
+        ctl, again = operators.submit_sketch(bpy.context, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("Add a lid.", 1))
+        self.assertEqual(self.props.prompt, "", "the prompt left the box with the run")
+        self.wait(self.ctl, again)
+        self.assertEqual(hist.tree.node(again).prompt, "Add a lid.")
+
+    def test_a_typed_prompt_replaces_the_folded_one(self):
+        node = self.send("Add a lid.")
+        self.wait(self.ctl, node)
+        self.props.prompt = "Add a handle."
+        ctl, again = operators.submit_sketch(bpy.context, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual(sent.request.prompt, "Add a handle.")
+        self.wait(self.ctl, again)
+
+    def test_undo_to_a_folded_turns_start_leaves_its_strokes_pending(self):
+        from whittle import addon
+
+        node = self.send("")
+        self.wait(self.ctl, node)
+        number = turn.node_number(node)
+        # The turn-start undo step holds the strokes as the turn stamped them,
+        # an amendment's among them, and background Blender cannot undo.
+        sketch.stamp_strokes(self.obj, number)
+        add_stroke(self.obj, "free", [(0.1 * i, 0.2, 0.3) for i in range(4)], view=1, radius=0.01)
+        sketch.stamp_pending(self.obj, number, 1)
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {0: 2})
+        self.assertEqual(operators.send_key_action(bpy.context), "submit")
+
+        # A failure that kept its node is not folded: its strokes stay sent.
+        ctl, again = operators.retry(bpy.context, node, self.fake)
+        self.wait(self.ctl, again)
+        addon._after_undo()
+        self.assertEqual(sketch.stroke_counts(self.obj), {turn.node_number(again): 2})
+
+
+class FoldedPromptTest(ChatTurnCase):
+    script = "fold_second.json"
+
+    def test_send_leaves_a_folded_prompt_the_conversation_no_longer_shows(self):
+        hist = self.ctl.history
+        first = self.send("Scale it.")
+        self.wait(self.ctl, first)
+        node = self.send("Add a lid.")
+        self.wait(self.ctl, node)
+        self.assertEqual(self.ctl.last_folded, node)
+        operators.restore_node(bpy.context, hist.tree.root)
+        self.assertEqual([t.node for t in conversation.build(hist, self.ctl).turns], [])
+
+        ctl, again = operators.submit_sketch(bpy.context, self.fake)
+        sent = formats.read_bundle(self.ctl.session.request_dir(again))
+        self.assertEqual((sent.request.prompt, len(sent.strokes)), ("", 1))
+        self.wait(self.ctl, again)
 
 
 class PromptHandBackTest(ChatTurnCase):

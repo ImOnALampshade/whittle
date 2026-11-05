@@ -57,6 +57,16 @@ CHECKS = {
     "undo_turn": Check(
         "Ctrl+Z pressed in the viewport while a turn runs takes the scene back to the turn's "
         "start, the conversation warns, and the agent is told with its next call's result."),
+    "fold_undo": Check(
+        "A turn sent with strokes alone fails without changing anything: Ctrl+Z and Ctrl+Shift+Z "
+        "back onto its turn-start step, and a stroke drawn and undone after it, leave its strokes "
+        "pending, in Draw Mode, and Retry sends them."),
+    "fold_undo_object": Check(
+        "The same with the sketch ended, in Object Mode: undoing a later step leaves the folded "
+        "turn's strokes pending, and Retry sends them."),
+    "fold_undo_chat": Check(
+        "A turn folds, New Chat, then Ctrl+Z and Ctrl+Shift+Z onto its turn-start step: the undo "
+        "step belongs to the earlier chat, whose fold still releases the strokes."),
     "undo_compare": Check(
         "Ctrl+Z pressed during a comparison ends it without touching the scene the undo put back."),
     "modal_wait": Check(

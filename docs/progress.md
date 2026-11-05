@@ -356,8 +356,10 @@ these are fixed, each with a regression test.
   (`folded: true`) with their request and transcript, but hidden from the tree, never
   current, and not restorable or branchable; the next submit forks the conversation at
   the parent, so the agent never sees the failed exchange. A failed turn that did edit
-  the scene is still a node. The model is described in `architecture.md` §6
-  (`test_history.OutcomeTest`, `test_tree`).
+  the scene is still a node. A fold unstamps its strokes, also after an undo or redo onto
+  its turn-start step (`history.release_folded_strokes`, the GUI checks `fold_undo`,
+  `fold_undo_object` and `fold_undo_chat`), and Send on a blank box carries its prompt. The
+  model is described in `architecture.md` §6 (`test_history.OutcomeTest`, `test_tree`).
 - **Images too big for a request** never end a turn with a bare stop: the SDK's read limit
   is 128 MiB, a request over 180 MiB of images is refused when its bundle is written, and a
   turn that fails for size says so and offers Edit in place of Retry (architecture §5 Image
@@ -454,8 +456,9 @@ timer).
 - `tests/gui/checks.py`: `GuiStage` (the screenshot stage plus simulated keys, clicks,
   drags and typing, `button()` running an operator as a sidebar button does, in the
   sidebar region with an undo step, File-menu saves and opens, and the fake agent's log)
-  and 26 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
-  `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `undo_compare`,
+  and 29 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
+  `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `fold_undo`,
+  `fold_undo_object`, `fold_undo_chat`, `undo_compare`,
   `modal_wait`, `save_as`, `recover_autosave`, `recover_last_session`,
   `crash_keeps_chats`, `dirty_flag`, `send_key`, `shortcut`, `auto_targets`, `branch_undo`,
   `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`, `preferences_key`,
@@ -849,7 +852,7 @@ them at each save. Nothing is written beside the `.blend`.
 - **Folded turns** keep their request on disk; Edit & Resend on one only puts its prompt
   back (the scene never left its parent). Send takes the prompt out of the box and a
   fold does not put it back (the folded turn shows it), and a failed turn keeps its
-  strokes. A folded turn shows in the conversation only in the Blender
+  strokes (a folded one's are pending again, and Send on a blank box carries its prompt). A folded turn shows in the conversation only in the Blender
   session that ran it. A turn that failed after only reading the scene folds even if
   the user edited the target meanwhile: the user's edit stays in the scene.
 - **Settings restart**: a changed setting is noticed when an operator next looks up the

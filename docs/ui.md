@@ -433,7 +433,9 @@ failure):
   shows after its parent while it is the latest thing that happened in this Blender
   session, with its failure and `Retry`; it disappears at the next send or when Blender
   restarts. Its prompt does not go back into the prompt box (the bubble shows it, and
-  Retry or ⋯ → Edit & Resend bring it back).
+  Retry or ⋯ → Edit & Resend bring it back). Its strokes are pending again, so Send works
+  with a blank box: it carries that turn's prompt with them, as Retry does, while the
+  conversation shows the turn. A typed prompt replaces it.
 
 **A collapsed turn** (older turns of the path): one
 `layout.panel(f"whittle_turn_{node}", default_closed=True)` whose header is the prompt
@@ -517,8 +519,9 @@ types are a `row(align=True)` of their own, then the active type's name (dim):
 material here`).
 
 **Stroke count**, only when there is something to count: outside a turn, the pending
-strokes, the strokes an earlier turn was sent with that are still shown (a stopped or
-failed sketch turn keeps them), and the stored views (`3 strokes · 2 views`, `1 stroke
+strokes, the strokes an earlier turn was sent with that are still shown (a stopped turn,
+or one that failed after changing the scene, keeps them; a folded turn's are pending
+again), and the stored views (`3 strokes · 2 views`, `1 stroke
 sent · 1 view`, `1 view`), so Clear and the view list are in reach whenever the
 viewport shows something; during a turn, the strokes it was sent with and those
 drawn since (`3 sent · 1 new`), left out when both are zero. It is the header of
@@ -1372,6 +1375,10 @@ before the undo (`undo_pre`) they get one (`Whittle: <node> so far`); Ctrl+Shift
 them back. A second Ctrl+Z with no edit since goes on past the turn's start. Ctrl+Z during a comparison ends it without
 touching the scene (the undo put back a scene from before it). An undo that takes the
 sketch out of Draw Mode ends the sketch session.
+
+A folded turn pushes no step of its own, and its turn-start step still holds the turn's
+stamp on the strokes. After an undo or redo onto it they are pending again, also after a
+chat change: the folded turns of the chat the step belongs to count.
 
 Chats are not undone: New Chat, a switch, a rename and a delete push no undo step, and
 Ctrl+Z never changes the current chat. An undo step that holds another chat's node

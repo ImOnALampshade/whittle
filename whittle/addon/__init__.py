@@ -67,6 +67,7 @@ def _before_undo(*_args):
 @bpy.app.handlers.persistent
 def _after_undo(*_args):
     for step in (history.sync_from_scene,
+                 history.release_folded_strokes,
                  # A comparison is no undo step: an undo puts back a scene from
                  # before it, so it is over.
                  compare.forget,
