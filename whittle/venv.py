@@ -120,13 +120,18 @@ SUPPORTED = {"linux": ("x86_64", "amd64", "aarch64", "arm64"), "win32": ("amd64"
              "darwin": ("arm64", "aarch64")}
 SUPPORTED_TEXT = "Linux x64 and arm64, Windows x64 and macOS on Apple silicon"
 _OS_NAMES = {"linux": "Linux", "win32": "Windows", "darwin": "macOS"}
+# blender.org's 5.2 builds bundle 3.13; a distribution's package may run on a
+# system 3.14. The lock holds wheels of every pin for both.
+PYTHONS = ((3, 13), (3, 14))
+PYTHONS_TEXT = "3.13 or 3.14"
 
 
 def compatible(version_info, machine: str, platform: str) -> str | None:
     """Why this interpreter cannot use the lock, or None. The lock holds
-    CPython 3.14 wheels for the platforms in SUPPORTED."""
-    if tuple(version_info[:2]) != (3, 14):
-        return f"the agent environment needs Python 3.14, but Blender runs {version_info[0]}.{version_info[1]}"
+    CPython wheels for the versions in PYTHONS on the platforms in SUPPORTED."""
+    if tuple(version_info[:2]) not in PYTHONS:
+        return (f"the agent environment needs Python {PYTHONS_TEXT}, but Blender runs "
+                f"{version_info[0]}.{version_info[1]}")
     system = "linux" if platform.startswith("linux") else platform
     if system not in SUPPORTED:
         return f"the agent environment is available on {SUPPORTED_TEXT}, not {platform}"

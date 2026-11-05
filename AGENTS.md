@@ -5,7 +5,7 @@ repeating it; when this file and a doc disagree, the doc wins (and fix this file
 
 ## What Whittle is
 
-A Blender 5.2 extension (Blender's Python 3.14) that runs a Claude Agent SDK agent as a
+A Blender 5.2 extension (Blender's Python, 3.13 or 3.14) that runs a Claude Agent SDK agent as a
 chat in the 3D viewport sidebar. The user sketches over a model with Grease Pencil,
 writes a prompt, and the agent edits the open scene by running Python in Blender. Every
 turn is a node in a branching history; a file can hold several chats, stored in the
@@ -33,7 +33,7 @@ Blender (add-on, main thread)  <-- bridge: JSON lines over 127.0.0.1 -->  agent 
   Never imports `whittle.agent`.
 - **Agent**, `whittle/agent/`: never imports `bpy`. Only `agent/runner.py` imports
   `claude_agent_sdk`; everything else there is stdlib, so the fake agent runs under any
-  Python 3.14.
+  Python 3.13 or 3.14.
 - **Shared**, `whittle/*.py` (`protocol`, `formats`, `tree`, `chats`, `caches`,
   `markdown`, `models`, `style`, `venv`, `platforms`): stdlib only at module level.
   `whittle/__init__.py` stays bpy-free at import time.
@@ -56,7 +56,7 @@ prompt's modeling practice and the mesh skills) and [docs/progress.md](docs/prog
 You need Blender 5.2 as `blender` on `PATH`. The README's Development section has the
 exact commands; in short:
 
-- Make `.venv/` at the repo root from Blender 5.2's own Python 3.14 and install
+- Make `.venv/` at the repo root from Blender 5.2's own Python (3.13 or 3.14) and install
   `agent_env/requirements.lock` with `--require-hashes --only-binary :all: --no-deps`,
   exactly as the add-on does. Install nothing else into it.
 - `export WHITTLE_AGENT_PYTHON="$PWD/.venv/bin/python"` (or the Development → Agent

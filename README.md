@@ -21,7 +21,7 @@ for how it is built, [docs/decisions.md](docs/decisions.md) for the choices behi
 [docs/ui.md](docs/ui.md) for the sidebar, and [docs/progress.md](docs/progress.md) for what
 works today and what is still rough.
 
-Requirements: Blender 5.2 (its Python 3.14) on Linux x64 or arm64, Windows x64 or an
+Requirements: Blender 5.2 (its Python, 3.13 or 3.14) on Linux x64 or arm64, Windows x64 or an
 Apple silicon Mac, and an Anthropic API key. Linux arm64, Windows and macOS are untested:
 reports welcome (see [Platforms](#platforms)).
 
@@ -72,7 +72,7 @@ of each pinned version, so pip picks the files for your platform (the
 left out because `cryptography` 50, which the lock pins, has no Intel macOS wheel, and
 Blender 5.2 has no Intel Mac build. Windows on Arm is left out too: the pinned SDK has
 no Windows Arm wheel. On Linux arm64 every pin has an aarch64 or pure-Python wheel for
-Python 3.14 whose hash is in the lock (checked against PyPI), but no one has run it yet.
+Python 3.13 and 3.14 whose hash is in the lock (checked against PyPI), but no one has run it yet.
 
 What differs on Windows: setup steps and the agent run without a console window; the
 agent and the Claude Code CLI it starts share a Job Object, so stopping the agent (or
@@ -301,12 +301,12 @@ You need Blender 5.2 as `blender` on your `PATH`: `run_tests.sh`, `build.sh`,
 and `gui_checks.sh` need Linux with KDE's `kwin_wayland`. On Windows, run the commands
 they contain by hand (the dev venv's Python is `.venv\Scripts\python.exe` there).
 
-- Make the dev venv `.venv/` at the repo root once, from Blender 5.2's own Python 3.14 (in
-  Blender's folder, `5.2/python/bin/python3.14`, or a system Python 3.14 when your
-  Blender uses that), and install the pinned lock exactly as the add-on does:
+- Make the dev venv `.venv/` at the repo root once, from Blender 5.2's own Python (in
+  Blender's folder, `5.2/python/bin/python3.13` in blender.org's builds, or a system
+  Python 3.14 when your Blender uses that), and install the pinned lock exactly as the add-on does:
 
   ```sh
-  PY=/path/to/blender-5.2/5.2/python/bin/python3.14
+  PY=/path/to/blender-5.2/5.2/python/bin/python3.13
   "$PY" -I -m venv .venv
   .venv/bin/python -m pip install --isolated --disable-pip-version-check --no-input \
       --require-hashes --only-binary :all: --no-deps -r agent_env/requirements.lock

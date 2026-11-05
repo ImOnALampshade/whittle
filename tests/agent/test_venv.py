@@ -107,9 +107,13 @@ class CommandTest(unittest.TestCase):
         for machine, platform in (("x86_64", "linux"), ("aarch64", "linux"), ("arm64", "linux"),
                                   ("AMD64", "win32"), ("arm64", "darwin")):
             with self.subTest(platform=platform):
+                self.assertIsNone(venv.compatible((3, 13, 13), machine, platform))
                 self.assertIsNone(venv.compatible((3, 14, 8), machine, platform))
-        self.assertIn("3.14", venv.compatible((3, 13, 1), "x86_64", "linux"))
-        self.assertIn("3.14", venv.compatible((3, 15, 0), "arm64", "darwin"))
+        for version in ((3, 12, 9), (3, 15, 0), (4, 0, 0)):
+            with self.subTest(version=version):
+                reason = venv.compatible(version, "x86_64", "linux")
+                self.assertIn("3.13 or 3.14", reason)
+                self.assertIn(f"{version[0]}.{version[1]}", reason)
         for machine, platform in (("armv7l", "linux"), ("riscv64", "linux"), ("ARM64", "win32")):
             with self.subTest(platform=platform, machine=machine):
                 reason = venv.compatible((3, 14, 0), machine, platform)

@@ -3,8 +3,9 @@
 Resolutions of the open questions in `design.md` §10, plus environment facts.
 
 ## Environment
-- Blender 5.2.2 LTS, bundled Python 3.14 (a distribution-packaged Blender may use the system `/usr/bin/python3.14`). Grease Pencil is the v3 API (`bpy.types.GreasePencil` with layers, drawings and attributes) — the 4.2-era GP API does not apply.
-- Extension format: `blender_manifest.toml`, minimum Blender 5.2: the Grease Pencil v3 API, and the lock's wheels are built for its Python 3.14, so an older Blender would install the extension and then fail.
+- Blender 5.2 LTS, bundled Python 3.13 in blender.org's builds (a distribution-packaged Blender may use the system `/usr/bin/python3.14`). Grease Pencil is the v3 API (`bpy.types.GreasePencil` with layers, drawings and attributes) — the 4.2-era GP API does not apply.
+- **Python 3.13 and 3.14 both** (2026-11-04): official blender.org 5.2.3 bundles 3.13.13 and a distribution's build may use 3.14, so `venv.compatible()` accepts either (`venv.PYTHONS`). One lock serves both: it was compiled for 3.14, but its hashes cover each pin's 3.13 wheels too, so it stays as it is.
+- Extension format: `blender_manifest.toml`, minimum Blender 5.2: the Grease Pencil v3 API, and the lock's wheels are built for its Python, so an older Blender would install the extension and then fail.
 
 - **Platforms** (2026-10-23; `linux-arm64` added 2026-10-23): `linux-x64`, `linux-arm64`,
   `windows-x64` and `macos-arm64`, in one extension zip. Linux x64 is the only one tested;
@@ -20,7 +21,7 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
     in 49), and Blender 5.2 has no Intel Mac build. No Windows on Arm: the SDK has no
     `win_arm64` wheel.
   - Linux arm64: PyPI's JSON API, asked for each of the 30 pins at its exact version,
-    lists the CPython 3.14 manylinux/musllinux aarch64, abi3 and pure-Python wheels, and
+    lists the CPython 3.13 and 3.14 manylinux/musllinux aarch64, abi3 and pure-Python wheels, and
     every one's sha256 is already in the lock (the SDK's `manylinux_2_17_aarch64` wheel
     with its `claude` among them), so the lock installs there unchanged. Listed, untested.
   - One zip, not `extension build --split-platforms`. Splitting only filters the
@@ -38,7 +39,7 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
 ## Agent process
 - **Python**: Blender's bundled Python. The extension creates a private venv from Blender's `sys.executable` and installs `agent_env/requirements.lock` with `--require-hashes --only-binary :all: --no-deps`, after user confirmation in preferences. Never auto-upgrades.
 - **SDK**: `claude-agent-sdk==0.2.167`, exact pins + hashes in `agent_env/requirements.lock`. The wheel bundles the Claude Code CLI (`claude_agent_sdk/_bundled/claude`, `claude.exe` on Windows), so no separate CLI install is required.
-- **Dev venv**: `.venv/` at the repo root, made from Blender 5.2's Python 3.14 with the lock installed the way the add-on installs it (README, Development). Use `.venv/bin/python` for agent-side code and tests. Do not install anything else.
+- **Dev venv**: `.venv/` at the repo root, made from Blender 5.2's Python with the lock installed the way the add-on installs it (README, Development). Use `.venv/bin/python` for agent-side code and tests. Do not install anything else.
 - **Auth** (changed 2026-10-23): an Anthropic API key only: the preference, else `ANTHROPIC_API_KEY` in Blender's environment. No key, no agent; the sidebar asks for one. The agent's environment loses every other Claude or Anthropic credential variable and the bundled CLI runs with Whittle's own `CLAUDE_CONFIG_DIR`, so it can never sign in with the user's claude.ai login, nor read their Claude settings, hooks or MCP servers (architecture §2, Authentication). Why: Anthropic does not allow third-party products built on the Agent SDK to offer claude.ai login or use subscription plan limits; developers are to use API key authentication. The earlier default, the user's existing Claude login, is gone.
 - **Telemetry** (changed 2026-10-23): the agent runs with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, so the bundled CLI sends no usage telemetry or error reports of its own. The preference **Send Claude Code usage data** (off) leaves the variable unset, and Blender's own environment, if it sets it, still wins. Why: Whittle's privacy promise is that only the turns go to Anthropic; telemetry is opt-in.
 - **Model**: per chat, picked from the button beside Send (the newest of each family, older versions in a submenu, any id by hand); new chats start on the preference, default `claude-opus-5-5`. The list comes from the Models API through the key (older versions included), else the bundled CLI's initialize response, cached in the user folder over a bundled list (architecture §15). A change applies from the next turn via `set_model` in the same SDK session.

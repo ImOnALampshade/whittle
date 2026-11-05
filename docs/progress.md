@@ -686,6 +686,9 @@ them at each save. Nothing is written beside the `.blend`.
 
 ## Known gaps
 
+- **Real-agent turns on Python 3.13 have not been run live**: the offline suite passes on
+  blender.org's 3.13, and there the real agent's code compiles and imports with the lock
+  installed, but no live test has run on it.
 - **The chats' cache**:
   - A chat's conversation resumes through its transcript store when its cwd changed
     (a copy's fresh cache); that a real CLI resumes and forks from a

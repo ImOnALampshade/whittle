@@ -104,7 +104,7 @@ Rules:
   shebang), and the manifest says `license = ["SPDX:GPL-3.0-or-later"]`.
 - `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `models.py`, `style.py`, `venv.py`, `platforms.py` and everything under `agent/`
   import only the stdlib at module level. `agent/runner.py` imports `claude_agent_sdk`;
-  nothing else does, so the fake agent and the formats code run under any Python 3.14,
+  nothing else does, so the fake agent and the formats code run under any Python 3.13 or 3.14,
   including Blender's.
 - `addon/*` may import `bpy`, `bmesh`, `mathutils`, `gpu`, `numpy` (numpy ships with
   Blender). It never imports `whittle.agent`.
@@ -1340,7 +1340,7 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
 - `whittle/blender_manifest.toml`: `schema_version = "1.0.0"`, `id = "whittle"`,
   `version` (equal to `whittle.__version__`, checked by a test), `name = "Whittle"`,
   `tagline`, `maintainer`, `type = "add-on"`, `blender_version_min = "5.2.0"` (Grease
-  Pencil v3, and the lock's wheels are for Python 3.14),
+  Pencil v3, and the lock's wheels are for its Python, 3.13 or 3.14),
   `license = ["SPDX:GPL-3.0-or-later"]`,
   `platforms = ["linux-x64", "linux-arm64", "windows-x64", "macos-arm64"]` (no `wheels`: the venv is
   downloaded at setup, so the zip holds no binaries and one zip serves every platform;
@@ -1404,7 +1404,7 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
   folder, no marker. `on_finish` runs once at the end.
 - **Guard** (`setup.begin`): refuses, with a message for the user, when a setup is
   already running, a turn is running or waiting (`TurnController.busy`), `venv.compatible()`
-  objects (Python 3.14 on Linux x86_64, Windows AMD64 or macOS arm64, `venv.SUPPORTED`: the
+  objects (Python 3.13 or 3.14, `venv.PYTHONS`, on Linux x86_64, Windows AMD64 or macOS arm64, `venv.SUPPORTED`: the
   lock has every pin's wheel for those; an Intel Mac gets its own message naming
   `cryptography`), Blender's Python
   has no `ensurepip`, the folder is `foreign`, the venv is `ready` and this is not a
