@@ -38,14 +38,16 @@ jobs:
           persist-credentials: false
 
       # What blender.org's Linux build links from the system. It is the same
-      # list whether or not the image already has them.
+      # list whether or not the image already has them. EGL is loaded only when
+      # a test draws, so it never shows up as a link; on a runner with no GPU it
+      # then needs Mesa's software driver as well.
       - name: Install Blender's system libraries
         if: runner.os == 'Linux'
         run: |
           timeout 180 sudo apt-get update
           timeout 300 sudo apt-get install -y --no-install-recommends \
               libgl1 libglx0 libopengl0 libice6 libsm6 libx11-6 libxext6 libxfixes3 libxi6 \
-              libxkbcommon0 libxrender1 libxt6t64
+              libxkbcommon0 libxrender1 libxt6t64 libegl1 libgl1-mesa-dri
 
       # Restore and save apart: the plain cache action saves only when the job
       # passes, and a failing platform should not download Blender every run.
