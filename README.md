@@ -44,7 +44,9 @@ Windows or macOS yet: reports welcome (see [Platforms](#platforms)).
 
 Whittle is young (0.1.0); expect rough edges.
 
-- **Platforms**: developed and tested on Linux x64 only. Linux arm64, Windows x64 and
+- **Platforms**: developed on Linux x64, with real agent turns only on a distribution's
+  Blender with Python 3.14; blender.org's Python 3.13 has passed the offline suite in CI,
+  not a real turn. Linux arm64, Windows x64 and
   macOS on Apple silicon are supported in the code, and the last two run in CI, but real
   use on all three is untested: reports welcome. Intel Macs are not supported. See
   [Platforms](#platforms).
@@ -61,7 +63,7 @@ Whittle is young (0.1.0); expect rough edges.
 
 | Platform | Blender name | Status |
 |---|---|---|
-| Linux x64 | `linux-x64` | Developed and tested here. CI gates every release on it. |
+| Linux x64 | `linux-x64` | Developed here on a distribution's Blender with Python 3.14. CI gates every release on blender.org's build (Python 3.13), which has passed the offline suite but not a real agent turn. |
 | Linux arm64 | `linux-arm64` | Untested: blender.org publishes no build for it, so CI cannot run it. Reports welcome. |
 | Windows x64 | `windows-x64` | The agent-side tests have passed in CI, but the Blender suite cannot finish on the headless runner. Real use is untested: reports welcome. |
 | macOS on Apple silicon | `macos-arm64` | The offline suite has passed in CI. Real use is untested: reports welcome. |

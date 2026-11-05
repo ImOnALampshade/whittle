@@ -11,7 +11,8 @@ writes a prompt, and the agent edits the open scene by running Python in Blender
 turn is a node in a branching history; a file can hold several chats, stored in the
 `.blend`. Licensed GPL-3.0-or-later.
 
-Platforms (README, Platforms): developed and tested on Linux x64; Linux arm64, Windows
+Platforms (README, Platforms): developed on Linux x64 with a distribution's Blender on
+Python 3.14 (blender.org's 3.13 has passed the offline suite in CI, not a real turn); Linux arm64, Windows
 x64 and macOS on Apple silicon are in the manifest and the code, and the last two run in
 CI, but real use on all three is untested; Intel Macs are not supported. One zip serves all four: it carries no wheels, and the setup installs the
 platform's own from the hash-pinned lock. What differs per platform lives in

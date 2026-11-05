@@ -226,7 +226,7 @@ The log of each setup is `logs/venv-<time>.log` in Whittle's user folder.
 
 | Platform | Status |
 |---|---|
-| Linux x64 | Developed and tested. |
+| Linux x64 | Developed on a distribution's Blender with Python 3.14. blender.org's build (Python 3.13) has passed the offline tests in CI, but not a real agent turn. |
 | Linux arm64 | Untested: blender.org publishes no build for it, so the automated tests cannot run it. Reports welcome. |
 | Windows x64 | The agent-side tests have passed on GitHub's runners, but the Blender tests cannot finish there. Real use is untested: reports welcome. |
 | macOS on Apple silicon | The offline tests have passed on GitHub's runners. Real use is untested: reports welcome. |
