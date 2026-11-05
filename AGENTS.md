@@ -163,7 +163,7 @@ Auth and Distribution).
   folder for it).
 - The CLI's own usage telemetry and error reports are off by default: the agent runs
   with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` unless the user turns on **Send
-  Claude Code usage data** (`usage_data`, off by default). Keep that default.
+  Claude CLI usage data** (`usage_data`, off by default). Keep that default.
 - Never modify the bundled CLI; Whittle only chooses its environment and folder.
 - No "Claude Code" branding: Whittle is its own product, "Powered by Claude" at most.
 
@@ -220,7 +220,7 @@ Auth and Distribution).
   `DESCRIPTIONS`, `LIMITS`); `whittle/style.py` words the style for the agent.
 - **Chats from another machine** (ui.md §3.11): every chat records the install that
   made it (`origin`, the random id in the user folder's `install.json`). A chat from
-  another install opens read-only with a **Continue this chat?** box; Send stays disabled
+  another install opens with a **Continue this chat?** box; Send stays disabled
   until Continue (`whittle.chat_continue`) adds this install to the chat's `adopted`.
   Anything that sends a turn must respect that gate.
 - **Agent-facing text** (system prompt, skills, tool descriptions, errors the agent

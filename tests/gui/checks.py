@@ -1980,7 +1980,7 @@ def preferences_defaults(stage: GuiStage):
                  "the Defaults box's fields")
     expect_equal([r["prop"] for r in in_box(page, "Files") if r["kind"] == "prop"], ["store_chats"],
                  "the Files box's fields")
-    expect(not p.usage_data, "Send Claude Code usage data is on by default")
+    expect(not p.usage_data, "Send Claude CLI usage data is on by default")
     yield from shoot_preferences(stage, "preferences-defaults", "Defaults")
     popover = Spy(ui.WHITTLE_PT_agent)
 

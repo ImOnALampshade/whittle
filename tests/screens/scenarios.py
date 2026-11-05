@@ -471,7 +471,7 @@ def too_large(stage: Stage):
                    say("Done: the crate has a lid.")], "finish": done("Added a lid.")},
         {"steps": [say("Looking at the photos.")],
          "finish": {"subtype": "success", "is_error": True, "too_large": True,
-                    "errors": ["The images are too big for one request: send fewer or smaller references, or start a new chat."]}},
+                    "errors": ["Images too big: send fewer or smaller"]}},
     ])
     yield from stage.turns(["Add a lid.", "Match the wood in these photos."], script)
 

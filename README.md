@@ -76,7 +76,7 @@ no Windows Arm wheel. On Linux arm64 every pin has an aarch64 or pure-Python whe
 Python 3.14 whose hash is in the lock (checked against PyPI), but no one has run it yet.
 
 What differs on Windows: setup steps and the agent run without a console window; the
-agent and the Claude Code CLI it starts share a Job Object, so stopping the agent (or
+agent and the Claude CLI it starts share a Job Object, so stopping the agent (or
 Blender crashing) ends the CLI too; and a stop is graceful only through Whittle's own
 shutdown message, since Windows has no terminate signal. A killed agent leaves the
 SDK's `claude-resume-*` folder in the temp folder; the next agent start removes
@@ -110,8 +110,8 @@ pick a shorter **Environment Folder**.
    the agent cannot start for lack of it.)
 
    - **What it downloads**: the 30 packages pinned in `requirements.lock`, among them
-     Anthropic's `claude-agent-sdk` 0.2.167, whose wheel bundles the Claude Code CLI that
-     runs the agent. They come from PyPI only, as prebuilt wheels.
+     Anthropic's `claude-agent-sdk` 0.2.167, whose wheel bundles the Claude CLI that
+     runs the agent. They come from PyPI, as prebuilt wheels.
    - **How**: Whittle makes a venv from Blender's own Python (`sys.executable -I -m venv`), then
      runs
      `pip install --isolated --disable-pip-version-check --no-input --no-cache-dir --index-url https://pypi.org/simple --progress-bar raw --require-hashes --only-binary :all: --no-deps -r requirements.lock`
@@ -247,8 +247,8 @@ Blenders gets a cache in each, and a quiet line in the sidebar says their chats 
 merge.
 
 A chat that was made on another machine (someone else's file, or your own from another
-computer) opens read-only, with a box asking **Continue this chat?**: Send stays disabled
-until you press **Continue**, and **New Chat** is there instead. You are asked once per
+computer) opens with a box asking **Continue this chat?**: Send stays disabled until you
+press **Continue**, and **New Chat** is there instead. You are asked once per
 chat; chats from files saved before Whittle recorded this never ask. The mark is a random
 id Whittle keeps for its install in its user folder (`install.json`); it names no person
 or machine.
@@ -259,10 +259,10 @@ or machine.
 ## Privacy and safety
 
 Whittle talks to Anthropic's API only, with your key, while the agent runs: a model
-listing when it starts, then the turns. The bundled Claude Code CLI can also send
+listing when it starts, then the turns. The bundled Claude CLI can also send
 Anthropic its own usage telemetry and error reports; Whittle turns that off by running it
 with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. **Preferences → Add-ons → Whittle →
-Send Claude Code usage data** (off by default) turns it back on, unless Blender's own
+Send Claude CLI usage data** (off by default) turns it back on, unless Blender's own
 environment sets that variable. What a turn sends:
 
 - your prompts, amendments and answers to Claude's questions, and the reference images
@@ -485,7 +485,7 @@ them first.
   `github:` or VCS references.
 - The install only runs after you confirm the dialog, never during a turn (so the agent's own
   Python can never start one), and never from background Blender.
-- The bundled Claude Code CLI is run as Anthropic ships it, unmodified.
+- The bundled Claude CLI is run as Anthropic ships it, unmodified.
 - A change to `agent_env/requirements.lock` (or its packaged copy) in a diff that should not
   touch dependencies is a red flag: stop and look at it.
 - Whittle never publishes anything.

@@ -127,9 +127,8 @@ def check_image_size(paths) -> None:
     """Refuses a request whose images are more than the agent could be handed."""
     total = sum(Path(p).stat().st_size for p in paths if Path(p).suffix.lower() in formats.IMAGE_TYPES)
     if total > formats.REQUEST_IMAGE_BYTES:
-        raise BundleError(f"the images of this request come to {total / 2**20:.0f} MB, over the "
-                          f"{formats.REQUEST_IMAGE_BYTES / 2**20:.0f} MB a request can hold: "
-                          "send fewer or smaller references")
+        raise BundleError(f"Images too big ({total / 2**20:.0f} MB, limit "
+                          f"{formats.REQUEST_IMAGE_BYTES / 2**20:.0f} MB): send fewer or smaller")
 
 
 def copy_refs(paths, dest_dir: Path) -> list[str]:

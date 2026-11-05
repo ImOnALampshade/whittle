@@ -434,8 +434,10 @@ failure):
   its parent, so its prompt goes back in the box if it is empty and its pending strokes
   and references are sent as they are). A turn whose images were too big (`too_large` on
   its node) has `Edit` there instead (`whittle.history_branch`, `GREASEPENCIL`): the same
-  request would fail the same way. Images over `formats.REQUEST_IMAGE_BYTES` never make a
-  turn: Send, Retry or an amendment says how big they are and nothing is sent.
+  request would fail the same way. Its reason, `Images too big: send fewer or smaller`, fits
+  those 2 lines at the default width; the fuller advice is in the docs site. Images over
+  `formats.REQUEST_IMAGE_BYTES` never make a turn: Send, Retry or an amendment reports
+  `Images too big (N MB, limit 180 MB): send fewer or smaller` and nothing is sent.
 - **A failed turn that changed nothing** is folded in the tree (never current). It still
   shows after its parent while it is the latest thing that happened in this Blender
   session, with its failure and `Retry`; it disappears at the next send or when Blender
@@ -801,7 +803,7 @@ nothing. The current chat is never included.
 `Rename`) with the title field, filled with the current title.
 
 **A chat made on another machine** (someone else's file, or the user's own from
-another computer; architecture §14) shows read-only until continued: its conversation
+another computer; architecture §14) has Send disabled until continued: its conversation
 and history as usual, and above the sketch row a small box (`ui.draw_foreign`):
 
 ```
@@ -822,6 +824,10 @@ sketch and references can still be prepared. **Continue** (`whittle.chat_continu
 for files you trust) marks the chat as continued here, for good: the box goes and Send
 works. New Chat in the chat menu stays available. Chats from files saved before
 Whittle recorded where a chat was made never ask.
+
+Going back in the chat's history stays allowed before Continue, though it changes the
+scene: the gate exists to stop text going to Claude from a chat this install did not
+start, and looking through the chat helps the user decide.
 
 **The same file open in another Blender** (each keeps its own copy of the chats): while
 the other Blender has it open, one dim line with `INFO` at the top of the panel, under

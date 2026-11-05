@@ -250,7 +250,7 @@ or Max plan ([Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/over
   whose name starts with `ANTHROPIC_` or `CLAUDE` except `ANTHROPIC_BASE_URL` and
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` (the user's telemetry opt-out), plus
   `ANTHROPIC_API_KEY` (the resolved key) and `CLAUDE_CONFIG_DIR`, and
-  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` unless the **Send Claude Code usage
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` unless the **Send Claude CLI usage
   data** preference (`usage_data`, off) is on: the CLI then sends no telemetry or error
   reports of its own. The preference is part of `launch_settings()`, so an idle agent
   restarts with a change at the next turn. That drops
@@ -311,7 +311,7 @@ same sequence runs synchronously with `popen.wait(timeout=…)`, since no more t
 come, with a shorter 10 s before the SIGTERM. `unregister()` does the same.
 
 The agent runs in its own process group (`start_new_session=True`), and every terminate
-or kill goes to the whole group (`os.killpg`), so the Claude Code CLI the SDK runs goes
+or kill goes to the whole group (`os.killpg`), so the Claude CLI the SDK runs goes
 with it, also when the bridge fails or the handshake times out. The agent handles
 SIGTERM like `shutdown`: it still closes its session, so the SDK's temporary config
 folder (which holds a copy of the credentials) is removed.

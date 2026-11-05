@@ -43,7 +43,7 @@ TICK = 0.25
 DROPPED_ENV_PREFIXES = ("PIP_", "PYTHON", "UV_", "VIRTUAL_ENV", "CONDA_")
 VERIFY_PREFIX = "whittle-verify:"
 # Imports the SDK (and so its whole dependency tree) and checks that the
-# wheel brought its bundled Claude Code CLI along, under the name the SDK
+# wheel brought its bundled Claude CLI along, under the name the SDK
 # looks for (bundled_cli_name).
 VERIFY_SCRIPT = (
     "import importlib.metadata, json, pathlib, sys, claude_agent_sdk; "
@@ -141,7 +141,7 @@ def compatible(version_info, machine: str, platform: str) -> str | None:
 
 
 def bundled_cli_name(platform: str = sys.platform) -> str:
-    """The Claude Code CLI's file name in the SDK's _bundled folder."""
+    """The bundled Claude CLI's file name in the SDK's _bundled folder."""
     return "claude.exe" if platforms.is_windows(platform) else "claude"
 
 
@@ -478,7 +478,7 @@ class VenvSetup:
             self._fail(f"verify found {SDK} {found.get('sdk')}, expected {expected}")
             return False
         if found.get("cli") is not True:
-            self._fail(f"{SDK} is installed without its bundled Claude Code CLI")
+            self._fail(f"{SDK} is installed without its bundled Claude CLI")
             return False
         self.sdk = found["sdk"]
         return True

@@ -134,8 +134,8 @@ class WhittlePreferences(bpy.types.AddonPreferences):
                     "in this computer's cache only, and files saved from now on carry none")
 
     usage_data: BoolProperty(
-        name="Send Claude Code usage data", default=DEFAULTS["usage_data"],
-        description="Let the bundled Claude Code CLI send Anthropic its own usage telemetry and error "
+        name="Send Claude CLI usage data", default=DEFAULTS["usage_data"],
+        description="Let the bundled Claude CLI send Anthropic its own usage telemetry and error "
                     "reports. Off: it sends only the turns themselves "
                     "(CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC). An idle agent restarts with the change "
                     "at the next turn")

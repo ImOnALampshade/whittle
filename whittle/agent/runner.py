@@ -51,8 +51,9 @@ API_REQUEST_BYTES = 32 * 1024 * 1024
 # above this limit the API would refuse the request anyway. The other way, a
 # tool result on its way to the CLI, is bounded by formats.REQUEST_IMAGE_BYTES.
 MAX_FRAME_BYTES = 4 * API_REQUEST_BYTES
-# Fits stream.REASON_CHARS, which the sidebar cuts a turn's reason to.
-IMAGES_TOO_LARGE = "The images are too big for one request: send fewer or smaller references, or start a new chat."
+# Whole in the two lines beside Edit at the sidebar's default width, the most
+# a turn's reason gets; the rest of the advice is in the docs.
+IMAGES_TOO_LARGE = "Images too big: send fewer or smaller"
 CLI_STOPPED = "the agent CLI stopped"
 # How the CLI words a request the API refused for its size or its images.
 SIZE_REFUSALS = ("Request too large", "Image was too large")

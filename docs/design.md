@@ -221,7 +221,7 @@ Blender's UI is plainer than a web panel — that's the accepted trade.
 ## 8. Packaging
 
 - Blender 5.2+ **extension**: `blender_manifest.toml`, declared permissions `network` (API calls) and `files` (session folder, venv).
-- The agent's Python environment is a **private venv** the extension creates on first run (user-confirmed), with an exactly pinned `claude-agent-sdk` and its pinned dependencies. Verify whether the SDK bundles the Claude Code CLI or needs it installed separately.
+- The agent's Python environment is a **private venv** the extension creates on first run (user-confirmed), with an exactly pinned `claude-agent-sdk` and its pinned dependencies. Verify whether the SDK bundles the Claude CLI or needs it installed separately.
 - Supply-chain hygiene: pinned versions with hashes, no auto-upgrade, install scripts reviewed.
 
 ---

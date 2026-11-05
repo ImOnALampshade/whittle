@@ -151,7 +151,7 @@ CHECKS = {
         "Cancel, and Cancel leaves it cancelled and the folder Whittle's to rebuild."),
     "preferences_defaults": Check(
         "The Preferences' Model for New Chats starts the next new chat on that model and leaves "
-        "older chats on theirs. Send Claude Code usage data restarts an idle agent, whose "
+        "older chats on theirs. Send Claude CLI usage data restarts an idle agent, whose "
         "environment holds CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC only while it is off. The "
         "Defaults box has all six session settings; Triangle Budget, Palette, Bevel Style and Style "
         "Notes show in the agent popover's For This File as (default) and reach the session and "

@@ -5,6 +5,7 @@ import io
 import json
 import os
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from claude_agent_sdk import (AssistantMessage, CLIJSONDecodeError, RateLimitEvent, SystemMessage, TextBlock,
@@ -402,8 +403,12 @@ class SdkRunnerTest(RunnerTestCase):
         self.assertTrue(finished["is_error"])
         self.assertTrue(finished["too_large"])
         self.assertEqual(finished["errors"], [runner.IMAGES_TOO_LARGE])
-        self.assertIn("images", runner.IMAGES_TOO_LARGE)
+        self.assertIn("Images", runner.IMAGES_TOO_LARGE)
         self.assertEqual(ended["detail"], runner.IMAGES_TOO_LARGE)
+
+    def test_the_images_reason_is_the_one_the_sidebar_test_measures(self):
+        script = json.loads((Path(__file__).parents[1] / "fixtures" / "fake" / "too_large.json").read_text())
+        self.assertEqual(script["turns"][0]["finish"]["errors"], [runner.IMAGES_TOO_LARGE])
 
     async def test_a_bad_line_from_the_cli_is_not_blamed_on_the_images(self):
         finished, ended = await self.stream_failure(CLIJSONDecodeError("{oops", ValueError("not JSON")))

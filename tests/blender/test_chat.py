@@ -227,7 +227,7 @@ class TooLargeTest(ChatTurnCase):
         with self.assertRaises(RuntimeError):
             operators.retry(bpy.context, node, self.fake)
         conv = conversation.build(hist, self.ctl)
-        self.assertEqual(conv.turns[-1].failure, "The images are too big.")
+        self.assertEqual(conv.turns[-1].failure, "Images too big: send fewer or smaller")
 
 
 class RetryTest(ChatTurnCase):

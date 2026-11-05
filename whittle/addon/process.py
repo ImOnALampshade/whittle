@@ -44,7 +44,7 @@ NO_KEY = "Add an Anthropic API key in Preferences to run Claude"
 # CLAUDE_CONFIG_DIR points at Whittle's own folder, where the CLI finds no
 # login, settings, hooks or MCP servers of the user's. The CLI's own usage
 # telemetry and error reports are off unless the user turns them on
-# (the "Send Claude Code usage data" preference).
+# (the "Send Claude CLI usage data" preference).
 STRIPPED_PREFIXES = ("ANTHROPIC_", "CLAUDE")
 NONESSENTIAL = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
 KEPT = {"ANTHROPIC_BASE_URL", NONESSENTIAL}
@@ -142,7 +142,7 @@ class AgentProcess:
         started = time.time()
         try:
             # Its own process group (a Job Object on Windows), so terminating
-            # or killing it reaches the Claude Code CLI it runs too.
+            # or killing it reaches the bundled Claude CLI it runs too.
             self.popen = subprocess.Popen(argv, cwd=session_dir, env=env, stdin=subprocess.DEVNULL,
                                           stdout=self._log_file, stderr=subprocess.STDOUT,
                                           **platforms.own_group())

@@ -604,7 +604,7 @@ its own conversation, history tree and Claude session; the panel shows the curre
 - **SDK transcripts** go into each chat's `sdk/` through a `SessionStore`
   (`agent/store.py`), so a chat resumes after the file moved or on another machine.
 - **Chats from another machine**: each chat records the install that made it (a
-  random id in Whittle's user folder). Another install's chat opens read-only with a
+  random id in Whittle's user folder). Another install's chat opens with a
   `Continue this chat?` box: Send is disabled with a tooltip until Continue, which is
   stored with the chat so it never asks again; New Chat stays available. Chats from
   before the marker never ask.
@@ -717,6 +717,29 @@ its id when its first chat is made, and keeps it when saved); the file itself st
 them at each save. Nothing is written beside the `.blend`.
 
 ## Known gaps
+
+- **Found while writing the documentation site**. The site describes what happens today, so
+  a fix here also changes its page:
+  - **A system-wide pip config** still reaches setup through `extra-index-url`, `find-links`
+    and `no-index`, which no pip flag undoes, and its `no-index` makes setup fail. Decided, not
+    open (decisions.md, Agent process): the code stays, so a proxy or CA set only in pip.conf
+    keeps working, and the hashes are the protection.
+
+- **Found while fixing those**:
+  - **Big images under the request limit** can still end the session: many small ones the CLI
+    does not recompress go over the read limit. The user gets the images reason and Edit, not a
+    bare stop, but the add-on cannot predict what the CLI will shrink.
+  - **Stamps carry no chat**: a step made in chat A that holds strokes stamped by chat B's kept
+    failure, with the number of a fold in A, shows them as pending after an undo. Harmless, since
+    the next send stamps every visible stroke.
+  - **After a setup in a second Blender** the Send button stays dim until Enter,
+    Shift+Alt+Enter, Set Up… or Start Agent, because a poll never reads the venv.
+  - **The resume warning, between a refused submit and the next Send**, is not in the sidebar:
+    the refused turn's entry sits after it. It comes back on the next turn the agent takes.
+  - **A transcript Text from an older Whittle** stays until a save with Whittle enabled, and
+    autosave and crash recovery files, which run no `save_pre`, could still carry it.
+  - **A crash, then a new hostname**, leaves an open mark or claim that reads as another
+    machine's, so the second-Blender line shows until it ages out after 30 days.
 
 - **The chats' cache**:
   - A chat's conversation resumes through its transcript store when its cwd changed
