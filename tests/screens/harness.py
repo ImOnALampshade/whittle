@@ -248,6 +248,8 @@ class Run:
     """A state machine on one timer: settle, widen the sidebar, play the
     scenario, hold for the redraw, then shoot page by page and quit."""
 
+    deadline = DEADLINE
+
     def __init__(self, args):
         self.args = args
         self.out = Path(args.out)
@@ -266,8 +268,8 @@ class Run:
 
     def tick(self):
         try:
-            if time.monotonic() - self.started > DEADLINE:
-                raise TimeoutError(f"gave up after {DEADLINE:g} s in state {self.state}"
+            if time.monotonic() - self.started > self.deadline:
+                raise TimeoutError(f"gave up after {self.deadline:g} s in state {self.state}"
                                    + (f" waiting for {self.condition[1]}" if self.condition else ""))
             return getattr(self, f"_{self.state}")()
         except Exception:
@@ -414,6 +416,10 @@ class Run:
             pixels = screenshot_region(self.work / "viewport.png", viewport=True)
             self.pages = [(0, pixels)]
             return self._write(pixels)
+        return self._shoot_pages()
+
+    def _shoot_pages(self):
+        """The sidebar, a page per call, scrolling between them."""
         _win, _area, _main, ui = view3d()
         if ui.active_panel_category != "Whittle":
             raise RuntimeError(f"the sidebar shows the {ui.active_panel_category!r} tab, not Whittle")

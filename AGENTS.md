@@ -80,7 +80,7 @@ KDE's `kwin_wayland`.
 ./gui_checks.sh                # every GUI check in a real, hidden Blender (~4 min)
 ./gui_checks.sh undo_turn send_key
 WHITTLE_GUI=1 ./run_tests.sh   # the suite, then every GUI check
-./screens.sh                   # sidebar screenshots into build/screens/ (~1.5 min)
+./screens.sh                   # sidebar screenshots into build/screens/ (several minutes)
 ./screens.sh conversation asking
 ./screens.sh --docs            # the README's images, into docs/images/
 ./build.sh                     # validate and build build/whittle-<version>.zip

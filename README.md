@@ -352,7 +352,7 @@ Environment variables Whittle reads:
 ### Sidebar screenshots
 
 ```sh
-./screens.sh                       # every scenario, about 1.5 minutes
+./screens.sh                       # every scenario, several minutes
 ./screens.sh conversation asking   # only these
 ./screens.sh --docs                # the README's images, into docs/images/
 ```
