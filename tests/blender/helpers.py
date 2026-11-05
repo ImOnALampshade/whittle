@@ -9,11 +9,13 @@ import time
 import unittest
 from pathlib import Path
 
+from whittle import venv
+
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "tests" / "fixtures"
 CRATE_BUNDLE = FIXTURES / "crate" / "request"
 FAKE_SCRIPTS = FIXTURES / "fake"
-VENV_PYTHON = REPO / ".venv" / "bin" / "python"
+VENV_PYTHON = venv.venv_python(REPO / ".venv")
 
 
 def agent_python() -> Path:

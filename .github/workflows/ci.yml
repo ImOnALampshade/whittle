@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'ci/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux x64
+    uses: ./.github/workflows/test.yml
+    with:
+      runner: ubuntu-latest
+      gate: true
+
+  untested:
+    name: Untested platform
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-latest, macos-latest]
+    uses: ./.github/workflows/test.yml
+    with:
+      runner: ${{ matrix.runner }}
+      gate: false

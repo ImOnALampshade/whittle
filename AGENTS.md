@@ -122,6 +122,15 @@ WHITTLE_GUI=1 ./run_tests.sh   # the suite, then every GUI check
 - **Build**: `build.sh` refuses to build when `whittle/requirements.lock` or
   `whittle/LICENSE` differs from its root copy. It never copies them for you.
 
+- **CI**: `.github/workflows/`, GitHub-hosted runners only. `ci.yml` and `release.yml`
+  both call `test.yml` (offline suite and `build.sh`, one job per runner); `release.yml`
+  also checks the tag (`.github/scripts/release_tag.py`) and publishes from a job with no
+  checkout. `ubuntu-latest` gates; `windows-latest` and `macos-latest` use
+  `continue-on-error`, and `publish` does not need them. Blender comes from
+  `.github/scripts/fetch_blender.py`, with its version and hashes pinned there. Actions
+  are first-party and pinned to a commit: `tests/agent/test_ci.py` checks that and the
+  rest. How to cut a release is in the README.
+
 ## Hard rules
 
 **Supply chain.**

@@ -15,11 +15,17 @@ if [ "${WHITTLE_LIVE:-}" = "1" ]; then
     online="--online-mode"
 fi
 
+# A venv's Python is elsewhere on Windows.
+python=.venv/bin/python
+if [ ! -e "$python" ]; then
+    python=.venv/Scripts/python.exe
+fi
+
 # unittest exits 5 when it ran no test. With -k a pattern may match tests on
 # one side only, so a side that matched nothing is not a failure unless the
 # other side matched nothing too.
 agent=0
-timeout 300 .venv/bin/python -m unittest discover -s tests/agent -t . "$@" || agent=$?
+timeout 300 "$python" -m unittest discover -s tests/agent -t . "$@" || agent=$?
 if [ "$agent" -ne 0 ] && [ "$agent" -ne 5 ]; then
     exit "$agent"
 fi

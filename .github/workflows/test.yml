@@ -1,0 +1,105 @@
+# The one test definition: called by ci.yml and release.yml, once per runner.
+name: Test
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: The GitHub-hosted runner label
+        type: string
+        required: true
+      gate:
+        description: Whether a failure counts; the gate also uploads the zip it built
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Tests and build (${{ inputs.runner }})
+    runs-on: ${{ inputs.runner }}
+    continue-on-error: ${{ !inputs.gate }}
+    timeout-minutes: 60
+    steps:
+      # The shell scripts and the fixtures must keep their LF endings.
+      - name: Keep line endings as committed
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # What blender.org's Linux build links from the system. It is the same
+      # list whether or not the image already has them.
+      - name: Install Blender's system libraries
+        if: runner.os == 'Linux'
+        run: |
+          timeout 180 sudo apt-get update
+          timeout 300 sudo apt-get install -y --no-install-recommends \
+              libgl1 libglx0 libopengl0 libice6 libsm6 libx11-6 libxext6 libxfixes3 libxi6 \
+              libxkbcommon0 libxrender1 libxt6t64
+
+      # Restore and save apart: the plain cache action saves only when the job
+      # passes, and a failing platform should not download Blender every run.
+      - name: Restore the Blender archive
+        id: restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/blender-archive
+          key: blender-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/fetch_blender.py') }}
+
+      - name: Fetch and verify Blender
+        id: blender
+        timeout-minutes: 30
+        run: |
+          "$(command -v python3 || command -v python)" .github/scripts/fetch_blender.py \
+              --archive-dir "$RUNNER_TEMP/blender-archive" --install-dir "$RUNNER_TEMP/blender"
+
+      - name: Save the Blender archive
+        if: steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/blender-archive
+          key: ${{ steps.restore.outputs.cache-primary-key }}
+
+      - name: Give the runner a timeout command
+        run: |
+          if ! timeout --version >/dev/null 2>&1; then
+              echo "$GITHUB_WORKSPACE/.github/scripts/shims" >> "$GITHUB_PATH"
+          fi
+
+      - name: Make the dev venv from Blender's Python
+        env:
+          BLENDER_PYTHON: ${{ steps.blender.outputs.python }}
+        run: |
+          blender --version
+          timeout 120 "$BLENDER_PYTHON" -I -m venv .venv
+          python=.venv/bin/python
+          if [ ! -e "$python" ]; then
+              python=.venv/Scripts/python.exe
+          fi
+          timeout 900 "$python" -I -m pip install --isolated --disable-pip-version-check --no-input \
+              --require-hashes --only-binary :all: --no-deps -r agent_env/requirements.lock
+
+      - name: Run the offline suite
+        run: ./run_tests.sh
+
+      - name: Build the extension
+        run: ./build.sh
+
+      - name: Upload the zip
+        if: inputs.gate
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: whittle-zip
+          path: build/whittle-*.zip
+          if-no-files-found: error
+          retention-days: 7

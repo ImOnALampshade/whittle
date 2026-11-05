@@ -620,6 +620,13 @@ its own conversation, history tree and Claude session; the panel shows the curre
   `tests/blender/test_models.py` (the Effort section, a switch between turns with the
   fake agent).
 
+**CI and releases** (README, CI and releases; decisions, Continuous integration).
+- `.github/workflows/`: `ci.yml`, `release.yml` and the shared `test.yml`.
+  `.github/scripts/`: `fetch_blender.py`, `release_tag.py` and the `timeout` shim.
+- Tests: `tests/agent/test_ci.py` (pinned first-party actions, hosted runners only,
+  permissions, time limits, no expression in a shell script, the gate, the tag rules, the
+  Blender pins, downloads cut off or wrong against a local server, the shim).
+
 ## How to run
 
 ```sh
@@ -689,6 +696,8 @@ them at each save. Nothing is written beside the `.blend`.
 - **Real-agent turns on Python 3.13 have not been run live**: the offline suite passes on
   blender.org's 3.13, and there the real agent's code compiles and imports with the lock
   installed, but no live test has run on it.
+- **CI has yet to run on GitHub**: Windows and macOS have never run, and Linux arm64 has no
+  CI because Blender publishes no build for it.
 - **The chats' cache**:
   - A chat's conversation resumes through its transcript store when its cwd changed
     (a copy's fresh cache); that a real CLI resumes and forks from a

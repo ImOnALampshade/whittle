@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""`timeout SECONDS COMMAND...` for runners without GNU timeout (macOS), so
+run_tests.sh and build.sh stay time-bounded there. CI puts this folder on PATH
+only when the runner has no working timeout; it exits 124 on a timeout, as
+GNU's does."""
+
+import os
+import signal
+import subprocess
+import sys
+
+KILL_AFTER = 10.0
+
+
+def main() -> int:
+    seconds, command = float(sys.argv[1]), sys.argv[2:]
+    # Its own session, so the signal also reaches what the command started.
+    process = subprocess.Popen(command, start_new_session=True)
+    try:
+        code = process.wait(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        print(f"timeout: {command[0]} ran past {seconds:g} s", file=sys.stderr)
+        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            process.wait(timeout=KILL_AFTER)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+        return 124
+    return 128 - code if code < 0 else code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

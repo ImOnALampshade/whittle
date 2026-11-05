@@ -74,3 +74,27 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
 - **No migration** (changed 2026-10-23): the code that moved earlier layouts into the cache (a single-session folder, the `<name>.whittle/` folder beside a file and its `.replaced-<time>/` copies, the user folder's `caches/<sha1>/` and `dev-sessions/`) is gone. Why: those layouts come from development builds before 0.1.0, which no released file uses, and the code had to be carried and tested through every change to the cache.
 - **Same file in two Blenders**: the second still gets a cache of its own (copy-on-conflict), so neither overwrites the other's chats; while the other's claim is live, the sidebar has one quiet line: "This file is open in another Blender; chats here won't merge with it." Why: merging two caches of one file is not worth its complexity, but silently diverging chats surprised.
 - **Chats from another machine**: each chat records the install that made it (`origin`, a random id in Whittle's user folder, `install.json`, naming no person or machine). A chat whose origin is another install opens read-only with a box, "Continue this chat?" [Continue]; Send is disabled with a tooltip until then, and New Chat stays available. Continue records this install in the chat's `adopted` list, stored with the chat, so it never asks again here, and the file saved from here carries that. Chats from before the marker count as this install's: no prompt for existing files. A user's own chats ask once on each of their other computers too; that is intended. Why: continuing a chat replays its conversation to Claude as if it were Claude's own, so text planted in someone else's file could steer it (README, Security); one click is cheap, and the default is the safe one.
+
+## Continuous integration
+
+- **GitHub Actions on free standard runners** (2026-11-04), with a GitHub Release as the
+  output. No larger or self-hosted runners and no secrets; publishing uses `GITHUB_TOKEN`
+  in the one job with `contents: write`, which checks nothing out.
+- **Blender from download.blender.org, not a package**, so CI runs what most users run.
+  The version and each archive's SHA-256 are pinned in `.github/scripts/fetch_blender.py`,
+  from Blender's published `.sha256` file, and checked on every use, cached or not, so the
+  cache is not trusted.
+- **blender.org's 5.2 builds bundle Python 3.13**, on all three platforms; only a
+  distribution's package may run on a system 3.14. The venv in CI is made from that 3.13,
+  which Whittle accepts alongside 3.14 (Environment, above).
+- **Only Linux x64 gates.** Windows and macOS have never been run, so they report without
+  blocking. `publish` needs `tag` and `linux` only, which keeps them out of a release by
+  construction rather than through how a failed `continue-on-error` job reports.
+- **No Linux arm64 row**: Blender 5.2 publishes no such build. The lock has its wheels.
+- **macOS has no GNU `timeout`**: `.github/scripts/shims/timeout` goes on `PATH` when the
+  runner lacks a working one, so `run_tests.sh` and `build.sh` stay as they are and
+  time-bounded. The only change they needed was `run_tests.sh` finding Windows' venv Python.
+- **Windows checks out with `core.autocrlf` off**: CRLF would break the shell scripts.
+- **The Blender archive's cache is restored and saved in separate steps**, since
+  `actions/cache` saves only when a job passes and a failing platform would otherwise
+  download Blender on every run.

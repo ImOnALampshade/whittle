@@ -436,6 +436,34 @@ The live tests call the real API with `ANTHROPIC_API_KEY` (a few US cents per ru
 to that key): they use `claude-haiku-5-5` with a tiny prompt, and `run_tests.sh` adds
 `--online-mode` to Blender for them.
 
+## CI and releases
+
+GitHub Actions runs on GitHub's free standard runners and needs no secrets.
+`.github/workflows/ci.yml` runs on pushes to `main` and `ci/**` and on pull requests;
+`release.yml` runs on tags. Both call `test.yml`, which downloads a pinned Blender
+from download.blender.org (`.github/scripts/fetch_blender.py` checks its SHA-256 before
+unpacking it), makes `.venv` from Blender's Python, installs the lock, and runs
+`./run_tests.sh` and `./build.sh`. The GUI checks and screenshots are not part of CI: they
+need `kwin_wayland`.
+
+Linux x64 (`ubuntu-latest`) is the gate. Windows x64 and macOS on Apple silicon run too,
+but their failures count for nothing yet, and a release does not wait for them. Linux
+arm64 has no CI: Blender publishes no Linux arm64 build.
+
+To cut a release:
+
+1. Set `version` in `whittle/blender_manifest.toml` and merge that to `main`.
+2. Tag that commit `v` plus the version and push the tag:
+
+   ```sh
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+The tag must match the manifest, or the release stops at once. When the tests pass,
+`whittle-<version>.zip` and its `.sha256` are attached to a new GitHub Release. A tag with
+a hyphen, such as `v0.2.0-rc1`, publishes a prerelease of the manifest's `0.2.0`.
+
 ## Contributing
 
 Issues and pull requests are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
