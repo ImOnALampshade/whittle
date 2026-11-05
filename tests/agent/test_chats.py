@@ -130,7 +130,14 @@ class PackTest(TempRoot):
             chats.unpack(data, out)
 
     def test_unsafe_members_are_refused(self):
-        for name in ("../escape.txt", "/abs.txt", "a/../../b.txt", "c:/x.txt", "a\\b.txt"):
+        names = ["../escape.txt", "/abs.txt", "a/../../b.txt", "c:/x.txt"]
+        # zipfile turns os.sep into "/" both ways, so on Windows a backslash
+        # name never reaches unpack; the rule is checked directly below.
+        if os.sep == "/":
+            names.append("a\\b.txt")
+        with self.assertRaises(formats.FormatError):
+            chats._safe_member("a\\b.txt")
+        for name in names:
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, "w") as zf:
                 zf.writestr("session.json", "{}")
