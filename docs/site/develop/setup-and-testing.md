@@ -36,12 +36,12 @@ Before you send a change:
 
 ## The dev venv
 
-Make `.venv/` at the repo root once, from Blender 5.2's own Python 3.14 (in Blender's
-folder, `5.2/python/bin/python3.14`, or a system Python 3.14 when your Blender uses that),
-and install the lock exactly as the add-on does:
+Make `.venv/` at the repo root once, from Blender 5.2's own Python (in Blender's folder,
+`5.2/python/bin/python3.13` in blender.org's builds, or a system Python 3.14 when your
+Blender uses that), and install the lock exactly as the add-on does:
 
 ```sh
-PY=/path/to/blender-5.2/5.2/python/bin/python3.14
+PY=/path/to/blender-5.2/5.2/python/bin/python3.13
 "$PY" -I -m venv .venv
 .venv/bin/python -m pip install --isolated --disable-pip-version-check --no-input \
     --no-cache-dir --index-url https://pypi.org/simple \
@@ -261,7 +261,7 @@ they run. `docs_shots.sh` has no such switch.
 The site's source is `docs/site/`: one MyST page per doc, `conf.py`, and the API reference
 that autodoc builds from the docstrings. It has a venv of its own, `.venv-docs/`, kept
 apart from `.venv` so nothing it needs reaches the agent's environment or the zip. Make it
-once from Python 3.14:
+once from Python 3.13 or 3.14:
 
 ```sh
 python3 -m venv .venv-docs
@@ -324,6 +324,32 @@ It validates the extension and builds one zip for every platform, since the zip 
 wheels ({doc}`../guides/installation`). It refuses to build when
 `whittle/requirements.lock` differs from `agent_env/requirements.lock`, or `whittle/LICENSE`
 from `LICENSE`. It never copies them for you: a difference is something to look at.
+
+## CI and releases
+
+GitHub Actions runs on GitHub's free standard runners and needs no secrets. `ci.yml` runs on
+pushes to `main` and `ci/**` and on pull requests; `release.yml` runs on tags. Both call
+`test.yml`, which downloads a pinned Blender (`.github/scripts/fetch_blender.py` checks its
+SHA-256 before unpacking it), makes `.venv` from Blender's Python, installs the lock, and
+runs `./run_tests.sh` and `./build.sh`. The GUI checks and the screenshots are not part of
+CI, because they need `kwin_wayland`, and neither is this site.
+
+Linux x64 (`ubuntu-latest`) is the gate. Windows x64 and macOS on Apple silicon run too, but
+their failures count for nothing yet, and a release does not wait for them. Linux arm64 has
+no CI, because blender.org publishes no build for it. [Platforms](../guides/installation.md#platforms)
+says how far each one has got.
+
+To cut a release, set `version` in `whittle/blender_manifest.toml`, merge that to `main`, then
+tag that commit with `v` plus the version and push the tag:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag must match the manifest, or the release stops at once. When the tests pass,
+`whittle-<version>.zip` and its `.sha256` are attached to a new GitHub Release. A tag with a
+hyphen, such as `v0.2.0-rc1`, publishes a prerelease of the manifest's `0.2.0`.
 
 ## Live tests
 

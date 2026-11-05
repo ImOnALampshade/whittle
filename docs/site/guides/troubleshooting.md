@@ -68,7 +68,7 @@ Install**, and there is no **Last setup failed:** line and no log:
 
 | The message says | What to do |
 |---|---|
-| Something about Python 3.14 | Whittle needs Blender 5.2. |
+| The agent environment needs Python 3.13 or 3.14 | This Blender runs another Python, which Whittle has no packages for. Use Blender 5.2 from [blender.org](https://www.blender.org/download/), which bundles Python 3.13. |
 | Blender's Python has no ensurepip, so it cannot make a venv | This Blender runs on a Python without `ensurepip`, which can happen with a Blender from a Linux distribution. Use a Blender from [blender.org](https://www.blender.org/download/), or install your distribution's package that adds `ensurepip`. |
 
 On an Intel Mac, Blender refuses the zip at **Install from Disk**, because Whittle does not

@@ -8,8 +8,8 @@ covers both parts, then updating and removing them. When you are done, go on to
 
 ## What you need
 
-- Blender 5.2 or later, whose Python is 3.14. See [Platforms](#platforms) for the systems it
-  runs on.
+- Blender 5.2 or later, whose Python is 3.13 or 3.14. blender.org's builds bundle 3.13. See
+  [Platforms](#platforms) for the systems it runs on.
 - An internet connection for setup, and about 320 MB of disk space for the agent environment.
   The largest download is about 114 MB.
 - An {doc}`Anthropic API key <api-key>`, before your first turn.
@@ -150,8 +150,8 @@ differ per platform: the zip stays the same everywhere, and setup fetches your p
 Setup has three steps, and the status names each one:
 
 1. **create**: makes a private Python environment from Blender's own Python.
-2. **install**: downloads the 30 packages listed in the extension's `requirements.lock` from
-   PyPI, among them Anthropic's `claude-agent-sdk`, which brings the Claude program the agent
+2. **install**: downloads the 30 packages listed in the extension's `requirements.lock` (31 on
+   Windows, with `pywin32`) from PyPI, among them Anthropic's `claude-agent-sdk`, which brings the Claude program the agent
    is built on.
 3. **verify**: checks that the package loads, is the version the lock names, and brought that
    program with it. Only then does the environment count as ready.

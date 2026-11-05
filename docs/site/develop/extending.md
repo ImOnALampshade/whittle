@@ -444,6 +444,9 @@ Supporting a new platform touches more:
   new operating system, `_OS_NAMES` in `whittle/venv.py`, which `venv.compatible` checks.
   `test_platforms_match_what_the_setup_accepts`
   in `tests/blender/test_manifest.py` lists the manifest's platforms by hand.
-- Wheels for every pin in `agent_env/requirements.lock`. If one is missing, the platform waits
-  for a lock change, and that needs the maintainer's approval.
+- Wheels for every pin in `agent_env/requirements.lock` that applies there, for both Python
+  3.13 and 3.14 (`PYTHONS` in `whittle/venv.py`), with their hashes in the lock. A compiled pin
+  has every file's hash already; `pywin32` is added by hand with a `sys_platform` marker and has
+  only its Windows x64 hashes, so another Windows platform needs its own. If one is missing, the
+  platform waits for a lock change, and that needs the maintainer's approval.
 - The README's Platforms table.

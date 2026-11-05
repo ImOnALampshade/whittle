@@ -65,7 +65,7 @@ The Agent SDK stays out of the way of the fake agent:
   words those notes, and the agent tests for calling handlers directly.
 - `store` needs no import at all: the SDK finds a session store's methods by name.
 
-So the fake agent runs under any Python 3.14, with no SDK installed and no API key.
+So the fake agent runs under any Python 3.13 or 3.14, with no SDK installed and no API key.
 [Development setup and testing](../develop/setup-and-testing.md) shows how to run one, and
 [Extending Whittle](../develop/extending.md) how to add a tool or a skill. What goes over the
 bridge is in [Protocol and file formats](../develop/protocol.md).

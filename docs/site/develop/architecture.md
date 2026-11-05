@@ -23,7 +23,7 @@ bundled Claude CLI (from the claude-agent-sdk wheel)
 
 | Process | Code | Runs on | What it does |
 |---|---|---|---|
-| Blender | `whittle/addon/` | Blender's Python 3.14 | Sidebar, sketch, history. Runs every piece of agent code that touches the scene. |
+| Blender | `whittle/addon/` | Blender's Python, 3.13 or 3.14 | Sidebar, sketch, history. Runs every piece of agent code that touches the scene. |
 | Agent | `whittle/agent/` | The agent venv's Python, asyncio | Holds the Agent SDK client, serves the agent's tools and turns SDK messages into events. |
 | Claude CLI | From the `claude-agent-sdk` wheel | Started by the SDK | Talks to the Anthropic API. Whittle never modifies it; it only picks its environment and folder. |
 
@@ -42,7 +42,7 @@ The code is split to match, and these import rules hold throughout:
   module level. `tools.build_servers` imports it too, but lazily, when the real runner calls
   it, so the rest of that folder is stdlib at import time. That is why the fake agent (a
   scripted stand-in that makes no API calls, see [The agent side](#the-agent-side)) runs
-  under any Python 3.14.
+  under any Python 3.13 or 3.14.
 - The shared modules at the top of `whittle/` (`protocol`, `formats`, `tree`, `chats`,
   `caches`, `markdown`, `models`, `style`, `venv`, `platforms`) are stdlib only at module
   level, and `whittle/__init__.py` imports nothing from Blender until `register()` runs.
