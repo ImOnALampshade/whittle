@@ -81,6 +81,18 @@ class FakePopen:
         self.signals.append(sig)
 
 
+class MarkerTest(unittest.TestCase):
+    def test_no_marker_applies_everywhere(self):
+        for platform in ("linux", "darwin", platforms.WINDOWS):
+            self.assertTrue(platforms.marker_applies("", platform))
+
+    def test_sys_platform_selects_one(self):
+        marker = " sys_platform == 'win32' "
+        self.assertTrue(platforms.marker_applies(marker, platforms.WINDOWS))
+        self.assertFalse(platforms.marker_applies(marker, "linux"))
+        self.assertFalse(platforms.marker_applies(marker, "darwin"))
+
+
 class SpawnOptionsTest(unittest.TestCase):
     def test_posix_starts_a_session_and_shows_no_flags(self):
         for platform in ("linux", "darwin"):

@@ -26,7 +26,7 @@ whittle/                          repo root
 │   ├── models.py                 stdlib only: model ids by family and version, the model list's cache (§15)
 │   ├── style.py                  stdlib only: the bevel style suggestions and how the prompt words the style
 │   ├── venv.py                   stdlib only: venv status, setup commands, the VenvSetup state machine
-│   ├── platforms.py              stdlib only: what differs on Windows and macOS (spawn flags, process trees, pid probe, replace, stale resume folders)
+│   ├── platforms.py              stdlib only: what differs on Windows and macOS (spawn flags, process trees, pid probe, replace, stale resume folders, lock markers)
 │   ├── requirements.lock         byte-identical copy of agent_env/requirements.lock (packaging step)
 │   ├── addon/                    Blender side; may import bpy everywhere
 │   │   ├── __init__.py           register()/unregister() for every class, handler and timer
@@ -78,7 +78,7 @@ whittle/                          repo root
 │       └── plugin/               local plugin (Claude Code plugin format) carrying the recipe skills
 │           ├── .claude-plugin/plugin.json      {"name": "whittle", "version": …, "description": …}
 │           └── skills/<skill-name>/SKILL.md
-├── agent_env/requirements.lock   pinned, hashed lock (never edited by hand)
+├── agent_env/requirements.lock   pinned, hashed lock (uv's output, plus pywin32 by hand: the header says why)
 ├── tests/
 │   ├── agent/                    unittest, run with .venv/bin/python
 │   ├── blender/                  unittest, run inside `blender -b`; run.py is the entry point
@@ -1405,7 +1405,7 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
 - **Guard** (`setup.begin`): refuses, with a message for the user, when a setup is
   already running, a turn is running or waiting (`TurnController.busy`), `venv.compatible()`
   objects (Python 3.13 or 3.14, `venv.PYTHONS`, on Linux x86_64, Windows AMD64 or macOS arm64, `venv.SUPPORTED`: the
-  lock has every pin's wheel for those; an Intel Mac gets its own message naming
+  lock has a wheel for those of every pin that applies there; an Intel Mac gets its own message naming
   `cryptography`), Blender's Python
   has no `ensurepip`, the folder is `foreign`, the venv is `ready` and this is not a
   reinstall, there is no online access, or Blender runs in the background. The last two

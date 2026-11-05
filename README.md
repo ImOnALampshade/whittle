@@ -67,11 +67,12 @@ Whittle is young (0.1.0); expect rough edges.
 
 One zip serves all four. It carries no wheels: the agent environment is downloaded at
 setup from the same hash-pinned `requirements.lock`, which holds the hashes of every wheel
-of each pinned version, so pip picks the files for your platform (the
+of each pinned version (except `pywin32`, which only Windows installs and which has just
+its Windows x64 wheels), so pip picks the files for your platform (the
 `claude-agent-sdk` wheel brings `claude` there, `claude.exe` on Windows). Intel Macs are
 left out because `cryptography` 50, which the lock pins, has no Intel macOS wheel, and
 Blender 5.2 has no Intel Mac build. Windows on Arm is left out too: the pinned SDK has
-no Windows Arm wheel. On Linux arm64 every pin has an aarch64 or pure-Python wheel for
+no Windows Arm wheel. On Linux arm64 every pin that applies has an aarch64 or pure-Python wheel for
 Python 3.13 and 3.14 whose hash is in the lock (checked against PyPI), but no one has run it yet.
 
 What differs on Windows: setup steps and the agent run without a console window; the
@@ -79,9 +80,8 @@ agent and the Claude Code CLI it starts share a Job Object, so stopping the agen
 Blender crashing) ends the CLI too; and a stop is graceful only through Whittle's own
 shutdown message, since Windows has no terminate signal. A killed agent leaves the
 SDK's `claude-resume-*` folder in the temp folder; the next agent start removes
-Whittle's once they are a day old, never one a running agent may use. The lock leaves out `pywin32`,
-which `mcp` lists for Windows: `mcp` only needs it for MCP servers it starts as
-processes, and Whittle's tools run inside the agent. Windows paths can get long (the
+Whittle's once they are a day old, never one a running agent may use. Only Windows installs `pywin32`:
+`mcp` imports it there as it loads, so the SDK cannot start without it. Windows paths can get long (the
 user folder is under `%APPDATA%\Blender Foundation\Blender\5.2\extensions\.user\…`):
 if a turn fails on a path over 260 characters, turn on Windows' long path support, or
 pick a shorter **Environment Folder**.
@@ -108,7 +108,7 @@ pick a shorter **Environment Folder**.
    Up Agent Environment**, then confirm the dialog. (The sidebar offers the same button when
    the agent cannot start for lack of it.)
 
-   - **What it downloads**: the 30 packages pinned in `requirements.lock`, among them
+   - **What it downloads**: the 30 packages pinned in `requirements.lock` (31 on Windows, with `pywin32`), among them
      Anthropic's `claude-agent-sdk` 0.2.167, whose wheel bundles the Claude Code CLI that
      runs the agent. They come from PyPI only, as prebuilt wheels.
    - **How**: Whittle makes a venv from Blender's own Python (`sys.executable -I -m venv`), then

@@ -2,7 +2,8 @@
 """What differs between Linux, Windows and macOS: starting a child process
 without a console window, stopping it together with everything it started,
 asking whether a pid is alive, replacing a file another program holds open,
-and clearing the SDK's resume folders that a killed Windows agent leaves.
+clearing the SDK's resume folders that a killed Windows agent leaves, and
+which of the lock's pins apply.
 
 Stdlib only, so the add-on and the agent-side tests share it. Every function
 takes the platform (a `sys.platform` value) and, on Windows, the kernel32
@@ -15,6 +16,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -45,6 +47,17 @@ JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
 # about a second in all, enough for a virus scanner or indexer to let go.
 REPLACE_DELAYS = (0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.4)
 TASKKILL_TIMEOUT = 5.0
+
+
+_SYS_PLATFORM = re.compile(r"""sys_platform\s*==\s*['"]([^'"]+)['"]""")
+
+
+def marker_applies(marker: str, platform: str = sys.platform) -> bool:
+    """Whether pip installs a lock pin with this environment marker here. A
+    pin with no marker applies everywhere. `sys_platform == '...'` is the only
+    kind the lock has, and a test keeps it that way."""
+    match = _SYS_PLATFORM.fullmatch(marker.strip())
+    return match is None or match.group(1) == platform
 
 
 def is_windows(platform: str = sys.platform) -> bool:

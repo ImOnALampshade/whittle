@@ -178,8 +178,8 @@ def describe() -> tuple[str, str]:
     return text, icon
 
 
-def install_summary() -> str:
-    pins = venv.read_pins(lock_path())
+def install_summary(system: str = sys.platform) -> str:
+    pins = venv.read_pins(lock_path(), system)
     return (f"Download {len(pins)} pinned packages incl. {venv.SDK} {pins.get(venv.SDK)} "
             f"from PyPI into {venv_dir()}")
 

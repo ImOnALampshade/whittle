@@ -248,7 +248,7 @@ restore, branch from and compare against, and each branch has its own SDK conver
 Whittle installs from a zip, sets up its own agent environment after asking, and a
 session can start from the scene, from nothing, from a primitive or from an asset.
 
-- `whittle/venv.py` (stdlib): reads the lock (30 pins with hashes), the venv's status
+- `whittle/venv.py` (stdlib): reads the lock (31 pins with hashes, `pywin32` for Windows only), the venv's status
   (`missing`, `ready`, `stale`, `broken`, `foreign`) from its `whittle-venv.json` marker,
   the create / install / verify commands (`pip install --isolated --require-hashes
   --only-binary :all: --no-deps -r requirements.lock`, never an upgrade), a scrubbed
@@ -262,7 +262,8 @@ session can start from the scene, from nothing, from a primitive or from an asse
   console window on Windows), `ProcessTree` (the process group on POSIX, a
   kill-on-close Job Object through ctypes on Windows, `taskkill /T` if that fails),
   `pid_alive` (OpenProcess and GetExitCodeProcess on Windows, where `os.kill(pid, 0)`
-  would send Ctrl+C) and `replace` (retries a held file on Windows). Each branch takes
+  would send Ctrl+C), `replace` (retries a held file on Windows) and `marker_applies`
+  (which of the lock's pins a platform installs). Each branch takes
   the platform as an argument and kernel32 as a fake, so the Linux suite runs the
   Windows code (`tests/agent/test_platforms.py`); none of it has run on Windows.
 - `addon/setup.py`: the venv folder (the `venv_dir` preference or `<user dir>/venv`),
@@ -696,8 +697,14 @@ them at each save. Nothing is written beside the `.blend`.
 - **Real-agent turns on Python 3.13 have not been run live**: the offline suite passes on
   blender.org's 3.13, and there the real agent's code compiles and imports with the lock
   installed, but no live test has run on it.
-- **CI has yet to run on GitHub**: Windows and macOS have never run, and Linux arm64 has no
-  CI because Blender publishes no build for it.
+- **CI on GitHub**: Linux x64 and macOS have passed the offline suite and the build.
+  Windows stopped on `No module named 'pywintypes'`, which is why the lock pins `pywin32`,
+  and has not run with the pin yet. Linux arm64 has no CI because Blender publishes no
+  build for it.
+- **The `pywin32` pin**: changing the lock makes every existing install `stale` on every
+  platform, even where pip installs the same 30 packages, so each one needs **Reinstall**.
+  CI's Blender bundles Python 3.13, so it can only exercise the cp313 wheel of 311; the
+  cp314 wheel is not exercised by CI.
 - **The chats' cache**:
   - A chat's conversation resumes through its transcript store when its cwd changed
     (a copy's fresh cache); that a real CLI resumes and forks from a
@@ -738,11 +745,13 @@ them at each save. Nothing is written beside the `.blend`.
   portrait viewport snapped into a landscape one keeps its field of view across the
   long side, not the short one.
 - **Not built yet**:
-  - Linux arm64, Windows and macOS have never run. The manifest lists `linux-arm64`,
+  - Linux arm64, Windows and macOS have never been used for real: CI runs only the
+    offline suite and the build on the last two. The manifest lists `linux-arm64`,
     `windows-x64` and `macos-arm64` and the code handles them (`whittle/platforms.py`, `venv.compatible()`), but every
-    platform branch is only unit-tested on Linux with the platform passed in and kernel32
+    platform branch is only unit-tested with the platform passed in and kernel32
     faked. Unchecked there: a real venv setup (Blender's bundled `ensurepip`, pip finding
-    the platform's wheels in the lock, `claude.exe` passing verify), the Job Object
+    the platform's wheels in the lock, `pywin32` loading on Windows, `claude.exe` passing
+    verify), the Job Object
     ending the CLI, no console windows flashing, `chats.project_key` matching what
     `claude.exe` writes (drive-letter case, mapped drives), paths past 260 characters,
     and Gatekeeper letting the bundled `claude` run on macOS. The SDK's resume folder

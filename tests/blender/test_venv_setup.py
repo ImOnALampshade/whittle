@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import os
+import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -127,10 +128,15 @@ class VenvSetupTest(unittest.TestCase):
         self.assertTrue(setup.timer_registered())
 
     def test_install_summary(self):
-        summary = setup.install_summary()
+        summary = setup.install_summary("linux")
         self.assertIn("30 pinned packages", summary)
         self.assertIn("claude-agent-sdk 0.2.167", summary)
         self.assertIn(str(self.user / "venv"), summary)
+
+    def test_install_summary_counts_what_pip_installs(self):
+        self.assertIn("30 pinned packages", setup.install_summary("darwin"))
+        self.assertIn("31 pinned packages", setup.install_summary("win32"))
+        self.assertEqual(setup.install_summary(), setup.install_summary(sys.platform))
 
     def attention(self, ctl) -> RecordingLayout:
         layout = RecordingLayout()

@@ -19,13 +19,36 @@ from whittle.venv import Step, VenvSetup, VenvStatus
 REPO = Path(__file__).resolve().parents[2]
 LOCK = REPO / "agent_env" / "requirements.lock"
 PINNED_SDK = "0.2.167"
+PYWIN32_HASHES = {"sha256:3aca44c046bd2ed8c90de9cb8427f581c479e594e99b5c0bb19b29c10fd6cb87",
+                  "sha256:718a38f7e5b058e76aee1c56ddd06908116d35147e133427e59a3983f703a20d"}
 
 
 class LockTest(unittest.TestCase):
     def test_pins(self):
         pins = venv.read_pins(LOCK)
-        self.assertEqual(len(pins), 30)
+        self.assertEqual(len(pins), 31)
         self.assertEqual(pins["claude-agent-sdk"], PINNED_SDK)
+
+    def test_pins_follow_the_platform(self):
+        for platform, count in (("linux", 30), ("darwin", 30), ("win32", 31)):
+            with self.subTest(platform=platform):
+                pins = venv.read_pins(LOCK, platform)
+                self.assertEqual(len(pins), count)
+                self.assertEqual("pywin32" in pins, platform == "win32")
+                self.assertEqual(pins["claude-agent-sdk"], PINNED_SDK)
+
+    def test_pywin32_stays_pinned_for_windows(self):
+        # mcp imports it on Windows, and the lock's recorded command targets
+        # Linux, so a recompile drops it without saying so.
+        lines = LOCK.read_text(encoding="utf-8").splitlines()
+        self.assertIn("pywin32==311 ; sys_platform == 'win32' \\", lines)
+        self.assertEqual(set(venv.lock_hashes(LOCK)["pywin32"]), PYWIN32_HASHES)
+
+    def test_pywin32_has_the_only_marker(self):
+        # platforms.marker_applies reads no other kind, so a new marker needs it taught first.
+        pins = [line for line in LOCK.read_text(encoding="utf-8").splitlines()
+                if ";" in line and not line.startswith("#")]
+        self.assertEqual(pins, ["pywin32==311 ; sys_platform == 'win32' \\"])
 
     def test_every_pin_has_a_hash(self):
         hashes = venv.lock_hashes(LOCK)

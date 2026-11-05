@@ -52,7 +52,7 @@ VERIFY_SCRIPT = (
     "'cli': cli.is_file()}), flush=True)"
 )
 
-_PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;\\]+)")
+_PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;\\]+)\s*(?:;([^\\]*))?")
 _HASH = re.compile(r"--hash=(sha256:[0-9a-f]{64})")
 
 
@@ -80,12 +80,13 @@ def _normalise(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def read_pins(lock: Path) -> dict[str, str]:
-    """Package name -> pinned version, in lock order."""
+def read_pins(lock: Path, platform: str | None = None) -> dict[str, str]:
+    """Package name -> pinned version, in lock order: all of them, or with a
+    platform only those pip installs there."""
     pins = {}
     for line in Path(lock).read_text(encoding="utf-8").splitlines():
         match = _PIN.match(line)
-        if match:
+        if match and (platform is None or platforms.marker_applies(match.group(3) or "", platform)):
             pins[_normalise(match.group(1))] = match.group(2)
     return pins
 
@@ -110,18 +111,20 @@ def lock_digest(lock: Path) -> str:
     return hashlib.sha256(Path(lock).read_bytes()).hexdigest()
 
 
-# (OS, machine) pairs the lock has a wheel of every pin for, by the names
-# sys.platform and platform.machine() use. The lock was compiled on Linux,
-# but its hashes cover every file of each pin, so Windows x64 and Apple
-# silicon install from it too. Intel Macs are left out: cryptography 50 has
-# no x86_64 macOS wheel (and Blender 5.2 no Intel build). Windows on Arm is
-# left out: the SDK has no win_arm64 wheel.
+# (OS, machine) pairs the lock has a wheel of every pin that applies for, by
+# the names sys.platform and platform.machine() use. The lock was compiled on
+# Linux, but its hashes cover every file of each compiled pin, so Windows x64
+# and Apple silicon install from it too. pywin32 is the exception: added by
+# hand for Windows only, it has just its two win_amd64 hashes. Intel Macs are
+# left out: cryptography 50 has no x86_64 macOS wheel (and Blender 5.2 no
+# Intel build). Windows on Arm is left out: the SDK has no win_arm64 wheel.
 SUPPORTED = {"linux": ("x86_64", "amd64", "aarch64", "arm64"), "win32": ("amd64", "x86_64"),
              "darwin": ("arm64", "aarch64")}
 SUPPORTED_TEXT = "Linux x64 and arm64, Windows x64 and macOS on Apple silicon"
 _OS_NAMES = {"linux": "Linux", "win32": "Windows", "darwin": "macOS"}
 # blender.org's 5.2 builds bundle 3.13; a distribution's package may run on a
-# system 3.14. The lock holds wheels of every pin for both.
+# system 3.14. The lock holds wheels for both of every pin that applies on a
+# platform; pywin32's two hashes are one for each.
 PYTHONS = ((3, 13), (3, 14))
 PYTHONS_TEXT = "3.13 or 3.14"
 

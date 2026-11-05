@@ -10,13 +10,24 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
 - **Platforms** (2026-10-23; `linux-arm64` added 2026-10-23): `linux-x64`, `linux-arm64`,
   `windows-x64` and `macos-arm64`, in one extension zip. Linux x64 is the only one tested;
   the others are marked untested in the README.
-  - The lock stays as it is. It was compiled for manylinux x86_64, but uv's
+  - One lock for every platform. It was compiled for manylinux x86_64, but uv's
     `--generate-hashes` wrote the hash of every file of each pin, so the Windows x64
-    and macOS arm64 wheels of all 30 pins at their pinned versions already verify under
-    `--require-hashes --only-binary :all: --no-deps`. The one package a Windows resolve
-    would add is `pywin32` (`mcp` requires it on win32). It is deliberately left out:
-    `mcp` guards the import and only its stdio client uses it, and Whittle's MCP tools
-    are in-process SDK servers.
+    and macOS arm64 wheels of all 30 compiled pins at their pinned versions already verify
+    under `--require-hashes --only-binary :all: --no-deps`. The one package a Windows
+    resolve adds is `pywin32` (`mcp` requires it on win32), which the lock pins by hand.
+  - **`pywin32` 311 in the lock, for Windows only** (2026-11-05). It was first left out
+    on the belief that `mcp` guards the import and only its stdio client uses it. Neither
+    is so: `mcp` 2.3.0's `mcp/os/win32/utilities.py` imports `pywintypes`, `win32api`,
+    `win32con` and `win32job` unconditionally on win32, and `mcp.server` reaches it through
+    `mcp.server.stdio`, so importing the SDK fails without them. Whittle's in-process
+    servers do not help, and the first Windows CI run stopped there
+    (`No module named 'pywintypes'`). 311 is the floor `mcp` declares (`pywin32>=311`),
+    the oldest release with wheels for both Python 3.13 and 3.14 (310 has no cp314), and
+    public since July 2025 where 312 dates from June 2026. Its marker keeps it off Linux
+    and macOS, and only its two `win_amd64` hashes are listed, the rest being wheels no
+    supported platform installs. The entry is added by hand because the lock's recorded
+    command targets Linux and would drop it; `tests/agent/test_venv.py` fails if a
+    recompile does.
   - No Intel Macs: `cryptography` 50.0.2 has no macOS x86_64 wheel (upstream dropped them
     in 49), and Blender 5.2 has no Intel Mac build. No Windows on Arm: the SDK has no
     `win_arm64` wheel.
