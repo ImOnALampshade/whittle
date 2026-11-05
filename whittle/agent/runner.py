@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Claude Agent SDK runner. The only module that imports claude_agent_sdk."""
+"""The Claude Agent SDK runner. The only module that imports claude_agent_sdk at module level."""
 
 import asyncio
 import base64

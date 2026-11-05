@@ -118,6 +118,12 @@ class SpecValidationTest(unittest.TestCase):
             (Path(tmp) / "page" / "stream.json").write_text("{}")
             self.assertEqual(spec.fake("stream.json"), Path(tmp) / "page" / "stream.json")
 
+    def test_every_spec_in_the_repository_is_valid(self):
+        paths = specs.spec_paths(examples=True)
+        self.assertTrue(any(p.stem == "_example" for p in paths))
+        for path in paths:
+            self.assertEqual(specs.validate(specs.load(path)), [], path.name)
+
     def test_all_leaves_out_examples(self):
         self.assertFalse([p for p in specs.spec_paths() if p.stem.startswith("_")])
 

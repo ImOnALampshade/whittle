@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """On-disk formats: request bundles and session folder layout.
 
-Stdlib only, so the agent process and Blender share one reader. JSON files carry
-"format" and "version" keys and are written atomically.
+Stdlib only, so the agent process and Blender share one reader. JSON files are
+written atomically, and the versioned ones carry "format" and "version" keys.
 """
 
 import json

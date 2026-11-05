@@ -868,8 +868,8 @@ names it (`Opus 5.5 ▾`) and opens the model menu. A new chat starts on the add
 **Model** preference (`claude-opus-5-5` unless changed); a chat's first turn keeps the
 model it was sent with, so changing the preference later moves only chats that have no
 turn yet. Changing a chat's model applies from its next turn, in the same Claude
-session (the conversation carries on); the button is hidden while a turn runs, and the
-menu's items say why they are disabled while Claude asks.
+session (the conversation carries on); the button is hidden while a turn runs, which
+includes while Claude asks.
 
 Each chat also has an effort, how much Claude thinks: Low, Medium or High, picked in
 the same menu. A new chat runs at High; a change applies from the chat's next turn, in

@@ -69,7 +69,7 @@ whittle/                          repo root
 │       ├── __main__.py           `python -m whittle.agent --port N [--fake SCRIPT]`
 │       ├── connection.py         asyncio bridge client (mirror of addon/bridge.py)
 │       ├── dispatch.py           Runner protocol; checks Blender's call params and routes them
-│       ├── runner.py             SdkRunner (the only module importing claude_agent_sdk)
+│       ├── runner.py             SdkRunner (the only module importing claude_agent_sdk at module level)
 │       ├── store.py              FolderSessionStore: a chat's SDK transcripts in its folder (§14)
 │       ├── tools.py              MCP tool handlers (plain async functions) + server builders
 │       ├── fake.py               FakeRunner: scripted agent for tests, stdlib only
@@ -91,12 +91,20 @@ whittle/                          repo root
 ├── build.sh                      validates and builds the extension zip into build/ (gitignored)
 ├── screens.sh                    screenshots into build/screens/; --docs refreshes docs/images/ (README)
 ├── gui_checks.sh                 GUI checks on the installed extension, into build/gui-checks/
+├── docs.sh                       the documentation site, from .venv-docs/ (gitignored) into build/docs/html
+├── docs_shots.sh                 the site's screenshots, into docs/site/images/
 ├── README.md                     what it is, install, API key, use, privacy, development, tests
 ├── CONTRIBUTING.md               how to propose a change
 ├── AGENTS.md                     the working guide for coding agents and contributors
 ├── LICENSE                       GPL-3.0 (the project is GPL-3.0-or-later)
 └── docs/
-    └── images/                   the README's screenshots, made by ./screens.sh --docs
+    ├── images/                   the README's screenshots, made by ./screens.sh --docs
+    └── site/                     the documentation site (Sphinx, MyST); none of it is in the zip
+        ├── conf.py, index.md     the site, and its pages by section in quickstart.md, walkthrough.md,
+        │                         guides/, develop/ and reference/ (autodoc, from the docstrings)
+        ├── requirements.in, .lock  the site's tools, hash-pinned, for .venv-docs/ only
+        ├── shots/<page-slug>.py  a page's screenshot spec; shots/README.md is the guide to writing one
+        └── images/<page-slug>/   the screenshots, committed
 ```
 
 Rules:
@@ -104,9 +112,9 @@ Rules:
 - Every source file starts with `# SPDX-License-Identifier: GPL-3.0-or-later` (after a
   shebang), and the manifest says `license = ["SPDX:GPL-3.0-or-later"]`.
 - `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `models.py`, `style.py`, `venv.py`, `platforms.py` and everything under `agent/`
-  import only the stdlib at module level. `agent/runner.py` imports `claude_agent_sdk`;
-  nothing else does, so the fake agent and the formats code run under any Python 3.14,
-  including Blender's.
+  import only the stdlib at module level. `agent/runner.py` imports `claude_agent_sdk`,
+  and `tools.build_servers` does when the real runner calls it; nothing else does, so the
+  fake agent and the formats code run under any Python 3.14, including Blender's.
 - `addon/*` may import `bpy`, `bmesh`, `mathutils`, `gpu`, `numpy` (numpy ships with
   Blender). It never imports `whittle.agent`.
 - Inside Blender the package is imported as `bl_ext.<repo>.whittle`; in tests it is

@@ -1,0 +1,8 @@
+{
+  "turns": [
+    {"steps": [{"say": "Checking the scene."},
+               {"call": "inspect", "params": {"query": "summary"}, "expect": "ok"},
+               {"say": "The crate is the only object here."}],
+     "finish": {"subtype": "success", "is_error": false, "result": "The crate is the only object here."}}
+  ]
+}

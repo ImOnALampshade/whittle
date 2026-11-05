@@ -16,6 +16,7 @@ outline where a latch should go, a red slot to carve into the lid, a yellow line
 lid's edge, a blue region on the side and a grey arrow. Beside it the Whittle sidebar shows
 the earlier turns with their renders and the next prompt, ready to send](docs/images/hero.png)
 
+The documentation site's source is in [docs/site/](docs/site/index.md) (Documentation, below).
 See [docs/design.md](docs/design.md) for the original design, [docs/architecture.md](docs/architecture.md)
 for how it is built, [docs/decisions.md](docs/decisions.md) for the choices behind it,
 [docs/ui.md](docs/ui.md) for the sidebar, and [docs/progress.md](docs/progress.md) for what
@@ -163,7 +164,7 @@ capable and the most expensive per token, Haiku the cheapest, and each self-chec
 sends renders back to the model. Set spending limits in the Console.
 
 **Model for New Chats** is the model a new chat starts on, `claude-opus-5-5` by default;
-it offers the models your key can use and takes any other model id. The **Defaults** box
+it suggests the models last reported for your key and the ones Whittle knows, and takes any other model id. The **Defaults** box
 sets what every session starts with: the triangle budget, self-check rounds and render
 size, and the style Claude works to: a **Palette** (a short list of colours, such as
 "weathered oak, dark iron"), a **Bevel Style** (none, subtle or chunky, or your own words)
@@ -347,6 +348,7 @@ Environment variables Whittle reads:
 | `WHITTLE_SCREENS_VISIBLE` | `1` makes `screens.sh` show its windows on your desktop (Sidebar screenshots). |
 | `WHITTLE_GUI` | `1` makes `run_tests.sh` run the GUI checks too (GUI checks). |
 | `WHITTLE_GUI_VISIBLE` | `1` makes `gui_checks.sh` show its windows on your desktop (GUI checks). |
+| `WHITTLE_DOCSHOTS_SLOTS` | How many Blenders `docs_shots.sh` runs at once across the machine (Documentation). |
 
 
 ### Sidebar screenshots
@@ -435,6 +437,32 @@ is skipped, and the script fails (exit code 5) only when no test matched on eith
 The live tests call the real API with `ANTHROPIC_API_KEY` (a few US cents per run, billed
 to that key): they use `claude-haiku-5-5` with a tiny prompt, and `run_tests.sh` adds
 `--online-mode` to Blender for them.
+
+## Documentation
+
+The documentation site is a Sphinx project in `docs/site/`: a quickstart, a walkthrough, a
+guide per topic, the development pages and an API reference generated from the source. None
+of it ships in the extension. It has a venv of its own, `.venv-docs/` (gitignored), made from
+its own hash-pinned lock, `docs/site/requirements.lock`; the build needs neither Blender nor
+the network.
+
+```sh
+python3 -m venv .venv-docs
+.venv-docs/bin/pip install --require-hashes --only-binary :all: --no-deps -r docs/site/requirements.lock
+./docs.sh                      # the site, into build/docs/html
+./docs.sh --strict             # every page rebuilt, warnings are errors
+./docs.sh --out DIR            # html and doctrees wholly in DIR
+./docs_shots.sh guides-undo    # a page's screenshots; add shot names for only those
+./docs_shots.sh --all          # every page's, about 6 minutes
+./docs_shots.sh --list         # every shot; --check validates the specs. Neither launches Blender
+```
+
+Each page's screenshots come from a spec, `docs/site/shots/<page-slug>.py`, where the slug
+is the page's name with `/` as `-`, and land in `docs/site/images/<page-slug>/`. They are
+committed. `docs/site/shots/README.md` is the guide to writing a spec. `docs_shots.sh` runs
+from `.venv` and needs `kwin_wayland`: every Blender gets a hidden session of its own and
+folders of its own under `build/docs-shots/`. `WHITTLE_DOCSHOTS_SLOTS` sets how many run at
+once; each holds GPU memory, and shots fail if the card runs out. [Development setup and testing](docs/site/develop/setup-and-testing.md) has the details.
 
 ## Contributing
 

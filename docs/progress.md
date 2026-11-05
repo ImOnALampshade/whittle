@@ -620,6 +620,19 @@ its own conversation, history tree and Claude session; the panel shows the curre
   `tests/blender/test_models.py` (the Effort section, a switch between turns with the
   fake agent).
 
+**The documentation site** (`docs/site/`, README Documentation). A Sphinx site of 27 pages:
+a home page, quickstart, walkthrough, 14 guides, 6 development pages and 4 of API reference
+autodoc builds from the docstrings.
+- `docs.sh` builds it offline from `.venv-docs/`, a docs-only venv from
+  `docs/site/requirements.lock`, with Blender and the SDK mocked. `--strict` makes warnings
+  errors, `--out` keeps a build wholly in one folder. None of it is in the zip.
+- `docs_shots.sh` shoots the committed screenshots from a spec per page
+  (`docs/site/shots/`; `tests/docshots/` runs them, sharing `tests/screens/steps.py` with the
+  scenarios). Each Blender has a hidden session and folders of its own, within a
+  machine-wide number of slots, so pages can be shot side by side.
+- Tests: `tests/agent/test_docs_site.py` (every module documented, every page reachable,
+  every image and shot on its page), `test_docshots.py`.
+
 ## How to run
 
 ```sh
@@ -631,6 +644,8 @@ timeout 300 blender -b --factory-startup --python-exit-code 1 --python tests/ble
 ./gui_checks.sh                 # the GUI checks (real GUI Blenders, hidden), ~4 minutes
 ./gui_checks.sh undo_turn       # one of them; its logs are in build/gui-checks/undo_turn/
 WHITTLE_GUI=1 ./run_tests.sh    # the offline suite, then the GUI checks
+./docs.sh --strict              # the documentation site, warnings as errors
+./docs_shots.sh --all           # its screenshots (real GUI Blenders, hidden)
 ```
 
 With `-k`, a side where nothing matches exits 5 (unittest's "no tests ran", which
