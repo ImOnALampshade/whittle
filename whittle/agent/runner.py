@@ -60,10 +60,14 @@ SIZE_REFUSALS = ("Request too large", "Image was too large")
 
 
 def inline_skills_from_env() -> bool:
+    """WHITTLE_INLINE_SKILLS is set, to anything but 0."""
     return os.environ.get("WHITTLE_INLINE_SKILLS", "") not in ("", "0")
 
 
 def build_options(params: dict, servers: dict, *, inline_skills: bool) -> ClaudeAgentOptions:
+    """The SDK options for a session, from its start_session params. With
+    inline_skills the recipes are in the system prompt, so there is no plugin
+    and no Skill tool."""
     settings = params.get("settings") or {}
     kwargs = dict(
         system_prompt=prompt.build(settings, inline_skills=inline_skills),
@@ -203,6 +207,8 @@ def frame_too_long(exc: Exception | None) -> bool:
 
 
 def refused_for_size(result: ResultMessage) -> bool:
+    """The API refused the request for its size or its images: a 413, or the
+    CLI's wording for one."""
     return result.is_error and (result.api_error_status == 413 or (result.result or "").startswith(SIZE_REFUSALS))
 
 
@@ -357,6 +363,8 @@ class SdkRunner:
     # -- Runner API -----------------------------------------------------------
 
     async def start_session(self, params: dict) -> None:
+        """Stops any session and starts one, returning once the SDK has
+        connected. A failed connect sends an error event and raises BridgeCallError."""
         await self._stop_session("session restarted")
         options = build_options(params, build_servers(self.ctx), inline_skills=self.inline_skills)
         self.session_id = params.get("resume")
@@ -378,6 +386,8 @@ class SdkRunner:
 
     async def submit(self, turn_id: str, bundle_dir: str, prompt_text: str, context=(),
                      model: str | None = None, effort: str | None = None) -> None:
+        """Starts a turn: queues its query for the session task and returns.
+        Refused without an open session or while a turn runs."""
         if not self._session_open():
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is not None:
@@ -405,6 +415,8 @@ class SdkRunner:
 
     async def amend(self, turn_id: str, text: str, bundle_dir: str | None,
                     number: int | None = None) -> None:
+        """Queues an amendment for the next tool result or a follow-up query to
+        carry. Refused unless the turn is running."""
         if not self._session_open():
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is None or turn_id != self.turn_id:
@@ -412,6 +424,7 @@ class SdkRunner:
         self.ctx.queue_amend(number, text, bundle_dir)
 
     async def interrupt(self, turn_id: str) -> None:
+        """Queues an interrupt; a turn that is not running is ignored."""
         if self.turn_id != turn_id or not self._session_open():
             return
         self._interrupt_requested = True
@@ -419,6 +432,7 @@ class SdkRunner:
         self._commands.put_nowait(("interrupt", None))
 
     async def close(self) -> None:
+        """Stops the session and cancels a models report still running."""
         await self._stop_session("agent shutting down")
         if self._models_task is not None and not self._models_task.done():
             self._models_task.cancel()

@@ -60,6 +60,7 @@ def new_file_id() -> str:
 
 
 def is_file_id(text) -> bool:
+    """Whether text is a string of the form new_file_id gives."""
     return isinstance(text, str) and bool(_FILE_ID.match(text))
 
 
@@ -222,6 +223,8 @@ def open_elsewhere(cache_dir, blend, skip=None) -> bool:
 # -- which cache a file uses -----------------------------------------------------
 
 def same_file(a, b) -> bool:
+    """Whether two paths are one file; when that cannot be checked (one is
+    missing, say), whether their real paths match."""
     try:
         return os.path.samefile(a, b)
     except OSError:

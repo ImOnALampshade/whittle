@@ -32,6 +32,7 @@ _current: VenvSetup | None = None
 
 
 def venv_dir() -> Path:
+    """The private venv's folder: the preference, else venv in the user folder."""
     folder = prefs.get().venv_dir
     if folder:
         return Path(bpy.path.abspath(folder)).resolve()
@@ -39,14 +40,17 @@ def venv_dir() -> Path:
 
 
 def lock_path() -> Path:
+    """The lock the extension ships."""
     return Path(__file__).resolve().parent.parent / venv.LOCK_NAME
 
 
 def base_python() -> Path:
+    """Blender's own Python, which the venv is made from."""
     return Path(sys.executable)
 
 
 def current() -> VenvSetup | None:
+    """The latest setup in this Blender session, running or finished."""
     return _current
 
 
@@ -117,6 +121,8 @@ def _finished(setup: VenvSetup) -> None:
 
 
 def cancel(wait: float = 0.0) -> None:
+    """Stops a running setup and the timer. The running step is asked to end;
+    with wait, it gets that long to exit before it is killed."""
     if _current is not None:
         _current.cancel(wait=wait)
     _stop_timer()
@@ -153,6 +159,7 @@ def _stop_timer() -> None:
 
 
 def timer_registered() -> bool:
+    """Whether the timer that drives the install is registered."""
     return bpy.app.timers.is_registered(_timer)
 
 
@@ -192,12 +199,15 @@ def describe() -> tuple[str, str]:
 
 
 def install_summary() -> str:
+    """The confirmation dialog's message: what is downloaded, and where to."""
     pins = venv.read_pins(lock_path())
     return (f"Download {len(pins)} pinned packages incl. {venv.SDK} {pins.get(venv.SDK)} "
             f"from PyPI into {venv_dir()}")
 
 
 class WHITTLE_OT_venv_install(bpy.types.Operator):
+    """Sets up or reinstalls the venv once the user confirms the download;
+    a dry run only logs the commands, without asking."""
     bl_idname = "whittle.venv_install"
     bl_label = "Set Up Agent Environment"
     bl_description = ("Make the agent's private Python environment and install its exactly pinned, "
@@ -246,6 +256,8 @@ class WHITTLE_OT_venv_install(bpy.types.Operator):
 
 
 class WHITTLE_OT_venv_cancel(bpy.types.Operator):
+    """Stops the running setup without waiting for its step to exit; only
+    offered while one runs."""
     bl_idname = "whittle.venv_cancel"
     bl_label = "Cancel Setup"
     bl_description = "Stop setting up the agent environment"

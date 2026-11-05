@@ -26,6 +26,8 @@ class Request:
     refs: int = 0
 
     def summary(self) -> str:
+        """What the bubble's dim line says, such as '2 strokes · 1 view'; empty
+        when the request carried nothing besides its prompt."""
         parts = []
         for count, word in ((self.strokes, "stroke"), (self.views, "view"), (self.refs, "ref")):
             if count:
@@ -35,6 +37,7 @@ class Request:
 
 @dataclass
 class Turn:
+    """One turn of the conversation, finished or running."""
     node: str | None
     prompt: str
     entries: list[Entry] = field(default_factory=list)
@@ -49,15 +52,19 @@ class Turn:
 
     @property
     def end(self) -> Entry | None:
+        """The entry that closed the turn, or None while none has."""
         return next((e for e in reversed(self.entries) if e.kind == "turn"), None)
 
     @property
     def failure(self) -> str:
+        """Why the turn ended: its closing entry's result, or a stock line when
+        that says nothing."""
         end = self.end
         return end.result if end is not None and end.result else "the turn did not finish"
 
     @property
     def renders(self) -> list[str]:
+        """The paths of the images the turn's tool calls returned, oldest first."""
         return [path for e in self.entries if e.kind == "tool" for path in e.images]
 
     @property
@@ -71,6 +78,7 @@ class Turn:
 
 @dataclass
 class Conversation:
+    """What the sidebar shows of a chat: its turns and what lies around them."""
     # The start line: node 0's id and label, or None before there is a history.
     root: tuple[str, str] | None = None
     current: str | None = None
@@ -83,6 +91,7 @@ class Conversation:
 
     @property
     def path_turns(self) -> list[Turn]:
+        """The turns on the path to the current node, without a folded or running one."""
         return [t for t in self.turns if not t.folded and not t.running]
 
 
@@ -126,6 +135,8 @@ def transcript_entries(session: formats.SessionDir, node: str) -> list[Entry]:
 
 
 def request_info(session: formats.SessionDir, node: str) -> Request:
+    """What a turn's request carried, from its request.json and strokes.json;
+    empty when the turn has no request."""
     path = session.request_dir(node) / "request.json"
     stamp = _stamp(path)
     if stamp is None:
@@ -174,6 +185,7 @@ def start_label(session: formats.SessionDir, node) -> str:
 
 
 def clear_cache() -> None:
+    """Forget everything read, so the next build reads the files again."""
     _entries.clear()
     _requests.clear()
     _starts.clear()

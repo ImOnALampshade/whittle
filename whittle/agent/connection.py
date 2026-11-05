@@ -18,6 +18,9 @@ Handler = Callable[[str, dict], Awaitable[dict]]
 
 
 class BridgeCallError(Exception):
+    """A call that failed, on either side of the bridge: what Connection.call
+    raises for an error result, and what a handler raises to reply with one."""
+
     def __init__(self, code: str, message: str, detail: str | None = None):
         super().__init__(f"{code}: {message}")
         self.code = str(code)
@@ -26,10 +29,14 @@ class BridgeCallError(Exception):
 
 
 class HandshakeError(Exception):
+    """The agent could not reach Blender, or Blender did not welcome it."""
     pass
 
 
 class Connection:
+    """The agent's end of the bridge socket: its calls and events out, Blender's
+    results and calls in. Make one with open, then run serve."""
+
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         self._reader = reader
         self._writer = writer
@@ -45,6 +52,9 @@ class Connection:
     @classmethod
     async def open(cls, port: int, token: str, mode: str, *, host: str = "127.0.0.1",
                    timeout: float = HANDSHAKE_TIMEOUT) -> "Connection":
+        """Connects to Blender and shakes hands. HandshakeError means it could not
+        connect in time, or the reply was missing or not a welcome; a reset during
+        the handshake raises ConnectionError and an undecodable reply ProtocolError."""
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(host, port), timeout)
@@ -63,9 +73,13 @@ class Connection:
         return conn
 
     def set_handler(self, handler: Handler) -> None:
+        """Sets what answers Blender's calls; until then they are refused."""
         self._handler = handler
 
     async def call(self, method: str, params: dict, timeout: float | None = 300.0) -> dict:
+        """Calls a method in Blender and returns its result. An error result, the
+        connection closing or the timeout (None waits for good) raises BridgeCallError;
+        a send that fails raises ConnectionError."""
         if self.closed.is_set():
             raise BridgeCallError(ErrorCode.AGENT_CRASHED, "Blender connection is closed")
         call_id = self._ids.next()
@@ -84,6 +98,7 @@ class Connection:
             self._pending.pop(call_id, None)
 
     async def send_event(self, name: str, data: dict) -> None:
+        """Sends an event, which gets no reply; one that cannot be sent is dropped."""
         if self.closed.is_set():
             return
         try:
@@ -110,6 +125,7 @@ class Connection:
             self.closed.set()
 
     async def close(self) -> None:
+        """Cancels the calls being served, fails the agent's own and closes the socket."""
         for task in list(self._tasks):
             task.cancel()
         self._fail_pending()

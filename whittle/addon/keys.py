@@ -24,6 +24,8 @@ _keymaps: list = []
 
 
 def register_keymap() -> None:
+    """Adds the sketching keys to the 3D View keymap, when there is a key
+    configuration to add them to."""
     kc = bpy.context.window_manager.keyconfigs.addon
     if kc is None:
         # Background Blender has no key configurations.
@@ -35,6 +37,7 @@ def register_keymap() -> None:
 
 
 def unregister_keymap() -> None:
+    """Removes the keys register_keymap added."""
     for km, kmi in _keymaps:
         km.keymap_items.remove(kmi)
     _keymaps.clear()

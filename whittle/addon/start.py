@@ -27,6 +27,7 @@ PRIMITIVES = ("CUBE", "CYLINDER", "CONE", "UV_SPHERE", "ICO_SPHERE", "PLANE", "M
 ASSET_TYPES = ("OBJECT", "COLLECTION")
 
 class StartError(RuntimeError):
+    """Why a start point cannot be taken; the start operators report it as an error."""
     pass
 
 
@@ -282,6 +283,8 @@ class _StartOperator:
         return can_start(history.active(), turn.current(), compare.active()) is None
 
     def run(self, context, ctl) -> str:
+        """Takes the start and returns the message to report. Subclasses say which
+        start; execute reports a failure as an error."""
         raise NotImplementedError
 
     def execute(self, context):
@@ -295,26 +298,33 @@ class _StartOperator:
 
 
 class WHITTLE_OT_start_existing(_StartOperator, bpy.types.Operator):
+    """Takes the scene as it is as the start, with the selection as the target.
+    The target picker stands when nothing eligible is selected."""
     bl_idname = "whittle.start_existing"
     bl_label = "Start From Selection"
     bl_description = "Start from the scene as it is: the selected objects are the target"
 
     def run(self, context, ctl):
+        """The message gives the target in a few words."""
         return start_existing(context, ctl)
 
 
 class WHITTLE_OT_start_blank(_StartOperator, bpy.types.Operator):
+    """Takes back what an earlier start put in the scene, then starts from what
+    remains with nothing selected or targeted."""
     bl_idname = "whittle.start_blank"
     bl_label = "Start Blank"
     bl_description = ("Start from this scene with nothing selected: Claude makes new objects. "
                       "Nothing is added to the scene")
 
     def run(self, context, ctl):
+        """The message is always the same: Claude makes new objects."""
         start_blank(context, ctl)
         return "Blank start: Claude makes new objects"
 
 
 class WHITTLE_OT_start_primitive(_StartOperator, bpy.types.Operator):
+    """Starts from a primitive of the given kind and size."""
     bl_idname = "whittle.start_primitive"
     bl_label = "Start From Primitive"
     bl_description = "Start from a primitive standing at the 3D cursor"
@@ -325,11 +335,14 @@ class WHITTLE_OT_start_primitive(_StartOperator, bpy.types.Operator):
                         unit="LENGTH", description="Its largest side")
 
     def run(self, context, ctl):
+        """The message names the new object."""
         obj = start_primitive(context, ctl, self.kind, size=self.size)
         return f"Start: {obj.name}"
 
 
 class WHITTLE_OT_start_asset(_StartOperator, bpy.types.Operator):
+    """Starts from an asset. From the Asset Browser's menu, invoke fills in the
+    fields from the context's asset."""
     bl_idname = "whittle.start_asset"
     bl_label = "Start Whittle From Asset"
     bl_description = "Start a Whittle session from this asset: it becomes the target"
@@ -354,6 +367,7 @@ class WHITTLE_OT_start_asset(_StartOperator, bpy.types.Operator):
         return self.execute(context)
 
     def run(self, context, ctl):
+        """Takes the asset as the start, naming its objects."""
         objects = start_asset(context, ctl, filepath=self.filepath, id_type=self.id_type,
                               name=self.name, local=self.local)
         return f"Start: {', '.join(o.name for o in objects) or self.name}"

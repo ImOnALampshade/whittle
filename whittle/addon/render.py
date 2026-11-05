@@ -59,6 +59,8 @@ def _owner(scene, path: str):
 
 
 def snapshot_settings(scene) -> dict:
+    """The settings a render changes, by (path, attribute), and each object's
+    hide_render by name."""
     values = {(p, a): getattr(_owner(scene, p), a) for p, a in _SETTINGS}
     values["hide_render"] = {o.name: o.hide_render for o in scene.objects}
     return values
@@ -66,6 +68,8 @@ def snapshot_settings(scene) -> dict:
 
 @contextmanager
 def render_settings(scene):
+    """Context manager: the scene set up for flat, transparent Workbench PNGs,
+    and everything snapshot_settings holds put back afterwards."""
     saved = snapshot_settings(scene)
     try:
         scene.render.engine = "BLENDER_WORKBENCH"
@@ -96,6 +100,8 @@ def render_settings(scene):
 # -- cameras ------------------------------------------------------------------
 
 def camera_from_look_at(location, look_at, lens_mm: float | None = None) -> dict:
+    """A perspective camera spec for temp_camera, at location and looking at
+    look_at, with lens_mm on the 36 mm sensor."""
     eye, target = Vector(location), Vector(look_at)
     direction = target - eye
     if direction.length < 1e-6:
@@ -116,6 +122,8 @@ def camera_from_look_at(location, look_at, lens_mm: float | None = None) -> dict
 
 @contextmanager
 def temp_camera(scene, spec: dict):
+    """Context manager: a camera built from spec as the scene's camera, removed
+    afterwards. Putting the scene's own camera back is render_settings' job."""
     data = bpy.data.cameras.new(CAMERA_NAME)
     obj = None
     try:
@@ -139,6 +147,8 @@ def temp_camera(scene, spec: dict):
 
 
 def world_bounds(objects) -> tuple[Vector, Vector] | None:
+    """The (min, max) corners around the objects' bounding boxes in world
+    space; None with no objects."""
     corners = [o.matrix_world @ Vector(c) for o in objects for c in o.bound_box]
     if not corners:
         return None
@@ -180,6 +190,7 @@ def frame_camera(objects, direction=(1.0, -1.0, 0.8), lens_mm: float = DEFAULT_L
 
 
 def resolution(size: int, aspect: float) -> tuple[int, int]:
+    """(width, height) with size on the long side; aspect is width over height."""
     if aspect >= 1.0:
         return size, max(1, round(size / aspect))
     return max(1, round(size * aspect)), size
@@ -201,6 +212,8 @@ def load_pixels(path) -> np.ndarray:
 
 
 def save_pixels(pixels: np.ndarray, path) -> None:
+    """Writes float32 (h, w, 4) pixels as a PNG, the reverse of load_pixels:
+    Non-Color, so nothing is converted."""
     h, w, _ = pixels.shape
     image = bpy.data.images.new("whittle-composite", w, h, alpha=True)
     try:
@@ -225,6 +238,7 @@ def composite(top: np.ndarray, bottom: np.ndarray) -> np.ndarray:
 
 
 def flatten(pixels: np.ndarray, background=BACKGROUND) -> np.ndarray:
+    """The pixels over an opaque backdrop, as agent-facing images have them."""
     bg = np.empty_like(pixels)
     bg[..., :3] = background
     bg[..., 3] = 1.0

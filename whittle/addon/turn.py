@@ -61,6 +61,8 @@ def next_node_number(session: formats.SessionDir) -> int:
 
 
 class TurnController:
+    """Runs one session folder's turns: owns its agent process, stream and history,
+    and carries each run from Send to turn_finished."""
     def __init__(self, session_root: Path, *, fake_script: Path | None = None,
                  python: Path | None = None, agent_token: str | None = None,
                  use_timer: bool = True, model: str | None = None,
@@ -160,10 +162,13 @@ class TurnController:
 
     @property
     def bridge(self):
+        """The agent process's bridge, or None while there is no agent."""
         return self.process.bridge
 
     @property
     def running(self) -> bool:
+        """A turn was submitted and has not finished; a run still waiting for the
+        agent does not count (busy covers that too)."""
         return self.turn_id is not None
 
     @property
@@ -211,6 +216,7 @@ class TurnController:
 
     @property
     def interrupting(self) -> bool:
+        """The running turn was told to stop and has not finished yet."""
         return self.running and self.bridge is not None and self.bridge.interrupted
 
     def _turn_number(self) -> int | None:
@@ -224,6 +230,8 @@ class TurnController:
     # -- commands from the UI ------------------------------------------------
 
     def start(self) -> None:
+        """Starts the agent unless one is alive, keeping what it launched with for
+        launch_changed."""
         if not self.process.alive:
             self.session_ready = False
             launched = self.launch_settings()
@@ -259,6 +267,7 @@ class TurnController:
         return self.process.alive and self._launched is not None and self._launched != self.launch_settings()
 
     def stop(self, *, wait: bool = False) -> None:
+        """Asks the agent to exit; with wait, sees it out before returning."""
         self.process.stop(wait=wait)
 
     def close(self) -> None:
@@ -556,6 +565,8 @@ class TurnController:
         self._set_phase("interrupting")
 
     def answer(self, text: str) -> bool:
+        """Answers the agent's question with this text and any notes waiting for it.
+        False when no question is waiting or its call has gone."""
         if self.bridge is None or self.question is None:
             return False
         question = self.question
@@ -696,6 +707,8 @@ class TurnController:
     # -- callbacks -----------------------------------------------------------
 
     def on_event(self, msg: dict) -> None:
+        """Takes one agent event: it goes into the stream and the turn's transcript,
+        then moves the turn or session state on."""
         name, data = msg.get("name", ""), msg.get("data") or {}
         self.events.append(msg)
         self.stream.append(name, data)
@@ -1140,6 +1153,7 @@ _current: TurnController | None = None
 
 
 def current() -> TurnController | None:
+    """The controller the UI talks to, if there is one."""
     return _current
 
 
@@ -1152,11 +1166,14 @@ def busy(ctl) -> bool:
 
 
 def set_current(controller: TurnController | None) -> None:
+    """Makes this controller, or None, the one the UI talks to; closing the one
+    before it is the caller's job."""
     global _current
     _current = controller
 
 
 def shutdown_current() -> None:
+    """Closes the current controller, waiting for its agent to exit, and clears it."""
     global _current
     if _current is not None:
         _current.close()

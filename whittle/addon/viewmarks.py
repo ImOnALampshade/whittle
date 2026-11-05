@@ -32,6 +32,8 @@ ORTHO_DEPTH = 0.7
 
 
 def shown(context) -> bool:
+    """Whether markers show: during a sketch session, with the window manager's
+    toggle on."""
     return (sketch.current_session() is not None
             and bool(getattr(context.window_manager, SHOW_PROP, False)))
 
@@ -100,9 +102,12 @@ class WHITTLE_GT_view(bpy.types.Gizmo):
     __slots__ = ("lines", "tris", "key")
 
     def setup(self):
+        """Starts with no shape; sync gives it one."""
         self.lines = self.tris = self.key = None
 
     def set_shape(self, view, key) -> None:
+        """Builds the view's shapes: lines to draw, triangles to pick. sync compares
+        key to tell when the view changed."""
         lines, tris = marker_shape(view)
         self.lines = self.new_custom_shape("LINES", lines)
         self.tris = self.new_custom_shape("TRIS", tris)
@@ -113,6 +118,7 @@ class WHITTLE_GT_view(bpy.types.Gizmo):
             self.draw_custom_shape(self.lines)
 
     def draw_select(self, context, select_id):
+        """Draws the triangles for picking, so a click need not land on a thin line."""
         if self.tris is not None:
             self.draw_custom_shape(self.tris, select_id=select_id)
 
@@ -131,9 +137,11 @@ class WHITTLE_GGT_views(bpy.types.GizmoGroup):
         return shown(context)
 
     def setup(self, context):
+        """Starts with no markers; marks maps each view id to its gizmo."""
         self.marks = {}
 
     def draw_prepare(self, context):
+        """Brings the markers up to date before the viewport draws them."""
         obj = sketch.find_sketch_object()
         stored = views.load_views(obj.data) if obj is not None else []
         current = views.current_view(obj.data) if obj is not None else None

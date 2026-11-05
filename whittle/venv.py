@@ -58,6 +58,7 @@ _HASH = re.compile(r"--hash=(sha256:[0-9a-f]{64})")
 
 
 class VenvStatus(StrEnum):
+    """What a venv folder holds, as status() reads it."""
     MISSING = "missing"    # no folder, or an empty one
     READY = "ready"        # verified install from this exact lock
     STALE = "stale"        # installed from another lock; reinstall, never automatic
@@ -67,6 +68,7 @@ class VenvStatus(StrEnum):
 
 @dataclass(frozen=True)
 class Step:
+    """One subprocess of the setup, with its time limits."""
     name: str
     argv: list[str]
     timeout: float
@@ -108,6 +110,8 @@ def lock_hashes(lock: Path) -> dict[str, list[str]]:
 
 
 def lock_digest(lock: Path) -> str:
+    """The lock file's SHA-256 in hex. The marker records it, which is how a
+    venv made from another lock reads as stale."""
     return hashlib.sha256(Path(lock).read_bytes()).hexdigest()
 
 
@@ -148,6 +152,7 @@ def bundled_cli_name(platform: str = sys.platform) -> str:
 # -- commands -------------------------------------------------------------------
 
 def venv_python(venv: Path, platform: str = sys.platform) -> Path:
+    """Where the venv's Python is on that platform."""
     venv = Path(venv)
     if platform == "win32":
         return venv / "Scripts" / "python.exe"
@@ -155,6 +160,7 @@ def venv_python(venv: Path, platform: str = sys.platform) -> Path:
 
 
 def create_command(base_python: Path, venv: Path, *, clear: bool = False) -> list[str]:
+    """The command that makes the venv; clear empties a folder already there."""
     argv = [str(base_python), "-I", "-m", "venv"]
     if clear:
         argv.append("--clear")
@@ -162,6 +168,7 @@ def create_command(base_python: Path, venv: Path, *, clear: bool = False) -> lis
 
 
 def install_command(python: Path, lock: Path) -> list[str]:
+    """The pip command that installs exactly the lock's pins."""
     # --no-deps with --require-hashes means exactly the lock's pins are
     # installed, from wheels only, so no package's build code ever runs.
     # -u and a raw progress bar make pip report each downloaded chunk to the
@@ -178,15 +185,20 @@ def install_command(python: Path, lock: Path) -> list[str]:
 
 
 def verify_command(python: Path) -> list[str]:
+    """The command that prints the SDK's version and whether its bundled
+    Claude CLI is there, after VERIFY_PREFIX."""
     return [str(python), "-I", "-c", VERIFY_SCRIPT]
 
 
 def subprocess_env(environ) -> dict[str, str]:
+    """environ for the setup's steps, without DROPPED_ENV_PREFIXES."""
     return {key: value for key, value in environ.items()
             if not key.upper().startswith(DROPPED_ENV_PREFIXES)}
 
 
 def plan(base_python: Path, venv: Path, lock: Path, *, reinstall: bool = False) -> list[Step]:
+    """The steps that build the venv: create, install, verify. With reinstall
+    the create step clears the folder first."""
     python = venv_python(venv)
     return [Step("create", create_command(base_python, venv, clear=reinstall), STEP_TIMEOUTS["create"]),
             Step("install", install_command(python, lock), STEP_TIMEOUTS["install"],
@@ -197,6 +209,7 @@ def plan(base_python: Path, venv: Path, lock: Path, *, reinstall: bool = False) 
 # -- the marker -----------------------------------------------------------------
 
 def read_marker(venv: Path) -> dict | None:
+    """The venv's marker, or None when it is missing or unreadable."""
     try:
         data = json.loads((Path(venv) / MARKER).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -219,6 +232,7 @@ def base_home(venv: Path) -> Path | None:
 
 
 def status(venv: Path, lock: Path, platform: str = sys.platform) -> VenvStatus:
+    """Reads the folder's state from its marker, its Python and the lock."""
     venv = Path(venv)
     if not venv.is_dir() or not any(venv.iterdir()):
         return VenvStatus.MISSING
@@ -293,9 +307,12 @@ class VenvSetup:
 
     @property
     def running(self) -> bool:
+        """Whether the setup has started and not yet ended."""
         return self.state == "running"
 
     def start(self) -> None:
+        """Starts the first step; with dry_run only logs the steps and ends. A
+        setup runs once: starting it again raises RuntimeError."""
         if self.state != "idle":
             raise RuntimeError(f"setup already {self.state}")
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -317,6 +334,9 @@ class VenvSetup:
         self._next()
 
     def tick(self) -> float | None:
+        """Notices a step ending or overrunning and moves the setup on. Returns
+        the seconds until the next tick, or None when nothing is left to poll,
+        which also stops the Blender timer."""
         if self.state != "running" or self._proc is None:
             return None
         code = self._proc.poll()

@@ -52,6 +52,8 @@ def take_confirmed(now: float | None = None) -> str | None:
 
 
 class WHITTLE_OT_enter_send(bpy.types.Operator):
+    """Runs on the release of Enter: sends the field confirmed just before it, and
+    lets the key through when none was or sending is not possible."""
     bl_idname = "whittle.enter_send"
     bl_label = "Send on Enter"
     bl_description = "Send the prompt box's text when Enter confirms it"
@@ -70,6 +72,8 @@ CLASSES = (WHITTLE_OT_enter_send,)
 
 
 def register_keymap() -> None:
+    """Puts the release of both Enter keys on the Window keymap, when there is a key
+    configuration to add them to."""
     kc = bpy.context.window_manager.keyconfigs.addon
     if kc is None:
         # Background Blender has no key configurations.
@@ -80,6 +84,7 @@ def register_keymap() -> None:
 
 
 def unregister_keymap() -> None:
+    """Removes the keys register_keymap added."""
     for km, kmi in _keymaps:
         km.keymap_items.remove(kmi)
     _keymaps.clear()

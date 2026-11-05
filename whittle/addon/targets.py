@@ -17,6 +17,8 @@ REFERENCE_COLLECTION = "Whittle References"
 
 
 def eligible(obj) -> bool:
+    """Whether the object can be a target: anything but None, a camera, light, probe
+    or speaker, the sketch, a ghost or one of Whittle's helpers."""
     return (obj is not None and obj.type not in EXCLUDED_TYPES and obj.name != sketch.SKETCH_NAME
             and GHOST_PROP not in obj and REFERENCE_PROP not in obj)
 
@@ -69,6 +71,7 @@ def add(scene, objects) -> int:
 
 
 def set_from_selection(context) -> int:
+    """Replaces the list with the eligible selected objects; returns how many."""
     props = context.scene.whittle
     props.targets.clear()
     props.target_index = 0

@@ -95,6 +95,8 @@ def camera_spec(view_matrix, window_matrix, width: int, height: int) -> dict:
 
 def view_from_matrices(view_id: int, view_matrix, window_matrix, width: int, height: int, *,
                        from_camera: str | None = None) -> formats.View:
+    """A view from a viewport's matrices at width x height, with the camera that
+    reproduces it. from_camera names the scene camera it looks through, if any."""
     width, height = max(1, int(width)), max(1, int(height))
     camera = camera_spec(view_matrix, window_matrix, width, height)
     return formats.View(
@@ -234,6 +236,8 @@ def to_pixel(view: formats.View, co, width: int, height: int) -> tuple[float, fl
 # -- storage on the sketch datablock ------------------------------------------
 
 def load_views(gp) -> list[formats.View]:
+    """The views stored on the datablock; unreadable ones give an empty list and
+    a warning."""
     raw = gp.get(VIEWS_PROP)
     if not raw:
         return []
@@ -245,6 +249,7 @@ def load_views(gp) -> list[formats.View]:
 
 
 def save_views(gp, views: list[formats.View]) -> None:
+    """Replaces the views stored on the datablock."""
     gp[VIEWS_PROP] = json.dumps([v.to_json() for v in views], separators=(",", ":"))
 
 
@@ -288,6 +293,7 @@ def merge_views(gp, incoming) -> dict[int, int]:
 
 
 def latest_view(gp) -> formats.View | None:
+    """The stored view with the highest id, or None when there are none."""
     return max(load_views(gp), key=lambda v: v.id, default=None)
 
 
@@ -301,6 +307,7 @@ def current_view(gp) -> formats.View | None:
 
 
 def set_current_view(gp, view_id: int) -> None:
+    """Pins the view new strokes go to, until a newer view is stored."""
     gp[CURRENT_VIEW_PROP] = int(view_id)
 
 
@@ -320,6 +327,8 @@ def prune_views(gp, keep_ids: set[int]) -> None:
 
 
 def clear_views(gp) -> None:
+    """Drops every stored view and the pin; the next id stays, so ids are still
+    not reused."""
     save_views(gp, [])
     _unpin(gp)
 
@@ -328,6 +337,7 @@ def clear_views(gp) -> None:
 
 @dataclass
 class Viewport:
+    """One 3D viewport region, with its area and its RegionView3D."""
     area: object
     region: object
     rv3d: object
@@ -347,6 +357,8 @@ def viewports(window_manager) -> list[Viewport]:
 
 
 def viewport_from_context(context) -> Viewport | None:
+    """The context's 3D viewport, or None outside a 3D view area. From another
+    region of the area, such as the sidebar, it is the area's main region."""
     area = context.area
     if area is None or area.type != "VIEW_3D":
         return None

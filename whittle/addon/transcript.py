@@ -130,6 +130,7 @@ def session_records(session: formats.SessionDir) -> list[dict]:
 
 
 def has_transcript(session: formats.SessionDir) -> bool:
+    """Whether any node of the session has a transcript file to show."""
     return any(session.transcript_path(node).is_file() for node in session.node_ids())
 
 

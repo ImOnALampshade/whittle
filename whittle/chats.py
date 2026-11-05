@@ -64,6 +64,7 @@ def new_chat_id(taken=()) -> str:
 
 
 def is_chat_id(text: str) -> bool:
+    """Whether text has the form new_chat_id gives."""
     return bool(_CHAT_ID.match(text or ""))
 
 
@@ -134,6 +135,7 @@ def iso(seconds: float) -> str:
 
 
 def now_iso() -> str:
+    """The time now, in iso()'s form."""
     return iso(time.time())
 
 
@@ -322,6 +324,7 @@ class Entry:
     effort: str | None = None
 
     def to_json(self) -> dict:
+        """The entry as the index stores it."""
         return asdict(self)
 
 
@@ -333,15 +336,19 @@ _ENTRY_OPTIONAL = {"model": (str, None), "effort": (str, None), "origin": (str, 
 
 @dataclass
 class Index:
+    """The chat index: every chat's entry by id, and which chat is current."""
     current: str | None = None
     chats: dict[str, Entry] = field(default_factory=dict)
 
     def to_json(self) -> dict:
+        """The index as chats.json and the .blend store it."""
         return {"format": INDEX_FORMAT, "version": 1, "current": self.current,
                 "chats": {chat: entry.to_json() for chat, entry in self.chats.items()}}
 
 
 def validate_index(obj, where: str = INDEX_NAME) -> None:
+    """Raises FormatError unless obj is a well-formed index: its chat ids, its
+    entries' fields, and a current chat that is listed."""
     if not isinstance(obj, dict):
         raise formats.FormatError(f"{where}: not a JSON object")
     formats._check_header(obj, where, INDEX_FORMAT)
@@ -360,6 +367,8 @@ def validate_index(obj, where: str = INDEX_NAME) -> None:
 
 
 def index_from_json(obj, where: str = INDEX_NAME) -> Index:
+    """The Index in a chats.json object, validated first; where names it in
+    errors. Keys an earlier version lacks take Entry's defaults."""
     validate_index(obj, where)
     return Index(current=obj.get("current"),
                  chats={chat: Entry(**{k: entry[k] for k in (*_ENTRY_SPEC, *_ENTRY_OPTIONAL) if k in entry})
@@ -367,10 +376,13 @@ def index_from_json(obj, where: str = INDEX_NAME) -> Index:
 
 
 def read_index(path) -> Index:
+    """The Index in the file at path; FormatError when it is missing or
+    malformed."""
     return index_from_json(formats.read_json(path), str(path))
 
 
 def write_index(path, index: Index) -> None:
+    """Writes the index to path atomically."""
     formats.write_json_atomic(path, index.to_json())
 
 
@@ -392,18 +404,25 @@ class Chats:
     # -- paths --------------------------------------------------------------------
 
     def index_path(self) -> Path:
+        """The path of this root's chats.json."""
         return self.root / INDEX_NAME
 
     def folder(self, chat: str) -> Path:
+        """The chat's folder, also the agent's cwd for it. A chat still only
+        packed has none yet."""
         return self.root / "chats" / chat
 
     def packed_paths(self, chat: str) -> tuple[Path, Path]:
+        """The chat's zip and the JSON that records its digest, fingerprint and
+        size."""
         folder = self.root / "packed"
         return folder / f"{chat}.zip", folder / f"{chat}.json"
 
     # -- the index ---------------------------------------------------------------
 
     def load(self) -> None:
+        """Reads the index; one missing or unreadable is rebuilt from the chat
+        folders."""
         path = self.index_path()
         self.index = Index()
         if path.is_file():
@@ -415,6 +434,7 @@ class Chats:
         self.rebuild()
 
     def save(self) -> None:
+        """Writes the index to chats.json."""
         write_index(self.index_path(), self.index)
 
     def rebuild(self) -> None:
@@ -439,9 +459,11 @@ class Chats:
 
     @property
     def current(self) -> str | None:
+        """The current chat's id; None when there is none."""
         return self.index.current
 
     def entry(self, chat: str) -> Entry:
+        """The chat's index entry; KeyError when the index lacks it."""
         return self.index.chats[chat]
 
     def ordered(self) -> list[str]:
@@ -455,11 +477,14 @@ class Chats:
         return [c for c in self.ordered() if self.index.chats[c].turns or c == self.current]
 
     def total_size(self) -> int:
+        """What the chats the menu lists add to the .blend, in bytes."""
         return sum(self.index.chats[c].size for c in self.listed())
 
     # -- one chat ----------------------------------------------------------------
 
     def read_chat(self, chat: str) -> dict:
+        """The chat's chat.json; empty when it is missing, unreadable or not a
+        chat's."""
         path = self.folder(chat) / CHAT_NAME
         try:
             found = formats.read_json(path)
@@ -558,6 +583,9 @@ class Chats:
         return self.current
 
     def switch(self, chat: str) -> None:
+        """Makes the chat current, unpacking it if need be; KeyError when the
+        index lacks it. The chat left goes if it is empty, and a chat with a
+        history has its next turn say the scene may have moved on."""
         if chat not in self.index.chats:
             raise KeyError(f"no chat {chat!r}")
         self.ensure_unpacked(chat)
@@ -837,8 +865,10 @@ class Chats:
 
 
 def delete_label(count: int, size: int) -> str:
+    """The Delete Other Chats dialog's line on what a choice takes."""
     return f"Deletes {count} chat{'' if count == 1 else 's'}, {size_label(size)}."
 
 
 def index_json(index: Index) -> str:
+    """The index as the text the .blend stores, which state_stamp digests too."""
     return json.dumps(index.to_json(), ensure_ascii=False)

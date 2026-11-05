@@ -32,10 +32,13 @@ SETTINGS_KEYS = ("self_check_rounds", "poly_budget", "style_notes", "palette", "
 
 
 class BundleError(Exception):
+    """A request bundle cannot be written; the message says why."""
     pass
 
 
 def ensure_uid(obj) -> str:
+    """The object's whittle_uid, which restoring matches objects by; an object
+    without a usable one gets a new one."""
     uid = obj.get(UID_PROP)
     if not isinstance(uid, str) or not uid:
         uid = uuid.uuid4().hex
@@ -44,6 +47,7 @@ def ensure_uid(obj) -> str:
 
 
 def target_entries(objects) -> list[dict]:
+    """The request's target list: each object's uid, name and type."""
     return [{"uid": ensure_uid(o), "name": o.name, "type": o.type} for o in objects]
 
 
@@ -117,6 +121,7 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def check_refs(paths) -> None:
+    """Refuses reference images that are missing, or more than a request can carry."""
     missing = [str(p) for p in paths if not Path(p).is_file()]
     if missing:
         raise BundleError(f"reference image not found: {', '.join(missing)}")

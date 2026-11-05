@@ -60,6 +60,7 @@ def show_image(context, path) -> "bpy.types.Image":
 
 
 def show_text(context, text) -> None:
+    """Shows the text in a Text Editor, when one can be found or opened."""
     area = _open_area(context, "TEXT_EDITOR")
     if area is not None:
         area.spaces.active.text = text

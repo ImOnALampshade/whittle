@@ -12,12 +12,14 @@ _collection = None
 
 
 def register() -> None:
+    """Makes the collection, unless there already is one."""
     global _collection
     if _collection is None:
         _collection = bpy.utils.previews.new()
 
 
 def unregister() -> None:
+    """Frees the collection and its thumbnails."""
     global _collection
     if _collection is not None:
         bpy.utils.previews.remove(_collection)
@@ -25,6 +27,7 @@ def unregister() -> None:
 
 
 def clear() -> None:
+    """Drops every loaded thumbnail; each loads again on its next use."""
     if _collection is not None:
         _collection.clear()
 

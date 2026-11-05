@@ -21,6 +21,8 @@ _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 class FolderSessionStore:
+    """The store itself; the SDK calls append, load and list_subkeys by name."""
+
     def __init__(self, folder):
         self.folder = Path(folder)
 
@@ -39,6 +41,7 @@ class FolderSessionStore:
         return self.folder.joinpath(session, *parts[:-1], f"{parts[-1]}.jsonl")
 
     async def append(self, key: dict, entries: list) -> None:
+        """Adds a batch of entries to a transcript as JSON lines."""
         if not entries:
             return
         path = self.path(key)
@@ -52,6 +55,7 @@ class FolderSessionStore:
             os.close(fd)
 
     async def load(self, key: dict) -> list | None:
+        """A transcript's entries, or None when it was never written."""
         path = self.path(key)
         try:
             text = path.read_text(encoding="utf-8")
@@ -69,6 +73,7 @@ class FolderSessionStore:
         return entries
 
     async def list_subkeys(self, key: dict) -> list[str]:
+        """The subpaths of a session's subagent transcripts, sorted."""
         base = self.path({"session_id": key.get("session_id")}).with_suffix("")
         if not base.is_dir():
             return []

@@ -71,6 +71,7 @@ class Table:
 
     @property
     def height(self) -> int:
+        """Rows of text it takes: each table row is as tall as its tallest cell."""
         return sum(max((len(cell) for cell in row), default=1) for row in self.rows)
 
 
@@ -106,6 +107,8 @@ class Line:
 
 
 def styled(text: str, style: str) -> str:
+    """text in a style's Unicode letters ("b", "i", "bi" or "m"). A character
+    with no such letter stays as it is."""
     upper, lower, digit = _STYLES[style]
     out = []
     for ch in text:
@@ -136,6 +139,7 @@ def superscript(text: str) -> str | None:
 
 
 def subscript(text: str) -> str | None:
+    """text in subscript letters, or None when one has no such form."""
     if all(ch in _SUB or ch == " " for ch in text):
         return "".join(_SUB.get(ch, ch) for ch in text)
     return None
@@ -383,6 +387,8 @@ class Notes:
         self.order: list[str] = []
 
     def number(self, name: str) -> int | None:
+        """A footnote's number, given at its first reference; None for a name
+        with no text."""
         if name not in self.texts:
             return None
         if name not in self.order:
@@ -403,18 +409,22 @@ def inline_links(text: str, notes: Notes | None = None, *, styles: tuple = ()):
     held: list[tuple[str, str]] = []
 
     def hold(kind: str, value: str) -> str:
+        """Keeps value from the later passes; returns the character that stands
+        for it in the text."""
         held.append((kind, value))
         return chr(_HELD + len(held) - 1)
 
     text = _scan(_PRIVATE.sub("", text), hold)
     if notes is not None:
         def note(m):
+            """A reference to a known footnote as its number, any other left as it is."""
             n = notes.number(m.group(1))
             return m.group(0) if n is None else hold("raw", superscript(str(n)))
         text = _NOTE_REF.sub(note, text)
     text = _LINK.sub(lambda m: _LINK_ON + hold("url", m.group(2)) + (m.group(1) or hold("raw", m.group(2)))
                      + _LINK_OFF, text)
     def bare(m):
+        """A bare address as a link, the punctuation after it left outside."""
         url = _trim_url(m.group(0))
         return (_LINK_ON + hold("url", _address(url)) + hold("raw", url) + _LINK_OFF
                 + m.group(0)[len(url):])
@@ -445,6 +455,7 @@ OPEN_SCHEMES = ("http", "https", "mailto")
 
 
 def openable(url: str) -> bool:
+    """Whether a link may be opened: its scheme is in OPEN_SCHEMES."""
     try:
         return urlsplit(url).scheme.lower() in OPEN_SCHEMES
     except ValueError:
@@ -587,6 +598,10 @@ def _finish(text: str, held) -> tuple[str, list]:
     expect_url = False
 
     def emit(value: str, kind: str):
+        """Adds value's characters, cleaned of what Blender would draw as
+        boxes: "text" in the styles now on, "code" the same but monospace in
+        place of bold or italic, "raw" with its letters as they are (a stroke
+        still applies)."""
         for ch in clean(value):
             chars.append((_style_char(ch, depth, kind), depth["s"] > 0 and ch != "\n"))
 
@@ -828,6 +843,7 @@ class _Layout:
         after_blank = True
 
         def gap():
+            """Adds a gap, unless it would come first or after another gap."""
             if out and out[-1].kind != "gap":
                 out.append(Line("", "gap", quote=quote))
 

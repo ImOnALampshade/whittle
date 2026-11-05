@@ -52,9 +52,13 @@ class Compare:
 
     @property
     def live_blend(self) -> Path:
+        """The live scene's snapshot, in the session's compare folder."""
         return self.history.session.compare_dir() / "live.blend"
 
     def start(self, scene) -> None:
+        """Writes the live snapshot, then shows the other node. If that fails the
+        scene goes back to live and the error is raised; when even that fails
+        the comparison stays, so it can be tried again."""
         if not self.history.can_restore(self.other):
             raise RuntimeError(f"node {self.other} has no snapshot to compare")
         from . import targets
@@ -97,6 +101,9 @@ class Compare:
         return self._live if side == LIVE else self._other
 
     def show(self, side: str, scene) -> None:
+        """Puts one side in the scene, LIVE or the other node. What the side
+        showing has and the new one lacks goes, but going to the node takes
+        only the agent's objects."""
         if side == self.showing:
             return
         incoming, outgoing = self._snap(side), self._snap(self.showing)
@@ -133,6 +140,7 @@ class Compare:
         targets.select_list(scene)
 
     def toggle(self, scene) -> str:
+        """Shows the side not showing now, and returns the one that is."""
         self.show(self.other if self.showing == LIVE else LIVE, scene)
         return self.showing
 
@@ -161,10 +169,13 @@ _active: Compare | None = None
 
 
 def active() -> Compare | None:
+    """The comparison running now, if any."""
     return _active
 
 
 def start(hist: history.History, node: str, scene) -> Compare:
+    """Starts comparing the scene with node; only one runs at a time. A start
+    that fails and cannot go back to live stays active, to be ended."""
     global _active
     if _active is not None:
         raise RuntimeError("a comparison is already running")
@@ -241,6 +252,7 @@ def show_ghost(hist: history.History, node: str, scene) -> list:
 
 
 def ghost_node() -> str | None:
+    """The node the ghost in this file shows, if there is one."""
     for obj in bpy.data.objects:
         if GHOST_PROP in obj:
             return str(obj[GHOST_PROP])

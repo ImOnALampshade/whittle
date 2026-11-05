@@ -136,6 +136,8 @@ HANDLERS = ((bpy.app.handlers.load_pre, _stop_agent), (bpy.app.handlers.exit_pre
 
 
 def register():
+    """Registers the classes and properties, the file and undo handlers, the Asset
+    Browser's menu entry and the keys, and finds the chats of a file already open."""
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     props.register_props()
@@ -172,6 +174,8 @@ def _remove_asset_entry():
 
 
 def unregister():
+    """Ends the sketch session, the agent and any running setup, and takes out
+    everything register added."""
     keys.unregister_keymap()
     shortcut.unregister_keymap()
     enter.unregister_keymap()

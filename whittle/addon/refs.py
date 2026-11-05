@@ -106,6 +106,7 @@ def place_empty(scene, path, *, align: str = "FRONT", size: float = 2.0, view=No
 
 
 class WHITTLE_OT_ref_pin(bpy.types.Operator):
+    """Toggles whether the reference at index is pinned."""
     bl_idname = "whittle.ref_pin"
     bl_label = "Pin Reference"
     bl_description = "Pinned references go with every request; unpinned ones only with the next"
@@ -122,6 +123,7 @@ class WHITTLE_OT_ref_pin(bpy.types.Operator):
 
 
 class WHITTLE_OT_ref_place(bpy.types.Operator):
+    """Places the reference at index as an image empty, aligned to a side or the view."""
     bl_idname = "whittle.ref_place"
     bl_label = "Place Reference"
     bl_description = "Show this reference image in the scene as a half-transparent image empty"

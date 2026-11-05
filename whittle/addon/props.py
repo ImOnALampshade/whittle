@@ -60,6 +60,7 @@ def file_settings(scene) -> dict:
 
 
 def reset_file_setting(scene, key: str) -> None:
+    """Clears the scene's override of a setting, so it reads the preference again."""
     props = scene.whittle
     if FILE_SETTINGS[key] in props:
         del props[FILE_SETTINGS[key]]
@@ -132,6 +133,7 @@ CLASSES = (WhittleRef, WhittleTarget, WhittleSceneProps)
 
 
 def register_props():
+    """Adds scene.whittle and the window manager's development and UI properties."""
     bpy.types.Scene.whittle = PointerProperty(type=WhittleSceneProps)
     # Development settings, on the window manager so no .blend ever carries
     # them: a fake script's steps run any Python, so one that came with a
@@ -158,6 +160,7 @@ def register_props():
 
 
 def unregister_props():
+    """Removes what register_props added."""
     del bpy.types.WindowManager.whittle_bundle_path
     del bpy.types.WindowManager.whittle_fake_script
     del bpy.types.WindowManager.whittle_show_all_chats

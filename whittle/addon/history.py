@@ -108,6 +108,8 @@ def chat_id(session: formats.SessionDir) -> str:
 
 
 class History:
+    """One session folder's tree and the snapshots of its nodes; get() keeps one
+    per folder. The tree is None until the first turn or start point."""
     def __init__(self, session: formats.SessionDir):
         self.session = session
         self.chat = chat_id(session)
@@ -118,6 +120,8 @@ class History:
     # -- persistence ----------------------------------------------------------
 
     def load(self) -> None:
+        """Reads session.json, if there is one. Turns left running are marked failed
+        and saved; a file that fails to parse or validate leaves no tree and sets error."""
         path = self.session.session_path()
         self.tree, self.error = None, None
         if not path.is_file():
@@ -133,14 +137,17 @@ class History:
             self.save()
 
     def save(self) -> None:
+        """Writes session.json, if there is a tree yet."""
         if self.tree is not None:
             tree.write_session(self.session.session_path(), self.tree)
 
     @property
     def current(self) -> str | None:
+        """The current node's id, or None without a tree."""
         return self.tree.current if self.tree is not None else None
 
     def node(self, node_id: str) -> tree.Node:
+        """The node with this id; TreeError when it or the tree is missing."""
         if self.tree is None:
             raise tree.TreeError("there is no history yet")
         return self.tree.node(node_id)
@@ -198,12 +205,15 @@ class History:
         return added
 
     def forget_session(self, node: str | None) -> None:
+        """Clears the SDK session a node carries on, when the submit was refused
+        and the turn never ran in it."""
         if self.tree is None or node not in self.tree.nodes:
             return
         self.tree.node(node).continued_session = None
         self.save()
 
     def discard(self, node: str) -> None:
+        """Forgets a node whose turn never started."""
         if self.tree is None or node not in self.tree.nodes:
             return
         self.tree.discard(node)
@@ -262,6 +272,7 @@ class History:
     # -- restore and branch -----------------------------------------------------
 
     def can_restore(self, node: str) -> bool:
+        """Whether the node has a snapshot on disk to go back to."""
         if self.tree is None or node not in self.tree.nodes:
             return False
         return self.tree.node(node).snapshot and self.session.target_blend(node).is_file()

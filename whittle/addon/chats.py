@@ -50,6 +50,7 @@ def config_dir() -> Path:
 
 
 def file_id() -> str | None:
+    """The open file's id, which names its cache; None until it has one."""
     return _file_id
 
 

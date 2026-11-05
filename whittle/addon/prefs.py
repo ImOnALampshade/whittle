@@ -280,6 +280,8 @@ def wrap_status(text: str, width: float | None, measure) -> list[str]:
 
 
 def get():
+    """A copy of the preferences as a namespace, or DEFAULTS when the add-on is not
+    registered, so callers need not care which. Setting a field on it changes nothing."""
     addon = bpy.context.preferences.addons.get(PACKAGE)
     if addon is None or addon.preferences is None:
         return SimpleNamespace(**DEFAULTS)

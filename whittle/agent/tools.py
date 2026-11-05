@@ -23,6 +23,8 @@ IMAGE_LINE = re.compile(r"^image: (.+)$", re.MULTILINE)
 
 @dataclass
 class Amendment:
+    """An amendment waiting to reach the model; bundle_dir is set when it brought
+    new strokes."""
     number: int | None
     text: str
     bundle_dir: str | None
@@ -39,12 +41,16 @@ def amend_note(number: int | None, text: str, has_bundle: bool) -> str:
 
 
 def follow_up_text(notes: list[str]) -> str:
+    """The query that delivers amendments no tool result could carry, because the
+    model had already finished."""
     return ("\n".join(notes) + "\n\nThe user sent this after your last reply. Fold this into the "
             "current turn and continue.")
 
 
 @dataclass
 class ToolContext:
+    """What the handlers share: the bridge connection, the running turn and its
+    queued amendments. The runner keeps one and updates it each turn."""
     connection: object
     turn_id: str | None = None
     bundle_dir: str | None = None
@@ -52,12 +58,15 @@ class ToolContext:
     amends: list[Amendment] = field(default_factory=list)
 
     async def event(self, name: str, data: dict) -> None:
+        """Sends Blender an event tagged with the running turn."""
         await self.connection.send_event(name, {"turn_id": self.turn_id, **data})
 
     def queue_amend(self, number: int | None, text: str, bundle_dir: str | None) -> None:
+        """Holds an amendment until a tool result or a follow-up query can carry it."""
         self.amends.append(Amendment(number, text, bundle_dir))
 
     def take_amend_notes(self) -> list[tuple[int | None, str]]:
+        """Empties the queue, returning (number, note) for each amendment."""
         amends, self.amends = self.amends, []
         return [(a.number, amend_note(a.number, a.text, a.bundle_dir is not None)) for a in amends]
 
@@ -73,16 +82,19 @@ class ToolContext:
 # -- result helpers -----------------------------------------------------------
 
 def text_block(text: str) -> dict:
+    """A text item for a tool result's content."""
     return {"type": "text", "text": text}
 
 
 def image_block(path: Path) -> dict:
+    """An image item for a tool result's content, with the file inlined as base64."""
     mime = formats.IMAGE_TYPES.get(path.suffix.lower(), "image/png")
     return {"type": "image", "data": base64.b64encode(path.read_bytes()).decode("ascii"),
             "mimeType": mime}
 
 
 def error_result(exc: BridgeCallError) -> dict:
+    """The tool result that tells the model a Blender call failed."""
     text = f"Blender error ({exc.code}): {exc.message}"
     if exc.detail:
         text += f"\n{exc.detail}"
@@ -90,10 +102,13 @@ def error_result(exc: BridgeCallError) -> dict:
 
 
 def image_paths(text: str) -> list[str]:
+    """The paths on the image caption lines of a result's text."""
     return [m.strip() for m in IMAGE_LINE.findall(text)]
 
 
 def format_exec_result(data: dict) -> str:
+    """The text the model gets back from exec: stdout, any error, the scene diff
+    and notes."""
     parts = []
     stdout = data.get("stdout") or ""
     parts.append("stdout:\n" + stdout if stdout else "stdout: (empty)")
@@ -117,6 +132,7 @@ def format_exec_result(data: dict) -> str:
 # -- handlers -----------------------------------------------------------------
 
 async def exec_tool(ctx: ToolContext, args: dict) -> dict:
+    """Runs the model's Python in Blender and reports what it did to the scene."""
     params = {"code": args["code"], "label": args.get("label") or ""}
     try:
         # No time limit: Blender cannot stop code once it runs, so a timeout
@@ -131,6 +147,7 @@ async def exec_tool(ctx: ToolContext, args: dict) -> dict:
 
 
 async def inspect_tool(ctx: ToolContext, args: dict) -> dict:
+    """Returns Blender's answer to a scene query as JSON, with any notes after it."""
     params = {"query": args["query"]}
     if args.get("name") is not None:
         params["name"] = args["name"]
@@ -145,6 +162,7 @@ async def inspect_tool(ctx: ToolContext, args: dict) -> dict:
 
 
 async def render_tool(ctx: ToolContext, args: dict) -> dict:
+    """Has Blender render the scene and returns the image with its caption."""
     params = {"mode": args["mode"], "view": args.get("view"), "camera": args.get("camera")}
     if args.get("size") is not None:
         params["size"] = args["size"]
@@ -164,6 +182,8 @@ async def render_tool(ctx: ToolContext, args: dict) -> dict:
 
 
 async def checkpoint_tool(ctx: ToolContext, args: dict) -> dict:
+    """Has Blender save a checkpoint and reports its id and objects, and how to
+    restore it or that it cannot be restored."""
     try:
         data = await ctx.connection.call(Method.CHECKPOINT, {"label": args.get("label") or ""})
     except BridgeCallError as exc:
@@ -180,6 +200,7 @@ async def checkpoint_tool(ctx: ToolContext, args: dict) -> dict:
 
 
 async def restore_checkpoint_tool(ctx: ToolContext, args: dict) -> dict:
+    """Restores a checkpoint and warns that variables holding its objects are stale."""
     try:
         data = await ctx.connection.call(Method.RESTORE_CHECKPOINT,
                                          {"checkpoint_id": args["checkpoint_id"]}, timeout=None)
@@ -196,6 +217,8 @@ async def restore_checkpoint_tool(ctx: ToolContext, args: dict) -> dict:
 
 
 async def request_tool(ctx: ToolContext, args: dict) -> dict:
+    """Reads the turn's request bundle, or an amendment's with amend, from disk;
+    Blender plays no part."""
     if not ctx.bundle_dir:
         return {"content": [text_block("There is no request bundle for this turn.")], "is_error": True}
     root = Path(ctx.bundle_dir)
@@ -267,6 +290,8 @@ def strokes_text(bundle: formats.Bundle, limit: int = STROKES_TEXT_LIMIT) -> tup
 
 
 def stroke_summary(bundle: formats.Bundle) -> list[str]:
+    """One line per stroke type used: its strokes, their views and how many points
+    lie on a surface."""
     lines = []
     for stroke_type in formats.STROKE_TYPES:
         group = [s for s in bundle.strokes if s.type == stroke_type]
@@ -281,6 +306,8 @@ def stroke_summary(bundle: formats.Bundle) -> list[str]:
 
 
 def describe_bundle(bundle: formats.Bundle) -> list[dict]:
+    """A bundle as tool result content: one text block with the request and its
+    strokes, then each view's overlay and the reference images."""
     req = bundle.request
     lines = [
         f"Request {req.node} (parent {req.parent})" + (f", amendment {req.amend}" if req.amend else ""),
@@ -320,6 +347,8 @@ def describe_bundle(bundle: formats.Bundle) -> list[dict]:
 
 
 async def ask_tool(ctx: ToolContext, args: dict) -> dict:
+    """Asks the user through the sidebar and waits with no time limit, reporting
+    the waiting_user status meanwhile."""
     params = {"question": args["question"], "choices": list(args.get("choices") or [])}
     await ctx.event(Event.STATUS, {"state": "waiting_user", "detail": params["question"]})
     try:
@@ -480,6 +509,8 @@ def short_name(tool_name: str) -> str:
 
 
 def build_servers(ctx: ToolContext) -> dict:
+    """Wraps the handlers in the SDK's in-process MCP servers, one per name in
+    SERVERS. The SDK is imported here so the handlers work without it."""
     from claude_agent_sdk import ToolAnnotations, create_sdk_mcp_server, tool
 
     by_server: dict[str, list] = {s: [] for s in SERVERS}
@@ -487,6 +518,7 @@ def build_servers(ctx: ToolContext) -> dict:
         annotations = ToolAnnotations(maxResultSizeChars=IMAGE_RESULT_CHARS) if images else None
 
         async def run(args, _handler=handler):
+            """Runs one tool call and adds any queued amendments to its result."""
             return await ctx.deliver_notes(await _handler(ctx, args))
 
         by_server[server].append(tool(name, description, schema, annotations)(run))

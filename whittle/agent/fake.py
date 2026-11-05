@@ -79,6 +79,8 @@ def _new_id(prefix: str) -> str:
 
 
 class FakeRunner:
+    """Plays a script (see the module docstring) where SdkRunner would run Claude."""
+
     def __init__(self, connection, script_path, *, exit=os._exit):
         self.conn = connection
         self.script = json.loads(Path(script_path).read_text(encoding="utf-8"))
@@ -100,6 +102,8 @@ class FakeRunner:
         self._models_reported = False
 
     async def start_session(self, params: dict) -> None:
+        """Starts a fake session, first stopping a turn still playing. With
+        resume_fails in the script a resume is refused."""
         if self._task is not None and not self._task.done():
             self._interrupt()
             await self._task
@@ -130,6 +134,8 @@ class FakeRunner:
 
     async def submit(self, turn_id: str, bundle_dir: str, prompt: str, context=(),
                      model: str | None = None, effort: str | None = None) -> None:
+        """Starts playing the script's next turn, unless that turn refuses. With no
+        turns left the turn finishes with an error."""
         if self.session is None:
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is not None:
@@ -157,6 +163,7 @@ class FakeRunner:
 
     async def amend(self, turn_id: str, text: str, bundle_dir: str | None,
                     number: int | None = None) -> None:
+        """Holds an amendment for the next call's result or the end of the steps."""
         if self.session is None:
             raise BridgeCallError(ErrorCode.NO_SESSION, "start_session first")
         if self.turn_id is None or turn_id != self.turn_id:
@@ -165,6 +172,7 @@ class FakeRunner:
         self._amend_arrived.set()
 
     async def interrupt(self, turn_id: str) -> None:
+        """Cuts the turn short; a turn that is not running is ignored."""
         if self.turn_id == turn_id:
             self._interrupt()
             await self._event(Event.STATUS, {"state": "interrupting", "detail": None})
@@ -174,6 +182,7 @@ class FakeRunner:
         self._interrupt_event.set()
 
     async def close(self) -> None:
+        """Cancels a turn still playing."""
         if self._task is not None and not self._task.done():
             self._task.cancel()
             try:

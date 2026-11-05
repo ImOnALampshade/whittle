@@ -30,6 +30,7 @@ _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 
 
 def skill_path(name: str) -> Path:
+    """Where a skill's SKILL.md is in the plugin."""
     return PLUGIN_DIR / "skills" / name / "SKILL.md"
 
 
@@ -47,10 +48,13 @@ def parse_skill(text: str) -> tuple[dict, str]:
 
 
 def load_skill(name: str) -> str:
+    """A skill's SKILL.md without its frontmatter."""
     return parse_skill(skill_path(name).read_text(encoding="utf-8"))[1].strip()
 
 
 def build(settings: dict | None = None, *, inline_skills: bool = False) -> str:
+    """The system prompt for these settings, DEFAULTS filling the rest. It ends
+    with the recipe skills: named, or written out in full with inline_skills."""
     values = {**DEFAULTS, **{k: v for k, v in (settings or {}).items() if v is not None}}
     text = Template((HERE / "system_prompt.md").read_text(encoding="utf-8")).safe_substitute(
         self_check_rounds=values["self_check_rounds"],
