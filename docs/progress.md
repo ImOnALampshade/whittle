@@ -362,6 +362,8 @@ these are fixed, each with a regression test.
   is 128 MiB, a request over 180 MiB of images is refused when its bundle is written, and a
   turn that fails for size says so and offers Edit in place of Retry (architecture §5 Image
   limits, `test_runner`, `test_bundle`, `test_sidebar`, screenshot `too_large`).
+- **The resume warning stays** on the turn it belongs to, stored as a `warning` record, also
+  when the resumed session ends before taking its run's turn (`test_history_sessions`).
 - **Compare → End and Toggle back to live** put the target list back as it was, found
   by `whittle_uid` (`test_compare.CompareTest.test_end_keeps_the_target_list`).
 - **Prompt-only requests**: a request with no strokes and no views says so plainly in

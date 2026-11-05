@@ -295,6 +295,7 @@ class ConversationModelTest(unittest.TestCase):
     def test_transcript_records_replay_as_entries(self):
         records = [
             {"type": "local", "name": "submit", "data": {"node": "n0001", "prompt": "Add a lid."}},
+            {"type": "local", "name": "warning", "data": {"text": "Could not resume."}},
             {"type": "event", "name": Event.TEXT, "data": {"turn_id": "n0001", "text": "Adding a lid."}},
             {"type": "event", "name": Event.TOOL_USE,
              "data": {"turn_id": "n0001", "tool_use_id": "a", "tool": "exec", "input": {"label": "lid"}}},
@@ -312,10 +313,11 @@ class ConversationModelTest(unittest.TestCase):
         ]
         entries = stream.entries_from_records(records, "n0001")
         self.assertEqual([e.kind for e in entries],
-                         ["text", "tool", "amend", "note", "answer", "stopping", "turn"],
+                         ["warning", "text", "tool", "amend", "note", "answer", "stopping", "turn"],
                          "a target_edited record from an older session is not shown")
-        self.assertEqual(entries[2].text, "taller (+ 2 new strokes)")
-        self.assertEqual(entries[4].text, "yes")
+        self.assertEqual(entries[0].text, "Could not resume.")
+        self.assertEqual(entries[3].text, "taller (+ 2 new strokes)")
+        self.assertEqual(entries[5].text, "yes")
         end = entries[-1]
         self.assertEqual((end.status, end.result, end.steps, end.cost), ("failed", "Claude ran out of steps",
                                                                          4, 0.01))

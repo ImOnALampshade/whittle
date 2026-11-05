@@ -1023,7 +1023,12 @@ recorded in `TurnController.session_starts`. **A failed resume** (the CLI cannot
 the session, e.g. the `.blend` moved and with it the session folder the CLI keys its
 sessions by; or a resumed session that ends before its first turn) falls back once to
 a fresh session with the note "The earlier conversation could not be resumed
-(<message>); inspect the target before editing."; a second failure drops the run.
+(<message>); inspect the target before editing."; a second failure drops the run. The
+user gets a warning too (`TurnController._resume_lost`, once per loss), also when the
+resumed session ends before taking its run's turn (`session_ended` or `no_session`). It
+waits for the first turn the fresh session takes, across a refused submit, and is stored
+there as a `warning` record, so it stays on that turn. It goes with the agent, or when a
+restart into another session follows with no failure to report.
 
 **Session resume after a Blender restart**: a new controller reads `session.json`
 (`history.get(root, reload=True)`), so the first submit resumes the current node's
@@ -1282,7 +1287,8 @@ snapshot uses; a restore replaces the ones of those names the file has).
 `{"v": 1, "type": "local", "name": …, "data": …}`: `submit` (node, prompt, bundle_dir,
 targets, parent, context — the first line of each node), `amend` (amend, text, bundle_dir, strokes),
 `amend_returned` (amend, reason), `answer` (question, answer), `interrupt` (mode
-`keep` | `restore`), `restored` (objects) and `target_edited` (edits: [{name, kind}]).
+`keep` | `restore`), `restored` (objects), `target_edited` (edits: [{name, kind}]) and
+`warning` (text).
 
 ### Request bundle
 

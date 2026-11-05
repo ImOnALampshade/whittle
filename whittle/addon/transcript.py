@@ -68,6 +68,8 @@ def _local_lines(name: str, data: dict) -> list[str]:
     if name == "target_edited":
         edits = ", ".join(f"{e['name']} ({e['kind']})" for e in data.get("edits") or [])
         return [f">> You edited the target: {edits}"]
+    if name == "warning":
+        return [f">> Warning: {data.get('text')}"]
     if name == "amend_returned":
         return [f">> Amendment {data.get('amend')} was not delivered: {data.get('reason')}"]
     return [f">> {name}: {json.dumps(data, ensure_ascii=False)}"]

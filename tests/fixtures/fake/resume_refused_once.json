@@ -1,0 +1,7 @@
+{
+  "resume_fails": true,
+  "turns": [
+    {"refuse": "bad_request"},
+    {"steps": [{"say": "Done."}], "finish": {"subtype": "success", "is_error": false}}
+  ]
+}

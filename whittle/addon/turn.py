@@ -19,7 +19,7 @@ from . import (bundle, chats, commands, compare, execution, history, models, pat
 from . import refs as references
 from .bridge import modal_running, redraw_view3d
 from .process import AgentProcess, AgentState
-from .stream import Stream, TranscriptWriter, local_entry
+from .stream import Entry, Stream, TranscriptWriter, local_entry
 
 log = logging.getLogger("whittle")
 
@@ -110,6 +110,9 @@ class TurnController:
         self._context: list[str] = []
         # Set when resuming the SDK session failed: the next start is fresh.
         self._resume_failed: str | None = None
+        # The sidebar's word on that, kept until the fresh session takes a
+        # turn: submit hands it to the turn that tells the agent.
+        self._resume_warning: Entry | None = None
         self._resumed = False
         self._session_turns = 0
         # What the sidebar shows: idle | starting | running | waiting_user | interrupting.
@@ -427,6 +430,11 @@ class TurnController:
             # is not left running a turn that never started.
             self._abandon_submit(node, began=began)
             raise
+        warning = self._resume_warning
+        # A submit sent again after no_session is the same turn: it has it.
+        if warning is not None and warning.turn_id != node:
+            warning.turn_id = node
+            self._local("warning", {"text": warning.text})
         self.stream.note(f"Turn {node}: {text or '(sketch only)'}", kind="submit", turn_id=node)
         self.bridge.call(Method.SUBMIT, {"turn_id": node, "bundle_dir": str(dest), "prompt": text,
                                          "context": context, "model": model, "effort": self.chat_effort()},
@@ -445,6 +453,10 @@ class TurnController:
         self._transcript = None
         self._from_sketch = False
         self._began = None
+        if self._resume_warning is not None:
+            # Off the node: its number can go to the next turn. The plan's
+            # note still waits for a turn, and this waits with it.
+            self._resume_warning.turn_id = None
         if began:
             try:
                 self.history.discard(node)
@@ -705,10 +717,10 @@ class TurnController:
             # next run has to start a new one.
             self.session_ready = False
             self.live_node = None
-            if self._resumed and self._session_turns == 0:
-                # A resumed conversation that ends before taking a turn could
-                # not really be resumed; the next start is fresh.
-                self._resume_failed = data.get("detail") or "the session ended at once"
+            if self.busy and self._resumed and self._session_turns == 0:
+                # A resumed conversation that ends before taking its run's
+                # turn could not really be resumed; the next start is fresh.
+                self._resume_lost(data.get("detail") or "the session ended at once")
             # An accepted turn the end is not tagged with will get no
             # turn_finished. One still being submitted waits for its answer.
             if self.running and self._accepted and data.get("turn_id") != self.turn_id:
@@ -753,6 +765,7 @@ class TurnController:
         # is going; the next agent starts its own.
         self._session_starting = False
         self._plan = None
+        self._resume_warning = None
         # The agent is going or gone: a run waiting for it must not fire on
         # some later, unrelated start.
         if self._pending_run is not None:
@@ -785,13 +798,19 @@ class TurnController:
                 and not crashed):
             # The conversation could not be resumed (the session folder moved,
             # say): carry on in a fresh one, with a note in its place.
-            self._resume_failed = message
-            self.stream.note(f"Could not resume the agent's earlier conversation ({message}); "
-                             "starting a new one.", kind="warning")
+            self._resume_lost(message)
             self._advance()
             return
         self._drop_pending_run()
         self._error(f"start_session failed: {message}")
+
+    def _resume_lost(self, reason: str) -> None:
+        """The run's conversation could not be resumed, so its next start is
+        fresh. plan_session tells the agent; this tells the user, once."""
+        self._resume_failed = reason
+        if self._resume_warning is None:
+            self._resume_warning = self.stream.note(f"Could not resume the agent's earlier conversation "
+                                                    f"({reason}); starting a new one.", kind="warning")
 
     def _on_submit_result(self, ok: bool, data: dict) -> None:
         if ok:
@@ -804,6 +823,7 @@ class TurnController:
             self._plan = None
             self._context = []
             self._resume_failed = None
+            self._resume_warning = None
             self._send_queued_amends()
             return
         submitted = self._submitted
@@ -822,7 +842,7 @@ class TurnController:
             # The refused turn never ran in that session.
             self.history.forget_session(submitted[2])
             if self._resumed and self._session_turns == 0 and self._resume_failed is None:
-                self._resume_failed = data.get("message") or "the resumed session ended at once"
+                self._resume_lost("the resumed session ended at once")
             self._pending_run = submitted
             self.stream.note("The agent session had ended; starting a new one.")
             self._advance()
@@ -856,6 +876,9 @@ class TurnController:
         plan = self.plan_session()
         if plan.restart:
             self.session_ready = False
+            if self._resume_failed is None and not self._retried:
+                # Another session takes over: the loss is not its to report.
+                self._resume_warning = None
             self._plan, self._plan_node = plan, self.history.current
             self.start_session(plan)
             return

@@ -207,6 +207,8 @@ def local_entry(stream: "Stream", name: str, data: dict, turn_id: str | None) ->
         return stream.note(text or "(new strokes only)", kind="amend", turn_id=turn_id)
     if name == "answer":
         return stream.note(data.get("answer") or "", kind="answer", turn_id=turn_id)
+    if name == "warning":
+        return stream.note(data.get("text") or "", kind="warning", turn_id=turn_id)
     if name == "interrupt":
         how = "the turn start will be restored" if data.get("mode") == "restore" else "keeping the changes"
         # Its own kind: the running turn's phase line and the stopped turn's

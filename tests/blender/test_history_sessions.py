@@ -15,8 +15,9 @@ import bpy
 from tests.blender.helpers import REPO, pump
 from tests.blender.history_helpers import HistoryTurnCase
 from whittle import tree
-from whittle.addon import chats, history, paths, turn
+from whittle.addon import chats, conversation, history, paths, transcript, turn, ui
 from whittle.addon.process import AgentState
+from whittle.protocol import SESSION_ENDED, Event
 
 
 def start_params(start):
@@ -100,6 +101,155 @@ class SessionBookkeepingTest(HistoryTurnCase):
         found = ctl.history.node(n2)
         self.assertEqual(found.status, "complete")
         self.assertNotEqual(found.agent_session_id, s1)
+
+    def resume_fails(self, script="resume_fails.json"):
+        """A controller whose next submit cannot resume the earlier conversation."""
+        ctl = self.controller()
+        self.turn(ctl, "Scale it.")
+        ctl.stop(wait=True)
+        pump(ctl, lambda: ctl.process.state == AgentState.STOPPED, 10, "the agent to stop")
+        turn.set_current(None)
+        return self.controller(script)
+
+    def warnings(self, entries):
+        return [e.text for e in entries if e.kind == "warning" and "Could not resume" in e.text]
+
+    def test_the_resume_warning_stays_with_its_turn(self):
+        ctl = self.resume_fails()
+        node = self.submit(ctl, "Add a lid.")
+        pump(ctl, lambda: ctl.turn_id == node, 15, "the turn to start")
+        conv = conversation.build(ctl.history, ctl)
+        self.assertEqual(conv.turns[-1].node, node)
+        self.assertTrue(conv.turns[-1].running)
+        self.assertEqual(len(self.warnings(conv.turns[-1].entries)), 1, "while the turn runs")
+        self.assertEqual(self.warnings(conv.notes), [], "and only there")
+
+        self.wait(ctl, node)
+        conv = conversation.build(ctl.history, ctl)
+        self.assertEqual(conv.turns[-1].node, node)
+        self.assertEqual(len(self.warnings(conv.turns[-1].entries)), 1, "once it has finished")
+        self.assertEqual(self.warnings(conv.notes), [])
+        self.assertIn("warning", [kind for kind, _item in ui._segments(conv.turns[-1].entries)])
+        self.assertIn(">> Warning: Could not resume", transcript.format_transcript(self.local_records(ctl, node)))
+
+        ctl.stop(wait=True)
+        pump(ctl, lambda: ctl.process.state == AgentState.STOPPED, 10, "the agent to stop")
+        turn.set_current(None)
+        history.invalidate()
+        conversation.clear_cache()
+        conv = conversation.build(self.controller().history, None)
+        self.assertEqual(conv.turns[-1].node, node)
+        self.assertEqual(len(self.warnings(conv.turns[-1].entries)), 1, "and in a reopened file")
+
+    def test_the_resume_warning_shows_while_its_run_waits(self):
+        ctl = self.resume_fails()
+        self.start_ready(ctl)
+        ctl._pending_run = (ctl.session.root, "x", None, False)
+        self.addCleanup(setattr, ctl, "_pending_run", None)
+        with mock.patch.object(ctl, "_advance"):
+            ctl._on_session_started(False, {"message": "gone"}, {"resume": "s1"})
+        self.assertEqual(len(self.warnings(conversation.build(ctl.history, ctl).notes)), 1)
+
+    def test_the_resume_warning_goes_with_the_turn_that_ran(self):
+        ctl = self.resume_fails("resume_refused.json")
+        node = self.submit(ctl, "Add a lid.")
+        pump(ctl, lambda: ctl.errors, 15, "the refusal")
+        self.assertFalse(ctl.session.node_dir(node).exists())
+        ctl.errors.clear()
+
+        # The refused turn's number comes round again and takes the warning,
+        # and resuming fails again when the session this run finds has ended.
+        self.assertEqual(self.submit(ctl, "Add a lid."), node)
+        self.wait(ctl, node)
+        self.assertEqual([r["name"] for r in self.local_records(ctl, node)].count("warning"), 1)
+        conv = conversation.build(ctl.history, ctl)
+        self.assertEqual(len(self.warnings(conv.turns[-1].entries)), 1)
+        self.assertEqual(len(self.warnings(e for e in ctl.stream.entries() if e.turn_id == node)), 1,
+                         "the refused turn's warning did not come back with its number")
+
+    def test_the_resume_warning_waits_for_the_turn_the_agent_takes(self):
+        ctl = self.resume_fails("resume_refused_once.json")
+        first = self.submit(ctl, "Add a lid.")
+        pump(ctl, lambda: ctl.errors, 15, "the refusal")
+        ctl.errors.clear()
+
+        # The fresh session carries on, so nothing fails again, yet this
+        # submit is the one that tells the agent the conversation was lost.
+        node = self.turn(ctl, "Add a lid.")
+        self.assertEqual(node, first)
+        self.assertEqual([s["resume"] is None for s in ctl.session_starts], [False, True])
+        self.assertTrue(any("could not be resumed" in line for line in self.context_lines(ctl, node)))
+        self.assertEqual([r["name"] for r in self.local_records(ctl, node)].count("warning"), 1)
+        conv = conversation.build(ctl.history, ctl)
+        self.assertEqual(len(self.warnings(conv.turns[-1].entries)), 1)
+
+    def assert_lost_on(self, ctl, node):
+        """The fresh session's turn told the agent and keeps the user's warning."""
+        self.assertIsNotNone(ctl.session_starts[0]["resume"])
+        self.assertIsNone(ctl.session_starts[-1]["resume"])
+        self.assertTrue(any("could not be resumed" in line for line in self.context_lines(ctl, node)))
+        names = [r["name"] for r in self.local_records(ctl, node)]
+        self.assertEqual((names.count("submit"), names.count("warning")), (2, 1))
+        conv = conversation.build(ctl.history, ctl)
+        self.assertEqual(conv.turns[-1].node, node)
+        self.assertEqual(len(self.warnings(conv.turns[-1].entries)), 1)
+
+    def test_a_session_gone_at_the_first_submit_warns_too(self):
+        ctl = self.resume_fails("resume_lost.json")
+        self.assert_lost_on(ctl, self.turn(ctl, "Add a lid."))
+
+    def test_a_session_end_before_the_refusal_warns_once(self):
+        ctl = self.resume_fails("resume_lost.json")
+        answer = ctl._on_submit_result
+
+        def after_the_end(ok, data):
+            # The real agent's order: its status, then no_session.
+            if not ok:
+                ctl.on_event({"name": Event.STATUS,
+                              "data": {"turn_id": None, "state": SESSION_ENDED, "detail": "the agent CLI stopped"}})
+            answer(ok, data)
+
+        with mock.patch.object(ctl, "_on_submit_result", after_the_end):
+            node = self.turn(ctl, "Add a lid.")
+        self.assert_lost_on(ctl, node)
+
+    def test_a_session_end_while_idle_warns_of_nothing(self):
+        ctl = self.controller()
+        self.start_ready(ctl)
+        ctl._resumed = True
+        ctl.on_event({"name": Event.STATUS, "data": {"turn_id": None, "state": SESSION_ENDED, "detail": "gone"}})
+        self.assertEqual(self.warnings(ctl.stream.entries()), [], "the next run tries to resume again")
+
+    def test_a_warning_left_waiting_goes_with_its_session(self):
+        ctl = self.controller()
+        self.turn(ctl, "Scale it.")
+        ctl._resume_warning = ctl.stream.note("Could not resume.", kind="warning")
+        ctl.on_event({"name": Event.STATUS, "data": {"turn_id": None, "state": SESSION_ENDED, "detail": "gone"}})
+        node = self.turn(ctl, "Add a lid.")
+        self.assertEqual(len(ctl.session_starts), 2, "resumed in another session")
+        self.assertNotIn("warning", [r["name"] for r in self.local_records(ctl, node)])
+
+    def test_a_stopped_agent_takes_the_waiting_warning_with_it(self):
+        ctl = self.controller()
+        self.start_ready(ctl)
+        ctl._resume_warning = ctl.stream.note("Could not resume.", kind="warning")
+        ctl.stop(wait=True)
+        pump(ctl, lambda: ctl.process.state == AgentState.STOPPED, 10, "the agent to stop")
+        self.assertIsNone(ctl._resume_warning)
+
+    def test_a_resent_submit_keeps_one_resume_warning(self):
+        ctl = self.resume_fails("resume_retried.json")
+        node = self.turn(ctl, "Add a lid.")
+        names = [r["name"] for r in self.local_records(ctl, node)]
+        self.assertEqual(names.count("submit"), 2, "sent again after no_session")
+        self.assertEqual(names.count("warning"), 1)
+
+    def test_a_later_turn_leaves_the_resume_warning_behind(self):
+        ctl = self.resume_fails()
+        first = self.turn(ctl, "Add a lid.")
+        second = self.turn(ctl, "Taller.")
+        self.assertIn("warning", [r["name"] for r in self.local_records(ctl, first)])
+        self.assertNotIn("warning", [r["name"] for r in self.local_records(ctl, second)])
 
 
 class SceneFollowingTest(HistoryTurnCase):
