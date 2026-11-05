@@ -120,11 +120,16 @@ def open_image(context, path: str):
     return editors.show_image(context, bpy.path.abspath(path))
 
 
+def can_open_transcript() -> bool:
+    hist = history.active()
+    return hist is not None and transcript.has_transcript(hist.session)
+
+
 def open_transcript(context):
-    ctl = turn.current()
-    if ctl is None:
-        raise RuntimeError("there is no session yet")
-    return transcript.open_transcript(ctl.session, context)
+    """Works from the stored chat: no controller is needed to read it."""
+    if not can_open_transcript():
+        raise RuntimeError("this chat has no turns yet")
+    return transcript.open_transcript(history.active().session, context)
 
 
 def remove_view(obj, view_id: int) -> None:
@@ -440,6 +445,7 @@ def delete_chat(context, chat: str) -> str | None:
     if current:
         _leave_chat(context.scene)
     found.delete(chat, chats.config_dir())
+    transcript.close(chat)
     if current:
         _show_chat(context.scene, found)
     return found.current
@@ -454,6 +460,7 @@ def delete_chats(context, which: str) -> list[str]:
     doomed = found.to_delete(which)
     for chat in doomed:
         found.delete(chat, chats.config_dir())
+        transcript.close(chat)
     return doomed
 
 
@@ -830,11 +837,11 @@ class WHITTLE_OT_open_image(bpy.types.Operator):
 class WHITTLE_OT_open_transcript(bpy.types.Operator):
     bl_idname = "whittle.open_transcript"
     bl_label = "Open Transcript"
-    bl_description = "Write the session's full transcript into the Whittle Transcript text and show it"
+    bl_description = "Show this chat's full transcript in a Text Editor. It is a view: the file does not save it"
 
     @classmethod
     def poll(cls, context):
-        return turn.current() is not None
+        return can_open_transcript()
 
     def execute(self, context):
         try:

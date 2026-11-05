@@ -364,6 +364,9 @@ these are fixed, each with a regression test.
   limits, `test_runner`, `test_bundle`, `test_sidebar`, screenshot `too_large`).
 - **The resume warning stays** on the turn it belongs to, stored as a `warning` record, also
   when the resumed session ends before taking its run's turn (`test_history_sessions`).
+- **The transcript is a view**: Open Transcript reads the stored chat, with no controller, and
+  its Text is runtime data that no file keeps and that ends with its chat, undo included
+  (`tests/blender/transcript_file.py`, `test_chats`).
 - **Compare → End and Toggle back to live** put the target list back as it was, found
   by `whittle_uid` (`test_compare.CompareTest.test_end_keeps_the_target_list`).
 - **Prompt-only requests**: a request with no strokes and no views says so plainly in

@@ -19,8 +19,8 @@ from tests.blender.sketch_helpers import add_stroke
 from tests.blender.ui_helpers import RecordingLayout
 from whittle import caches
 from whittle import chats as chat_store
-from whittle import tree
-from whittle.addon import chats, conversation, history, operators, paths, turn, ui
+from whittle import formats, tree
+from whittle.addon import chats, conversation, history, operators, paths, sketch, transcript, turn, ui
 
 
 def scene_state() -> dict:
@@ -201,6 +201,22 @@ class SwitchTest(ChatCase):
         addon._after_undo()
         self.assertEqual(history.active().current, a1, "the current chat's own undo still works")
 
+    def test_undo_keeps_a_transcript_only_while_its_chat_lives(self):
+        from whittle import addon
+
+        a, _a_turns, b, _b1 = self.two_chats()
+        text = transcript.open_transcript(formats.SessionDir(self.store.folder(a)))
+        addon._after_undo()
+        self.assertIn(transcript.TEXT_NAME, bpy.data.texts, "its chat is still here")
+        del text[transcript.CHAT_PROP]
+        addon._after_undo()
+        self.assertIn(transcript.TEXT_NAME, bpy.data.texts, "an older Whittle's Text names no chat")
+        # An undo step from before the delete gives the Text back.
+        operators.delete_chat(bpy.context, b)
+        text[transcript.CHAT_PROP] = b
+        addon._after_undo()
+        self.assertNotIn(transcript.TEXT_NAME, bpy.data.texts, "its chat is gone and stays gone")
+
     def test_switching_waits_while_comparing(self):
         a, (a1, a2), b, b1 = self.two_chats()
         operators.compare_node(bpy.context, "n0000")
@@ -253,7 +269,10 @@ class DeleteTest(ChatCase):
         self.assertEqual(delete_count(bpy.ops.whittle.chat_delete_many, "QUARTER"), 1)
         self.assertEqual(store.listed(), [store.current, b])
         self.assertEqual(operators.delete_chats(bpy.context, "MONTH"), [])
+        text = transcript.open_transcript(formats.SessionDir(store.folder(b)))
+        self.assertTrue(text.is_runtime_data)
         self.assertEqual(operators.delete_chats(bpy.context, "OTHERS"), [b])
+        self.assertNotIn(transcript.TEXT_NAME, bpy.data.texts, "the view ends with its chat")
         self.assertEqual(store.listed(), [store.current])
         self.assertFalse(bpy.ops.whittle.chat_delete_many.poll(), "no other chats")
 
@@ -474,6 +493,42 @@ class SaveTest(ChatCase):
     def test_a_file_without_chats_gets_no_holder(self):
         chats.before_save(self.scene)
         self.assertNotIn(chats.HOLDER, bpy.data.texts)
+
+
+class TranscriptFileTest(ChatCase):
+    """Open Transcript and the saved file, in a fresh Blender:
+    tests/blender/transcript_file.py does the steps."""
+
+    def test_the_transcript_is_a_view_of_the_stored_chat(self):
+        blend = self.user_dir / "saved" / "scene.blend"
+        blend.parent.mkdir()
+        env = {**os.environ, "WHITTLE_USER_DIR": str(self.user_dir), "WHITTLE_AGENT_PYTHON": str(agent_python())}
+        out = subprocess.run([bpy.app.binary_path, "-b", "--factory-startup", "--python",
+                              str(REPO / "tests" / "blender" / "transcript_file.py"), "--", str(blend),
+                              str(FAKE_SCRIPTS / "history.json")],
+                             capture_output=True, text=True, timeout=240, env=env)
+        line = next((l for l in out.stdout.splitlines() if l.startswith("RESULT ")), None)
+        self.assertIsNotNone(line, out.stdout[-3000:] + out.stderr[-3000:])
+        r = json.loads(line[len("RESULT "):])
+        self.assertEqual(r["errors"], [])
+        self.assertFalse(r["before_any_chat"], "nothing to show")
+        self.assertFalse(r["new_chat_without_turns"], "a chat without turns has nothing to show")
+        self.assertTrue(r["shown"])
+        self.assertGreaterEqual(r["users"], 2, "the space holds a user of the Text")
+        self.assertEqual(r["saved"], [], "the file does not carry it, shown in a Text Editor or not")
+        self.assertEqual(r["after_save"], {"open": True, "space": True}, "saving leaves the view open")
+        self.assertEqual(r["after_switch"], {"controller": False, "can_open": True, "a": True, "b": False},
+                         "it shows the switched-to chat, with no controller")
+        self.assertEqual(r["reopened"], {"texts": [], "space": False, "controller": False, "can_open": True,
+                                         "operator": ["FINISHED"], "shown": True})
+        self.assertEqual(r["save_chats_off"], {"texts": [], "bytes": False})
+        self.assertTrue(r["deleted_another"])
+        self.assertEqual(r["deleted_it"], {"open": False, "space": False}, "the view ends with its chat")
+        self.assertEqual(r["deleted_then_undone"], {"open": False, "space": False}, "chats are never undone")
+        self.assertFalse(r["deleted_then_redone"])
+        self.assertEqual(r["older_file"], {"texts": ["Whittle Transcript"], "bytes": True},
+                         "the bytes check sees a Text the file does carry")
+        self.assertEqual(r["older_file_saved_again"], {"texts": [], "bytes": False})
 
 
 class FileTest(ChatCase):

@@ -6,7 +6,7 @@ import logging
 import bpy
 
 from . import autotarget, chats, compare, enter, history, models, operators, prefs, previews, props, refs, setup, sketch, start, turn, ui
-from . import keys, shortcut, viewmarks
+from . import keys, shortcut, transcript, viewmarks
 
 log = logging.getLogger("whittle")
 
@@ -71,6 +71,7 @@ def _after_undo(*_args):
                  # before it, so it is over.
                  compare.forget,
                  sketch.after_undo,
+                 transcript.after_undo,
                  _tell_the_turn):
         try:
             step()
@@ -86,6 +87,10 @@ def _tell_the_turn():
 
 @bpy.app.handlers.persistent
 def _before_save(*_args):
+    try:
+        transcript.keep_out_of_file()
+    except Exception:
+        log.exception("could not keep the transcript out of the file")
     # Every chat goes into the file being written.
     try:
         chats.before_save()

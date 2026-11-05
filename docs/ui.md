@@ -1222,6 +1222,10 @@ Switched to an older chat (the scene was left as the last chat had it):
 | Open Render | `whittle.open_image` (the turn's last render; hidden without one) | `IMAGE_DATA` |
 | Open Transcript | `whittle.open_transcript` | `TEXT` |
 
+Open Transcript reads the stored chat, so it needs no running agent and is dim only in a
+chat with no turns. Its tooltip: `Show this chat's full transcript in a Text Editor. It is a
+view: the file does not save it`.
+
 The start's menu has Go Back to the Start and Compare With Current. A folded turn's menu has
 Edit & Resend (which only puts its prompt back in the box: the scene never left its
 parent and its strokes are still pending) and Open Transcript.

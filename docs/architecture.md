@@ -53,7 +53,7 @@ whittle/                          repo root
 │   │   ├── compare.py            A/B compare against a node, the parent ghost
 │   │   ├── turn.py               TurnController: submit/amend/interrupt/finish state machine
 │   │   ├── stream.py             sidebar entries (tool calls merged with results), transcript.jsonl writer
-│   │   ├── transcript.py         the session transcript as text, for the Whittle Transcript datablock
+│   │   ├── transcript.py         the session transcript as text, for the runtime Whittle Transcript Text
 │   │   ├── targets.py            the target picker (object list + collection on scene.whittle)
 │   │   ├── autotarget.py         Auto: the target list follows the selection
 │   │   ├── conversation.py       the conversation the sidebar draws, built from the history and stream
@@ -1907,7 +1907,8 @@ The payload lives on a holder datablock, a Text named `.whittle` (`use_fake_user
 a leading dot keeps it out of Blender's ID menus), and only **while the file is
 being saved and just after it is loaded**:
 
-- `save_pre` (`Chats.pack_all`): for each chat with a history (a `session.json`), if
+- `save_pre`: first `transcript.keep_out_of_file`, which makes a `Whittle Transcript` Text
+  an older Whittle left runtime data, so the save leaves it out. Then `Chats.pack_all`: for each chat with a history (a `session.json`), if
   its `fingerprint` differs from `packed/<id>.json`'s, pack it again into
   `packed/<id>.zip` (atomically) and record digest, fingerprint and size; a chat not
   unpacked since the file opened goes back as its zip came; an empty chat is only its
