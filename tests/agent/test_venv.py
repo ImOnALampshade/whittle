@@ -53,15 +53,21 @@ class CommandTest(unittest.TestCase):
         python = venv.venv_python(self.target, "linux")
         self.assertEqual(venv.install_command(python, LOCK), [
             str(python), "-I", "-u", "-m", "pip", "install", "--isolated",
-            "--disable-pip-version-check", "--no-input", "--progress-bar", "raw", "--require-hashes",
+            "--disable-pip-version-check", "--no-input", "--no-cache-dir", "--index-url",
+            "https://pypi.org/simple", "--progress-bar", "raw", "--require-hashes",
             "--only-binary", ":all:", "--no-deps", "-r", str(LOCK)])
 
-    def test_install_command_never_upgrades_or_changes_the_index(self):
+    def test_install_command_never_upgrades_or_adds_an_index(self):
         argv = venv.install_command(venv.venv_python(self.target), LOCK)
-        for banned in ("--upgrade", "-U", "--index-url", "-i", "--extra-index-url", "--pre",
-                       "--force-reinstall"):
+        for banned in ("--upgrade", "-U", "-i", "--extra-index-url", "--pre", "--force-reinstall"):
             self.assertNotIn(banned, argv)
         self.assertFalse([a for a in argv if "git+" in a or "github:" in a])
+
+    def test_install_command_names_pypi_and_leaves_no_wheels_behind(self):
+        argv = venv.install_command(venv.venv_python(self.target), LOCK)
+        self.assertEqual(argv[argv.index("--index-url") + 1], "https://pypi.org/simple",
+                         "overrides an index-url in the system-wide pip.conf, which --isolated still reads")
+        self.assertIn("--no-cache-dir", argv)
 
     def test_create_command(self):
         base, target = str(self.base), str(self.target)

@@ -170,8 +170,6 @@ def turn_status(data: dict) -> str:
 
 
 FAILURES = {
-    "error_max_turns": "Claude ran out of steps",
-    "error_max_budget_usd": "the turn reached its budget",
     "error_during_execution": "Claude stopped with an error",
     "session_ended": "the session ended",
     # An API failure reaches us as an error result of subtype success.

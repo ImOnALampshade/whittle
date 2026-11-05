@@ -827,7 +827,8 @@ mismatch reported as an `error` event); `ask` → bridge `ask`; `end_session` �
 session_ended`, so the next submit answers `no_session`; `fail` → exit the process
 with code 3 (crash tests); `finish` → `turn_finished` with a fake `session_id`
 `"fake-<hex8>"` (new for a fresh session or a fork, kept for a plain resume) and a
-`message_uuid` `"fake-msg-<hex8>"`. A top-level `"resume_fails": true` refuses every
+`message_uuid` `"fake-msg-<hex8>"`; besides `subtype`, `is_error` and `result` it can give
+`cost` (USD, 0 by default), `errors` and `too_large`. A top-level `"resume_fails": true` refuses every
 `start_session` that has a `resume` with `internal`; a turn with `"refuse": "<code>"`
 answers its submit with that error. `start_session` echoes `resume`/`fork`/`resume_at`
 (and `store_dir`, §14) in its status detail and a `log` event, plus `session model: <id>`
@@ -1422,9 +1423,13 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
 - **Steps** (`venv.plan(base, venv, lock, reinstall=)`), each with its own timeout:
   1. `create` (120 s): `[sys.executable, "-I", "-m", "venv", ("--clear",) venv]`;
      `--clear` for a reinstall, and for a stale or broken venv (Whittle's own).
-  2. `install` (900 s): `[venv python, "-I", "-m", "pip", "install", "--isolated",
-     "--disable-pip-version-check", "--no-input", "--require-hashes", "--only-binary",
-     ":all:", "--no-deps", "-r", lock]`.
+  2. `install` (900 s): `[venv python, "-I", "-u", "-m", "pip", "install", "--isolated",
+     "--disable-pip-version-check", "--no-input", "--no-cache-dir", "--index-url",
+     "https://pypi.org/simple", "--progress-bar", "raw", "--require-hashes", "--only-binary",
+     ":all:", "--no-deps", "-r", lock]`. `--isolated` skips the user's pip config and
+     `PIP_*`, not the system-wide one; `--index-url` overrides its `index-url`, while its
+     proxy and CA still apply, and so do its `extra-index-url`, `find-links` and `no-index`,
+     which no flag undoes. The hashes, not the index, decide what gets installed.
   3. `verify` (60 s): `[venv python, "-I", "-c", …]` imports `claude_agent_sdk` and prints
      `whittle-verify:{"sdk": <installed version>, "cli": <_bundled/claude is a file>}`
      (`claude.exe` on Windows, as the SDK looks for it: `venv.bundled_cli_name()`);
@@ -1572,7 +1577,8 @@ Details settled while building the agent and bridge, beyond the sections above.
   default, shown only with Developer Extras on): the bundle in use, `window_manager.whittle_fake_script` (used by Submit, Run Bundle
   and Start Agent when set), Run Bundle, Start/Stop Agent and the log tail after a crash.
 - **Which controller** (`operators.controller(fake_script)`, called by every operator
-  that runs the agent): a busy controller is always kept. An idle one with another
+  that runs the agent): the fake script is made absolute first, against Blender's working
+  folder, since the agent runs in the session folder. A busy controller is always kept. An idle one with another
   fake script is closed and replaced. An idle one whose agent was started with other
   launch settings (`TurnController.launch_settings()`: the Python, fake script, a
   digest of the API key and the session settings, recorded at

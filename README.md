@@ -114,12 +114,15 @@ pick a shorter **Environment Folder**.
      runs the agent. They come from PyPI only, as prebuilt wheels.
    - **How**: Whittle makes a venv from Blender's own Python (`sys.executable -I -m venv`), then
      runs
-     `pip install --isolated --disable-pip-version-check --no-input --progress-bar raw --require-hashes --only-binary :all: --no-deps -r requirements.lock`
+     `pip install --isolated --disable-pip-version-check --no-input --no-cache-dir --index-url https://pypi.org/simple --progress-bar raw --require-hashes --only-binary :all: --no-deps -r requirements.lock`
      inside it. Every file must match a hash in the lock, nothing is built from source (so no
      package's setup code runs), and nothing beyond the lock is resolved. `PIP_*`, `PYTHON*`,
-     `UV_*`, `VIRTUAL_ENV` and `CONDA_*` variables are dropped for these steps, so no
-     configuration can point pip at another index. Proxies (`HTTPS_PROXY`) and `SSL_CERT_*`
-     are kept.
+     `UV_*`, `VIRTUAL_ENV` and `CONDA_*` variables are dropped for these steps, and `--isolated`
+     skips your own pip config, so neither can point pip at another index. `--index-url`
+     overrides the index a system-wide pip config names, so a mirror set there does not apply
+     and setup fails where pypi.org is blocked. That config's proxy and CA still apply, and so do
+     its `extra-index-url`, `find-links` and `no-index`, which no flag undoes; the hashes hold
+     either way. Proxies (`HTTPS_PROXY`) and `SSL_CERT_*` are kept.
    - **Slow connections**: the `claude-agent-sdk` wheel is about 114 MB. The status line shows
      its download progress, and the install is only stopped if no data arrives for 5 minutes
      (or after 3 hours in all), so a slow but working connection gets there.
@@ -310,6 +313,7 @@ they contain by hand (the dev venv's Python is `.venv\Scripts\python.exe` there)
   PY=/path/to/blender-5.2/5.2/python/bin/python3.14
   "$PY" -I -m venv .venv
   .venv/bin/python -m pip install --isolated --disable-pip-version-check --no-input \
+      --no-cache-dir --index-url https://pypi.org/simple \
       --require-hashes --only-binary :all: --no-deps -r agent_env/requirements.lock
   ```
 

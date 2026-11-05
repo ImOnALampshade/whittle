@@ -250,8 +250,9 @@ session can start from the scene, from nothing, from a primitive or from an asse
 
 - `whittle/venv.py` (stdlib): reads the lock (30 pins with hashes), the venv's status
   (`missing`, `ready`, `stale`, `broken`, `foreign`) from its `whittle-venv.json` marker,
-  the create / install / verify commands (`pip install --isolated --require-hashes
-  --only-binary :all: --no-deps -r requirements.lock`, never an upgrade), a scrubbed
+  the create / install / verify commands (`pip install --isolated --no-cache-dir --index-url
+  https://pypi.org/simple --require-hashes --only-binary :all: --no-deps -r
+  requirements.lock`, never an upgrade), a scrubbed
   environment, and `VenvSetup`, which runs them as subprocesses with a timeout each,
   cancel, a log, and a dry run. Tested under `.venv/bin/python` with a fake process and
   clock plus one real-subprocess run that installs nothing (`tests/agent/test_venv.py`).

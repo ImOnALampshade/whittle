@@ -2,14 +2,15 @@
 """A scripted stand-in for the SDK agent, so the real process, socket and
 Blender handlers can be exercised end to end at no cost. Stdlib only.
 
-Script format: {"turns": [{"steps": [...], "finish": {...}}, ...]}, plus an
-optional top-level "resume_fails": true that refuses every start_session with
-a resume, as the CLI does when it cannot find the session, and an optional
-"models": {"models": [ids], "source": "api" | "cli"} reported (as the
-models event) when the first session starts, as the real runner reports what
-the account offers. Each submit plays
-the next turn; a turn with "refuse": "<code>" answers its submit with that
-error instead of starting. Steps:
+Script format: {"turns": [{"steps": [...], "finish": {...}}, ...]}, where
+finish may give the turn's "subtype", "is_error", "result" and "cost" (in USD,
+0 by default), plus an optional top-level "resume_fails": true that refuses
+every start_session with a resume, as the CLI does when it cannot find the
+session, and an optional "models": {"models": [ids], "source": "api" | "cli"}
+reported (as the models event) when the first session starts, as the real
+runner reports what the account offers. Each submit plays the next turn; a
+turn with "refuse": "<code>" answers its submit with that error instead of
+starting. Steps:
   {"say": text}
   {"call": method, "params": {...}, "expect": "ok" | "error:<code>",
    "delay": seconds}         announce the call, then wait (cut short by an
@@ -219,7 +220,7 @@ class FakeRunner:
             "subtype": finish.get("subtype", "success" if turn else "error_during_execution"),
             "is_error": bool(finish.get("is_error", turn is None)),
             "interrupted": self._interrupted,
-            "cost_usd": 0.0,
+            "cost_usd": finish.get("cost", 0.0),
             "num_turns": len(steps),
             "duration_ms": int((time.monotonic() - start) * 1000),
             "result_text": finish.get("result", ""),

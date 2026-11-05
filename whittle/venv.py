@@ -27,6 +27,7 @@ LOCK_NAME = "requirements.lock"
 MARKER = "whittle-venv.json"
 MARKER_FORMAT = "whittle.venv"
 SDK = "claude-agent-sdk"
+INDEX_URL = "https://pypi.org/simple"
 # Hard caps per step. The install is mostly downloading (the SDK wheel alone
 # is over 100 MB), so its cap is generous and it is really bounded by STALL:
 # a slow link that keeps making progress is never cut off, a dead one is.
@@ -36,7 +37,7 @@ PROGRESS_PREFIX = "Progress "
 TAIL_BYTES = 64 * 1024
 KILL_AFTER = 2.0
 TICK = 0.25
-# Settings that could point pip at another index or change which Python
+# Variables that could point pip at another index or change which Python
 # and site-packages the steps use. Everything else (PATH, HOME, proxies,
 # SSL_CERT_*) is kept so downloads work behind a proxy.
 DROPPED_ENV_PREFIXES = ("PIP_", "PYTHON", "UV_", "VIRTUAL_ENV", "CONDA_")
@@ -165,9 +166,15 @@ def install_command(python: Path, lock: Path) -> list[str]:
     # installed, from wheels only, so no package's build code ever runs.
     # -u and a raw progress bar make pip report each downloaded chunk to the
     # log as it arrives, which is what the stall check watches.
+    # --isolated skips the user's pip config and PIP_* but not the system-wide
+    # pip.conf. Naming the index here overrides its index-url; its proxy and CA
+    # still apply, and so do its extra-index-url, find-links and no-index, which
+    # no flag undoes. The lock's hashes, not the index, decide what gets installed.
+    # --no-cache-dir: the venv holds what it needs, so a copy of the wheels in
+    # pip's cache would only be some 125 MB left behind.
     return [str(python), "-I", "-u", "-m", "pip", "install", "--isolated", "--disable-pip-version-check",
-            "--no-input", "--progress-bar", "raw", "--require-hashes", "--only-binary", ":all:",
-            "--no-deps", "-r", str(lock)]
+            "--no-input", "--no-cache-dir", "--index-url", INDEX_URL, "--progress-bar", "raw",
+            "--require-hashes", "--only-binary", ":all:", "--no-deps", "-r", str(lock)]
 
 
 def verify_command(python: Path) -> list[str]:

@@ -402,7 +402,7 @@ class ConversationModelTest(unittest.TestCase):
             {"type": "local", "name": "interrupt", "data": {"mode": "keep"}},
             {"type": "event", "name": Event.TURN_FINISHED,
              "data": {"turn_id": "n0001", "is_error": True, "interrupted": False, "num_turns": 4,
-                      "cost_usd": 0.01, "subtype": "error_max_turns", "errors": []}},
+                      "cost_usd": 0.01, "subtype": "error_during_execution", "errors": []}},
         ]
         entries = stream.entries_from_records(records, "n0001")
         self.assertEqual([e.kind for e in entries],
@@ -412,8 +412,8 @@ class ConversationModelTest(unittest.TestCase):
         self.assertEqual(entries[3].text, "taller (+ 2 new strokes)")
         self.assertEqual(entries[5].text, "yes")
         end = entries[-1]
-        self.assertEqual((end.status, end.result, end.steps, end.cost), ("failed", "Claude ran out of steps",
-                                                                         4, 0.01))
+        self.assertEqual((end.status, end.result, end.steps, end.cost),
+                         ("failed", "Claude stopped with an error", 4, 0.01))
         self.assertTrue(all(e.turn_id == "n0001" for e in entries))
 
     def test_failure_reasons(self):
@@ -421,6 +421,15 @@ class ConversationModelTest(unittest.TestCase):
                          "the agent exited with code 3")
         self.assertEqual(stream.failure_reason({"subtype": "session_ended"}), "the session ended")
         self.assertEqual(stream.failure_reason({"subtype": "error_odd_thing"}), "error odd thing")
+        self.assertEqual(stream.failure_reason({"subtype": "error_max_turns",
+                                                "errors": ["Reached maximum number of turns (4)"]}),
+                         "Reached maximum number of turns (4)", "the CLI words its own limits")
+        self.assertNotIn("error_max_turns", stream.FAILURES)
+        self.assertNotIn("error_max_budget_usd", stream.FAILURES)
+        self.assertEqual(stream.failure_reason({"subtype": "success", "result_text": "API Error: 500\nmore"}),
+                         "API Error: 500", "the CLI reports an API failure as a result with subtype success")
+        self.assertEqual(stream.failure_reason({"subtype": "error_during_execution", "result_text": "x"}),
+                         "Claude stopped with an error")
         long = stream.failure_reason({"errors": ["x" * 500]})
         self.assertEqual(len(long), stream.REASON_CHARS)
 

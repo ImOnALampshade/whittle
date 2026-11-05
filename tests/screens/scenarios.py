@@ -456,7 +456,7 @@ def folded_failure(stage: Stage):
     script = stage.script("folded_failure", [
         {"steps": [say("Looking at the crate first."),
                    {"call": "inspect", "params": {"query": "summary"}, "expect": "ok"}],
-         "finish": {"subtype": "error_max_turns", "is_error": True, "result": ""}},
+         "finish": {"subtype": "error_during_execution", "is_error": True, "result": ""}},
     ])
     yield from stage.turns(["Add a lid with brass hinges."], script)
 

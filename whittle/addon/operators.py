@@ -2,6 +2,7 @@
 """Operators: sketching, views, submitting, and driving the agent by hand."""
 
 import logging
+import os
 from pathlib import Path
 
 import bpy
@@ -21,7 +22,8 @@ def controller(fake_script: str = "") -> turn.TurnController:
     settings is stopped, so the next run starts one with the new settings and
     resumes the conversation from the history."""
     current = turn.current()
-    fake = Path(bpy.path.abspath(fake_script)) if fake_script else None
+    # Absolute before the agent gets it: the agent runs in the session folder.
+    fake = Path(os.path.abspath(bpy.path.abspath(fake_script))) if fake_script else None
     if current is not None and busy(current):
         return current
     if current is not None and current.process.fake_script != fake:
