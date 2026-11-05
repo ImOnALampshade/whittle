@@ -1174,6 +1174,46 @@ def shortcut(stage: GuiStage, text: str):
     yield 0.2
 
 
+@phase("send_key_errors")
+def send_key_errors(stage: GuiStage):
+    python = os.environ["WHITTLE_AGENT_PYTHON"]
+
+    def state():
+        return stage.ctl.process.state if stage.ctl is not None else None
+
+    def expect_prompt_kept(what: str):
+        expect("lid" in stage.props.prompt, f"the prompt {what}: {stage.props.prompt!r}")
+
+    stage.crate()
+    stage.props.prompt = "Add a lid."
+    yield from send_key(stage)
+    yield Until(lambda: state() == "needs_key", "Shift+Alt+Enter to find no API key")
+    expect_prompt_kept("after Shift+Alt+Enter with no key")
+    yield from shortcut(stage, "Add a lid.")
+    yield from stage.settle()
+    expect_equal(state(), "needs_key", "the agent after Enter with no key")
+    expect_prompt_kept("after Enter with no key")
+
+    os.environ["WHITTLE_AGENT_PYTHON"] = str(stage.work / "no-such-python")
+    yield from send_key(stage)
+    yield Until(lambda: state() == "needs_setup", "Shift+Alt+Enter to find no environment")
+    expect_prompt_kept("after Shift+Alt+Enter with no environment")
+    yield from send_key(stage)
+    yield from shortcut(stage, "Add a lid.")
+    yield from stage.settle()
+    expect_equal(state(), "needs_setup", "the agent after the keys while Send is dim")
+    expect_prompt_kept("after the keys while Send is dim")
+
+    os.environ["WHITTLE_AGENT_PYTHON"] = python
+    script = stage.script("send_key_errors", [{"steps": [say("Done.")], "finish": done("Done.")}])
+    bpy.context.window_manager.whittle_fake_script = str(script)
+    yield from send_key(stage)
+    yield Until(lambda: stage.ctl is not None and (stage.ctl.last_finished or {}).get("turn_id"),
+                "the key to find the environment and send")
+    log = (stage.work / "phase-0.log").read_text(errors="replace")
+    expect("Traceback" not in log, "a key's error came out as a Python traceback")
+
+
 @phase("shortcut")
 def shortcut_check(stage: GuiStage):
     from whittle.addon import shortcut as keys

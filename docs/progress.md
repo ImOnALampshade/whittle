@@ -369,6 +369,9 @@ these are fixed, each with a regression test.
 - **The transcript is a view**: Open Transcript reads the stored chat, with no controller, and
   its Text is runtime data that no file keeps and that ends with its chat, undo included
   (`tests/blender/transcript_file.py`, `test_chats`).
+- **Keys report errors as lines**: Shift+Alt+Enter and Enter run the send body on their own
+  operator, follow Send's poll, and look again for an environment that has appeared
+  (`test_keys.SendRoutesTest`, the GUI check `send_key_errors`).
 - **Compare → End and Toggle back to live** put the target list back as it was, found
   by `whittle_uid` (`test_compare.CompareTest.test_end_keeps_the_target_list`).
 - **Prompt-only requests**: a request with no strokes and no views says so plainly in
@@ -456,11 +459,11 @@ timer).
 - `tests/gui/checks.py`: `GuiStage` (the screenshot stage plus simulated keys, clicks,
   drags and typing, `button()` running an operator as a sidebar button does, in the
   sidebar region with an undo step, File-menu saves and opens, and the fake agent's log)
-  and 29 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
+  and 30 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
   `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `fold_undo`,
   `fold_undo_object`, `fold_undo_chat`, `undo_compare`,
   `modal_wait`, `save_as`, `recover_autosave`, `recover_last_session`,
-  `crash_keeps_chats`, `dirty_flag`, `send_key`, `shortcut`, `auto_targets`, `branch_undo`,
+  `crash_keeps_chats`, `dirty_flag`, `send_key`, `send_key_errors`, `shortcut`, `auto_targets`, `branch_undo`,
   `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`, `preferences_key`,
   `preferences_environment`, `preferences_defaults`. Each says what it confirms in the
   catalog. The preference checks open the Preferences through Preferences… as the

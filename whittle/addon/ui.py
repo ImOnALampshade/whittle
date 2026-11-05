@@ -1290,7 +1290,7 @@ def draw_references(layout, ctx: Ctx) -> None:
 
 def can_send(ctx: Ctx) -> bool:
     props = ctx.props
-    if ctx.comparing is not None or ctx.busy or agent_state(ctx.ctl) == AgentState.NEEDS_SETUP:
+    if ctx.comparing is not None or ctx.busy or operators.needs_setup(ctx.ctl):
         return False
     if foreign(ctx):
         return False

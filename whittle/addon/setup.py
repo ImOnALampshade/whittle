@@ -25,6 +25,8 @@ from .process import AgentState
 log = logging.getLogger("whittle")
 
 UNREGISTER_WAIT = 2.0
+# Set Up's line when the environment it was offered for turned up on its own.
+FOUND = "The agent environment is ready"
 
 _current: VenvSetup | None = None
 
@@ -89,6 +91,17 @@ def begin(*, reinstall: bool = False, dry_run: bool = False) -> VenvSetup:
     if setup.running:
         _start_timer()
     return setup
+
+
+def recheck() -> bool:
+    """Clears a NEEDS_SETUP that no longer holds, as when another Blender set
+    the environment up, and returns whether it did. Only what the user just
+    pressed asks, so a redraw never reads the venv."""
+    ctl = turn.current()
+    if ctl is None or ctl.process.state != AgentState.NEEDS_SETUP or paths.agent_python() is None:
+        return False
+    ctl.process.clear_setup()
+    return True
 
 
 def _finished(setup: VenvSetup) -> None:
@@ -210,6 +223,9 @@ class WHITTLE_OT_venv_install(bpy.types.Operator):
     def invoke(self, context, event):
         if self.dry_run:
             return self.execute(context)
+        if not self.reinstall and recheck():
+            self.report({"INFO"}, FOUND)
+            return {"FINISHED"}
         title = "Reinstall Agent Environment" if self.reinstall else "Set Up Agent Environment"
         return context.window_manager.invoke_confirm(
             self, event, title=title, message=install_summary(),

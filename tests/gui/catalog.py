@@ -105,6 +105,11 @@ CHECKS = {
     "send_key": Check(
         "Shift+Alt+Enter over the viewport: with nothing typed it sends nothing; a typed prompt is "
         "sent between turns; while a turn runs it amends the turn once there is text to amend with."),
+    "send_key_errors": Check(
+        "With no API key, Shift+Alt+Enter and Enter report it as an error line, not a Python "
+        "traceback: the prompt stays and the box asks for a key. With no agent environment the "
+        "first press does the same and the next do nothing, as Send is dim; once an environment "
+        "is there, the key finds it and sends."),
     "auto_targets": Check(
         "With Auto on, clicking another object in the viewport makes it the target; clicking empty "
         "space keeps the active one; sketching keeps it; with Auto off a click leaves the list."),

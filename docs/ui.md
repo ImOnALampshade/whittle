@@ -187,7 +187,14 @@ Restart and Retry, the turn the crash ended shows a dim `Interrupted` (`PAUSE`) 
 While the box is shown, the conversation's notes from outside any turn (a run that did
 not start) are left out: the box says why.
 
-While the environment needs setting up, Send is disabled.
+While the environment needs setting up, Send is disabled (tooltip `Set up Claude to send`).
+Enter and Shift+Alt+Enter follow the button: they do nothing, but look for the environment
+first (`setup.recheck`), so one that has appeared since, set up in another Blender say, is
+found. `Set Up…` looks first too: with the environment there it reports `The agent
+environment is ready`, with no download dialog. Changing Agent Python or Environment Folder
+in the preferences clears the box, as adding a key clears the key box, and the next start
+looks again. A redraw never reads the environment, so after a setup in another Blender the
+button stays dim until one of those.
 
 "No API key": a start found no key (the agent's `needs_key` state, architecture §2
 Authentication) and none has been added since; Send stays enabled and tries again.
@@ -554,7 +561,7 @@ mode, Draw Mode included; listed and rebindable in Preferences → Keymap under 
 | Shift+Alt+D | `whittle.sketch_toggle` | Toggle Sketch Mode: starts sketching, or stops |
 | Shift+Alt+N | `whittle.next_stroke_type` | the next stroke type (free → add → carve → crease → region → note) |
 | Shift+Alt+V | `whittle.capture_view` | Capture View |
-| Shift+Alt+Enter | `whittle.send_key` | as Enter in the prompt box: Send between turns, Amend while Claude works (with typed text or new strokes), Answer while Claude asks (with an answer typed); nothing when there is nothing to send |
+| Shift+Alt+Enter | `whittle.send_key` | Send between turns (unlike Enter in the box, also with strokes or a reference and no text), Amend while Claude works (with typed text or new strokes), Answer while Claude asks (with an answer typed); nothing when there is nothing to send |
 
 ### 3.9 Composer
 
@@ -1283,7 +1290,7 @@ Added for sketching (§3.8):
 |---|---|---|
 | `whittle.sketch_toggle` | Toggle Sketch Mode | Shift+Alt+D: `whittle.sketch` or `whittle.sketch_stop`, whichever applies; undo step |
 | `whittle.view_snap` | Snap to View | `id`: moves the viewport to the view and makes it current; no undo step, like Blender's view operators |
-| `whittle.send_key` | Send or Amend | Shift+Alt+Enter: runs what Enter in the prompt box would (`operators.send_key_action`): `whittle.submit` between turns, `whittle.amend` during a turn, `whittle.answer` while Claude asks; nothing when there is nothing to send |
+| `whittle.send_key` | Send or Amend | Shift+Alt+Enter: runs what Enter in the prompt box would (`operators.send_key_action`): the body of `whittle.submit` between turns, of `whittle.amend` during a turn, of `whittle.answer` while Claude asks (`operators.key_send`, after their polls); nothing when there is nothing to send |
 
 `WindowManager.whittle_show_view_markers` (BoolProperty, `SKIP_SAVE`, default on) holds
 whether the view markers show while sketching.
@@ -1332,7 +1339,7 @@ Changed:
 
 - `whittle.submit` keeps its id; the button text is `Send` / `Send as Branch` (or
   `Branch`). It clears `prompt` when the turn is accepted, and a dropped run puts it
-  back. Its poll explains a comparison with `poll_message_set`.
+  back. Its poll explains a comparison and a missing environment with `poll_message_set`.
 - `whittle.history_branch` on a folded turn only puts its prompt back
   (`operators.can_branch` allows it while the scene is at its parent).
 - `whittle.stroke_type` has a per-type `description`.

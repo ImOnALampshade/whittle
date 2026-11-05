@@ -9,7 +9,8 @@ from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 
 from .. import chats as chat_store
 from .. import formats
-from . import bundle, chats, compare, editors, history, prefs, sketch, targets, transcript, turn, views
+from . import bundle, chats, compare, editors, history, prefs, setup, sketch, targets, transcript, turn, views
+from .process import AgentState
 
 log = logging.getLogger("whittle")
 
@@ -113,6 +114,57 @@ def send_key_action(context) -> str | None:
     if props.prompt.strip() or len(props.refs) or pending:
         return "submit"
     return None
+
+
+def needs_setup(ctl) -> bool:
+    """Whether the agent has found no environment to run in: Send waits for
+    the setup the attention box offers."""
+    return ctl is not None and ctl.process.state == AgentState.NEEDS_SETUP
+
+
+def report_submit(op, context, fake_script: str = "") -> set[str]:
+    """Send, reporting on `op`: the Send operator or a key's."""
+    try:
+        _ctl, node = submit_sketch(context, fake_script)
+    except (bundle.BundleError, RuntimeError, ValueError, OSError) as exc:
+        op.report({"ERROR"}, str(exc))
+        return {"CANCELLED"}
+    op.report({"INFO"}, f"Submitted turn {node}")
+    return {"FINISHED"}
+
+
+def report_amend(op, context) -> set[str]:
+    """Amend, reporting on `op`: the Amend operator or a key's."""
+    try:
+        number = amend(context)
+    except (RuntimeError, ValueError, bundle.BundleError, OSError) as exc:
+        op.report({"ERROR"}, str(exc))
+        return {"CANCELLED"}
+    ctl = turn.current()
+    sent = ctl is not None and ctl.running and not ctl.queued_amends
+    op.report({"INFO"}, f"Sent amendment {number}" if sent
+              else f"Amendment {number} goes in once the turn starts")
+    return {"FINISHED"}
+
+
+def report_answer(_op, context, text: str = "") -> set[str]:
+    return {"FINISHED"} if answer(context, text) else {"CANCELLED"}
+
+
+# What Send, Amend and Answer run, for the keys that send without their buttons.
+SENDS = {"submit": report_submit, "amend": report_amend, "answer": report_answer}
+
+
+def key_send(op, context, action: str) -> set[str] | None:
+    """Runs `action` for a key as its button would, or returns None when its
+    poll refuses (the disabled button says why). Its body runs here, with `op`
+    the key's own operator, and not as a nested operator: Blender raises a
+    nested operator's error report in the caller, so the user would get a
+    Python traceback in place of the line."""
+    setup.recheck()
+    if not getattr(bpy.ops.whittle, action).poll():
+        return None
+    return SENDS[action](op, context)
 
 
 def interrupt(mode: str) -> None:
@@ -354,6 +406,7 @@ CHAT_NEW_ALREADY = "This chat is new already"
 CHAT_GONE = "This chat is no longer in the file"
 # Send's tooltip in a chat made by another install, until it is continued.
 CHAT_FOREIGN = "This chat was made on another machine: Continue it to send, or start a New Chat"
+SETUP_FIRST = "Set up Claude to send"
 
 
 def chat_blocker(ctl) -> str | None:
@@ -624,16 +677,14 @@ class WHITTLE_OT_submit(bpy.types.Operator):
         if chats.current_foreign():
             cls.poll_message_set(CHAT_FOREIGN)
             return False
-        return not busy(turn.current())
+        ctl = turn.current()
+        if needs_setup(ctl):
+            cls.poll_message_set(SETUP_FIRST)
+            return False
+        return not busy(ctl)
 
     def execute(self, context):
-        try:
-            _ctl, node = submit_sketch(context, self.fake_script)
-        except (bundle.BundleError, RuntimeError, ValueError, OSError) as exc:
-            self.report({"ERROR"}, str(exc))
-            return {"CANCELLED"}
-        self.report({"INFO"}, f"Submitted turn {node}")
-        return {"FINISHED"}
+        return report_submit(self, context, self.fake_script)
 
 
 class WHITTLE_OT_send_key(bpy.types.Operator):
@@ -647,12 +698,8 @@ class WHITTLE_OT_send_key(bpy.types.Operator):
         if action is None:
             # Nothing to send: the key does nothing, as Enter in a blank box.
             return {"CANCELLED"}
-        op = getattr(bpy.ops.whittle, action)
-        if not op.poll():
-            # Sending is not possible right now (a comparison, say); the
-            # sidebar's disabled button says why.
-            return {"CANCELLED"}
-        return op("EXEC_DEFAULT")
+        # None: sending is not possible right now (a comparison, say).
+        return key_send(self, context, action) or {"CANCELLED"}
 
 
 class WHITTLE_OT_clear_sketch(bpy.types.Operator):
@@ -802,16 +849,7 @@ class WHITTLE_OT_amend(bpy.types.Operator):
         return ctl is not None and ctl.can_amend
 
     def execute(self, context):
-        try:
-            number = amend(context)
-        except (RuntimeError, ValueError, bundle.BundleError, OSError) as exc:
-            self.report({"ERROR"}, str(exc))
-            return {"CANCELLED"}
-        ctl = turn.current()
-        sent = ctl is not None and ctl.running and not ctl.queued_amends
-        self.report({"INFO"}, f"Sent amendment {number}" if sent
-                    else f"Amendment {number} goes in once the turn starts")
-        return {"FINISHED"}
+        return report_amend(self, context)
 
 
 class WHITTLE_OT_answer(bpy.types.Operator):
@@ -827,9 +865,7 @@ class WHITTLE_OT_answer(bpy.types.Operator):
         return ctl is not None and ctl.question is not None
 
     def execute(self, context):
-        if not answer(context, self.text):
-            return {"CANCELLED"}
-        return {"FINISHED"}
+        return report_answer(self, context, self.text)
 
 
 class WHITTLE_OT_open_image(bpy.types.Operator):

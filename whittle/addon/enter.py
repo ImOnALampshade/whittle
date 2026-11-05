@@ -13,6 +13,8 @@ import time
 
 import bpy
 
+from . import operators
+
 # How soon after a field is confirmed the release of Enter must follow.
 WINDOW = 0.5
 
@@ -59,13 +61,9 @@ class WHITTLE_OT_enter_send(bpy.types.Operator):
         name = take_confirmed()
         if name is None:
             return {"PASS_THROUGH"}
-        op = getattr(bpy.ops.whittle, SENDERS[name])
-        if not op.poll():
-            # Sending is not possible right now (a comparison, say); the
-            # text stays in the box and the button says why.
-            return {"PASS_THROUGH"}
-        op("EXEC_DEFAULT")
-        return {"FINISHED"}
+        # None: sending is not possible right now (a comparison, say); the
+        # text stays in the box and the button says why.
+        return operators.key_send(self, context, SENDERS[name]) or {"PASS_THROUGH"}
 
 
 CLASSES = (WHITTLE_OT_enter_send,)

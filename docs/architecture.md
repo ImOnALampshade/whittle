@@ -1450,7 +1450,12 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
   has no `ensurepip`, the folder is `foreign`, the venv is `ready` and this is not a
   reinstall, there is no online access, or Blender runs in the background. The last two
   do not apply to a dry run. When a real setup finishes, a controller in `needs_setup`
-  goes back to `stopped`, so the next submit finds the venv.
+  goes back to `stopped`, so the next submit finds the venv. So does a change to the
+  Agent Python or Environment Folder preference (`prefs._environment_changed`), and
+  `setup.recheck()` when `paths.agent_python()` resolves again: `operators.key_send` calls
+  it before a key's poll, and `whittle.venv_install`'s `invoke` before its dialog, which
+  then reports `setup.FOUND` instead. `submit`'s poll refuses while in `needs_setup`
+  (`SETUP_FIRST`) and never reads the venv, as polls run on redraw.
 - **Operators**: `whittle.venv_install` (`reinstall`, hidden `dry_run`): `poll` is false
   during a turn and while a setup runs, so an agent `exec` cannot start one; `invoke` is
   `wm.invoke_confirm(title=…, message=setup.install_summary(), confirm_text="Download and
@@ -1661,7 +1666,10 @@ never writes Blender data.
   Shift+Alt+N `whittle.next_stroke_type`, Shift+Alt+V `whittle.capture_view`,
   Shift+Alt+Enter `whittle.send_key`, which runs what Enter in the prompt box would
   (`operators.send_key_action`: Send between turns, Amend during one, Answer while Claude
-  asks, nothing when there is nothing to send). See `decisions.md`, Sketch keys.
+  asks, nothing when there is nothing to send). The key and Enter run the body on their own
+  operator (`operators.key_send`, `report_submit`, `report_amend`, `report_answer`), not as
+  a nested operator, whose error report Blender raises in the caller. See `decisions.md`,
+  Sketch keys.
 - **Composer**: reference chips packed into rows (a chip is `whittle.ref_menu` with the
   name and preview icon; a pinned one has a pressed `whittle.ref_pin` beside it); the
   prompt field (placeholder `shortcut.PLACEHOLDER`, `Ask Claude…`, in every state) with

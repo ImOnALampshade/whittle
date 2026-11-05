@@ -83,6 +83,16 @@ def _key_changed(_self, _context):
         ctl.process.clear_key()
 
 
+def _environment_changed(_self, _context):
+    """Another environment may be ready: the next start looks, and asks for
+    a setup again if it is not."""
+    from . import turn
+
+    ctl = turn.current()
+    if ctl is not None:
+        ctl.process.clear_setup()
+
+
 class WhittlePreferences(bpy.types.AddonPreferences):
     bl_idname = PACKAGE
 
@@ -97,10 +107,12 @@ class WhittlePreferences(bpy.types.AddonPreferences):
                     "model button beside Send")
     venv_dir: StringProperty(
         name="Environment Folder", subtype="DIR_PATH", default=DEFAULTS["venv_dir"],
+        update=_environment_changed,
         description="Where the agent's private Python environment lives; empty means the "
                     "extension's own user folder")
     agent_python: StringProperty(
         name="Agent Python", subtype="FILE_PATH", default=DEFAULTS["agent_python"],
+        update=_environment_changed,
         description="Development override for the Python that runs the agent")
     self_check_rounds: IntProperty(name="Self-check Rounds", default=DEFAULTS["self_check_rounds"],
                                    min=LIMITS["self_check_rounds"][0], max=LIMITS["self_check_rounds"][1],
