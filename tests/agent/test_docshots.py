@@ -15,6 +15,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+# The tool needs Linux and kwin_wayland, and its slots need fcntl.
+if os.name != "posix":
+    raise unittest.SkipTest("docs_shots.sh runs on Linux only")
+
 from tests.docshots import run, slots, spec as specs
 
 REPO = Path(__file__).resolve().parents[2]
