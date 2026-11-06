@@ -17,8 +17,10 @@ Some rules hold for all of them:
 - **The main thread.** All `bpy` access happens on Blender's main thread, from the bridge
   tick or an operator.
 - **Docs change with the code.** Update `README.md`, `docs/architecture.md`, `docs/ui.md`,
-  `docs/decisions.md` and `docs/progress.md` in the same change, wherever they say what you
-  changed.
+  `docs/decisions.md`, `docs/progress.md` and the site in `docs/site/` in the same change,
+  wherever they say what you changed. No test compares the site's tables with the code, so
+  the recipes below name the page each change reaches. A change to a wire or file format
+  reaches [Protocol and file formats](protocol.md).
 - **No new packages on the way past.** Adding, upgrading or removing a dependency needs the
   maintainer's approval and a change of its own.
 - New source files start with `# SPDX-License-Identifier: GPL-3.0-or-later`.
@@ -121,7 +123,8 @@ tool, the distance between two objects. The existing tools are listed in
    `StubConnection`, and the Blender handler in `tests/blender/`.
 
 8. **Update the docs.** Add the method to `docs/architecture.md` §3 and the tool to the table
-   in §5.
+   in §5, then to the tables in [Agent tools and skills](agent-tools.md) and, for a bridge
+   method, in [Protocol and file formats](protocol.md).
 
 A `call` step in a fake script reaches the Blender handler directly and skips `agent/tools.py`,
 so it is the quick way to try step 2 in a real Blender. Nothing here needs an API key:
@@ -182,8 +185,8 @@ pitfalls. The agent has no Read tool, so a skill has to be self-contained.
 
 4. **Check it and update the docs.** `test_every_skill_has_matching_frontmatter` wants the
    folders and `SKILLS` to agree, a description of more than 40 characters and at least one
-   `python` block. Add the name to the Recipe skills list in `docs/architecture.md` §1. A skill
-   that carries modeling practice also belongs in `docs/modeling-practices.md`.
+   `python` block. Add the name to the Recipe skills list in `docs/architecture.md` §1 and to
+   the table in [Agent tools and skills](agent-tools.md). A skill that carries modeling practice also belongs in `docs/modeling-practices.md`.
 
 ```sh
 ./run_tests.sh -k test_every_skill_has_matching_frontmatter
@@ -241,6 +244,10 @@ on screenshots as well as tests.
    `docs/ui.md` §10 and the general checks under that table: no text cut by Blender's own
    `...` at 280 px, nothing said twice, and red only in the failure scenarios. If the
    change alters what the README shows, refresh its images with `./screens.sh --docs`.
+
+6. **Tell the user.** Describe the state in [The sidebar](../guides/sidebar.md), and in
+   [Troubleshooting](../guides/troubleshooting.md) if it asks them to fix something. A page
+   whose pictures show the state needs them shot again with `./docs_shots.sh <page-slug>`.
 
 ```{figure} ../images/develop-extending/asking.png
 :alt: The sidebar paused on a question from Claude, with the buttons Overhang and Flush, and Stop in place of Send
@@ -327,9 +334,10 @@ guide's text and whether it is whole), and every one of those has a per-file ove
 2. Add the property to `WhittlePreferences`, taking its default from `DEFAULTS`.
    `test_rna_defaults_match_defaults` compares the two.
 3. Show it: `WhittlePreferences.draw` lays out each box by hand.
-4. Test it in `tests/blender/test_prefs.py`, and add it to the README.
+4. Test it in `tests/blender/test_prefs.py`, and add it to the README and
+   [Settings](../guides/settings.md).
 
-**A session setting**, which the agent's system prompt uses, also needs all of these:
+**A session setting**, which reaches the agent, also needs all of these:
 
 5. Its key in `prefs.SESSION_SETTINGS`, whose order is the order of the For This File fields,
    and its rows in `LABELS` and `DESCRIPTIONS`, plus `LIMITS` for an integer. Use those in the
@@ -348,12 +356,15 @@ guide's text and whether it is whole), and every one of those has a per-file ove
 8. The same default in `DEFAULTS` in `agent/prompt.py`, which `test_agent_side_defaults_agree`
    compares with the add-on's.
 9. Its substitution in `prompt.build`, which passes each key by name, and a `$name` in
-   `agent/system_prompt.md`.
+   `agent/system_prompt.md`. A setting the prompt text does not use, as `render_size` is,
+   needs no `$name`.
 10. Its type in `dispatch.session_params`, which checks each setting `start_session` carries.
 11. Tests in `tests/blender/test_file_settings.py`.
 
 `style_file` is the exception to steps 8 and 9: the agent uses the guide's text, which
-`session_settings` adds as `style_guide`, and never the path.
+`session_settings` adds as `style_guide`, and never the path. So the restart compares the
+guide's text and `style_incomplete`, not the path, and a Save As that rewrites the path never
+restarts the agent.
 
 The rest follows from `SESSION_SETTINGS`: `props.FILE_SETTINGS`, the popover's field and reset
 button, `prefs.session_settings()`, and the agent's restart before the next turn when a value

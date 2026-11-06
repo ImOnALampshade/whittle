@@ -40,7 +40,7 @@ curve = bpy.data.curves.new(name + "_curve", "CURVE")
 curve.dimensions = "3D"
 curve.bevel_mode = "ROUND"
 curve.bevel_depth = radius
-curve.bevel_resolution = 1          # 1 gives a 6-sided tube; 0 gives a flat ribbon
+curve.bevel_resolution = 1          # 1 gives a 6-sided tube, 0 a 4-sided one
 curve.use_fill_caps = True
 curve.resolution_u = 2
 spline = curve.splines.new("POLY")
@@ -65,7 +65,7 @@ print(obj.name, whittle.mesh_report(obj))
 ```
 
 Notes:
-- For a square profile (planks, trims) set `curve.bevel_resolution = 0` and use a Solidify modifier, or sweep with `bevel_mode = "OBJECT"` and a small square curve as `bevel_object`.
+- `curve.bevel_resolution = 0` gives four sides, but set on a corner. For a true square profile (planks, trims) sweep with `bevel_mode = "OBJECT"` and a small square curve as `bevel_object`.
 - Use "SMOOTH"/NURBS splines only for organic shapes; POLY keeps the vertex count predictable.
 - Where the path meets the body, run each end into the body by about twice the radius and union the sweep in (`fuse_parts` in `whittle:fuse-parts`). Ends only pushed into the body, as a separate object or a separate shell, look joined but leave buried faces.
 - A sweep can stay its own object when it should: a rope that hangs free, a rail the user wants to move. Say so in your reply.

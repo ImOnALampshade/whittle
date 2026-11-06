@@ -231,8 +231,8 @@ Auth and Distribution).
 - **Style guides** (architecture §1, decisions Behaviour): Style Notes (`style_file`) is
   a path to a `.md` or `.txt` file, which `style.load_guide` reads with its `@path`
   imports. Draw code only asks `prefs.style_guide` for the last read; the disk is read
-  before each turn and when a path may have changed, never from a redraw or during a
-  turn. `session_settings` carries the text, so a changed guide restarts the agent like a
+  before each turn and when a path may have changed, never from a redraw, and a running
+  turn and its amendments keep the guide they started with. `session_settings` carries the text, so a changed guide restarts the agent like a
   changed setting. Nothing about a guide fails a turn: a problem is a warning for the
   user and one line for the agent. A `.blend` from someone else can name any path and
   what loads goes to the API, so keep the file-type check on the resolved path and the
@@ -258,21 +258,22 @@ Auth and Distribution).
 - **A tool for the agent**: handler and schema in `agent/tools.py` (`TOOLS`; handlers
   take `(ctx, args)`), a method in `protocol.Method` if it needs Blender, its handler in
   `addon/commands.py` (`build_handlers`; fake scripts reach it with a `call` step),
-  tests in `tests/agent/test_tools.py` and `tests/blender/`, the table in
-  architecture §5, and the description per prompting.md.
+  tests in `tests/agent/test_tools.py` and `tests/blender/`, the tables in
+  architecture §5 and `docs/site/develop/agent-tools.md`, and the description per
+  prompting.md.
 - **A skill**: `agent/plugin/skills/<name>/SKILL.md` (self-contained; the agent has no
-  Read tool), its name in `agent/prompt.py` `SKILLS`, the list in architecture §1;
-  `tests/blender/test_skills.py` runs each recipe's Python blocks.
+  Read tool), its name in `agent/prompt.py` `SKILLS`, the lists in architecture §1 and
+  `docs/site/develop/agent-tools.md`; `tests/blender/test_skills.py` runs each recipe's Python blocks.
 - **A sidebar state**: spec and mockup in ui.md §4 and a check in §10, draw code in
   `addon/ui.py` (with `addon/conversation.py` for the conversation), a scenario in
   `tests/screens/catalog.py` and `scenarios.py`, layout tests in
-  `tests/blender/test_sidebar.py`.
+  `tests/blender/test_sidebar.py`, and the user's view in `docs/site/guides/sidebar.md`.
 - **A flow only a GUI shows** (a real undo, a key, a file browser, a restart): a check
   in `tests/gui/catalog.py` and `checks.py`, its description in the catalog, and the
   lists in the README's GUI checks and progress.md.
 - **A preference**: `addon/prefs.py` (`WhittlePreferences`, `DEFAULTS`), session
   defaults in `agent/prompt.py` `DEFAULTS` if the agent uses it, tests in
-  `tests/blender/test_prefs.py`, and the README. A session setting a file may override
+  `tests/blender/test_prefs.py`, the README and `docs/site/guides/settings.md`. A session setting a file may override
   also goes in `prefs.SESSION_SETTINGS` (with its `LABELS` and `DESCRIPTIONS`), which
   gives it a field in For This File; tests in `tests/blender/test_file_settings.py`.
 - **The style guide**: resolving it and its wording in `whittle/style.py` (tests in
@@ -287,4 +288,4 @@ Auth and Distribution).
   `./docs_shots.sh <page-slug>` and shown on the page (`tests/agent/test_docs_site.py`
   checks that); a new module gets its `automodule` in `docs/site/reference/`.
 - **Wire formats**: `protocol.py` (bridge), `formats.py` (request bundle, session
-  folder), architecture §3 and §8.
+  folder), architecture §3 and §8, and `docs/site/develop/protocol.md`.

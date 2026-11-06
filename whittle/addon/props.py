@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Per-scene state: scene.whittle."""
+"""Per-scene state: scene.whittle, and keeping a file's // style guide path
+naming the same guide through Save As and undo."""
 
 import os
 import uuid
@@ -92,9 +93,9 @@ def rebase_style_paths(target: str) -> None:
     rewritten to name the same file from there, as Blender does for its own
     paths. Save As and Save Copy look the same here, so both write the new
     text and settle_style_paths takes it back for a copy. Written straight to
-    the store: the property's update reads the disk, which a save during a
-    turn must not add to, and a file's own path is read at a Send or Read Now.
-    A read walks a `..` up from a folder's real place, so the rewrite starts
+    the store: the property's update would read the new text from the old
+    folder, as bpy.data.filepath has not moved yet, and save_post reads it
+    once it has. A read walks a `..` up from a folder's real place, so the rewrite starts
     from there too, not from the symlink a file was saved through."""
     global _rebased_from
     _rebased_from = bpy.data.filepath

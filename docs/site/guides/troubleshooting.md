@@ -19,6 +19,7 @@ Find what the sidebar says:
 | **Claude stopped unexpectedly** | [Claude stopped unexpectedly](#claude-stopped-unexpectedly) |
 | A red line at the end of a turn | [A turn failed](#a-turn-failed) |
 | **Could not resume the agent's earlier conversation** | [Claude lost the earlier conversation](#claude-lost-the-earlier-conversation) |
+| **Part of the style guide did not load** | [Part of the style guide did not load](#part-of-the-style-guide-did-not-load) |
 | No box at the top, but **Send** is dim | [Send is dim](#send-is-dim) |
 
 If Blender itself crashed, see [Blender crashed](#blender-crashed).
@@ -247,6 +248,28 @@ new session.
 
 Say in your prompt whatever still matters from earlier turns, such as a style you settled on or
 something to leave alone.
+
+## Part of the style guide did not load
+
+The conversation says this once, as a warning, when a turn starts without all of the
+[style guide](settings.md#style-guides). The turn still runs: Claude works from what did
+load, and is told part of the guide is missing.
+
+To see what went wrong, click the gear at the right of the panel's header. Each file that
+did not load has a warning under **Style Notes**:
+
+| The warning says | What to do |
+|---|---|
+| `… was not found.` | The file has moved or been renamed, or the `.blend` moved on its own. Pick the guide again, or fix the `@` line. To move a `.blend`, use **Save As**. |
+| `… was refused: only .md and .txt files load.` | Rename the file to `.md` or `.txt`. For a link, check the file it leads to. A line holding only a handle, such as `@alice`, counts as an import, and so does a quoted path with no space in it: reword the line, or take the quotes off. |
+| `… passes the 128 KiB limit: it and the rest of the guide were left out.` | Trim the guide, or split it so a file imports less. |
+| `… cannot be read: it is not UTF-8 text.` | Save the file as UTF-8 in your text editor. |
+| `… cannot be read: …` with another reason | Check that you can open the file, and that its drive or share is there. |
+| `… is not an absolute path.` | Start the path in the field with `//`, `~` or the full path. |
+| `… is relative to the .blend: save the file to use it.` | Save the `.blend`. |
+
+The warnings are from the last read, so one you have fixed stays until the next turn or save,
+or until you pick the file again.
 
 ## Send is dim
 

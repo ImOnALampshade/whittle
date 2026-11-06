@@ -129,13 +129,32 @@ relative to whichever `.blend` is open. An undo or redo across the Save As keeps
 same guide: the path is rewritten again for where the file is now. A `.blend` saved through a
 symlinked folder is counted from the folder's real place, as reading the guide is. If a folder
 on the way has a backslash in its name, on Linux or macOS, the path becomes an absolute one,
-since a `//` path would read that backslash as a slash.
+since a `//` path would read that backslash as a slash. A **Save As** onto another Windows
+drive also leaves an absolute path, as no `//` path reaches across drives.
 
 Moving a `.blend` in a file manager or with `git mv` fixes nothing, because Blender saves
 nothing: the path is now counted from the new folder, **Style Notes** warns that the guide was
 not found, and turns run without it until you pick it again. To move a `.blend` on its own,
 open it and use **Save As** instead. Moving a whole folder with its guides inside it is fine:
 the path between them stays the same.
+
+### Set up a guide for a project
+
+For a repository of `.blend` files that share a look:
+
+1. Put the guides in the repository, and save the `.blend` there first. In a file that has
+   never been saved, the file browser writes an absolute path, with no warning.
+2. Click the gear at the right of the panel's header. Under **For This File**, pick the guide
+   with the icon at the end of **Style Notes**.
+3. Check that the field starts with `//`. If it doesn't, pick the guide again with **Relative
+   Path** ticked in the file browser.
+4. Save the `.blend`, and commit the guides with it.
+5. Repeat for each `.blend`, and for each scene in it. There is no way to set many at once,
+   and a new `.blend` has no guide until you set one.
+
+**Defaults** rarely fits a repository. A `//` path there counts from each open file's own
+folder, so it only works if every `.blend` sits at the same depth, and an absolute path only
+works on one machine. It suits a guide you want on everything you make.
 
 ### Import other files
 
@@ -150,7 +169,10 @@ written once and other files add detail.
 - A line with anything else on it is plain text, so an address or a handle in a sentence
   imports nothing. Neither does a line inside a fenced code block, in a list item or not.
 - Nothing may follow the path on its line: `@base.md # the base` is plain text and is sent
-  as it stands, with no warning, and so is a path in quotes.
+  as it stands, with no warning.
+- Quotes are not understood, so write paths without them. `@"my base.md"`, with a space, is
+  plain text and is sent as it stands, with no warning. `@"base.md"`, without one, counts as
+  an import: it is refused with a warning and left out.
 - A path with spaces needs no quotes, but it must end in `.md` or `.txt`, or the line counts
   as a sentence. So `@bob read notes.md` is an import, of a file called `bob read notes.md`.
 - A line holding only a handle, such as `@alice` or `@team/art-leads`, counts as an import
@@ -213,10 +235,16 @@ Change `base.md` once, and both follow.
 - **The list.** Under the field, **Sent with each turn** shows the files loaded, the first
   ten and how many more. Their text goes to Anthropic with your turns, so look here in a
   `.blend` you did not make: the path is stored in the file and could name something
-  private of yours.
+  private of yours. **and N more files** means more is being sent than you can see, so in a
+  file you do not trust, clear **Style Notes** rather than send.
+- **The last read.** The list and its warnings show what the last read found, not what is on
+  disk now. After you edit a guide or fix an import, they catch up at the next turn or save,
+  or when you pick the file again.
 - **Opening a file.** Opening a `.blend` does not read the path it stores, since that could
   name a network share. The field says **Read at the next turn.** until you send a turn,
-  save the file or press **Read Now**, which lists the files before anything is sent.
+  save the file or press **Read Now**, which lists the files before anything is sent. Any
+  path with no read yet shows the same, as can happen after an undo or a scene switch. Once a
+  path has a read, the button goes.
 - **File types.** Only `.md` and `.txt` files load, as UTF-8 text. A link is judged by the
   file it leads to, so `notes.md` linking to a private key is refused.
 - **Size.** A guide can be 128 KiB in all. Reading stops at the file that would pass that,
@@ -225,9 +253,13 @@ Change `base.md` once, and both follow.
 - **Problems.** A missing, unreadable or refused file, the one in the field included, never
   stops a turn. It shows as a warning under the field, the conversation says so once, and
   Claude works from what did load and is told part of the guide is missing.
+  [Troubleshooting](troubleshooting.md#part-of-the-style-guide-did-not-load) says what to do
+  about each warning.
 - **Edits.** Whittle reads the guide again before each turn, so an edit applies from the
   next turn. If the text changed, the agent restarts first, and the conversation carries on.
   A running turn and its amendments keep the guide they started with.
+- **Cost.** The guide's text goes with every request of every turn. See
+  [Keep the cost down](api-key.md#keep-the-cost-down).
 
 ## Keep chats out of the .blend
 

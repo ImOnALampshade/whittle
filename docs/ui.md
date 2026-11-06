@@ -64,15 +64,16 @@ WHITTLE_PT_debug         "Development"  child of main, DEFAULT_CLOSED,
 
 Popovers (bl_space_type VIEW_3D, bl_region_type HEADER, so they never show up as
 sidebar panels of their own):
-  WHITTLE_PT_agent       agent state (and why it stopped), model, session folder,
-                         this file's settings, Start/Stop Agent, Preferences;
+  WHITTLE_PT_agent       agent state (and why it stopped), model, effort, the file
+                         storing the chats, this file's settings, Start/Stop Agent,
+                         Preferences;
                          bl_ui_units_x = 16
   WHITTLE_PT_history     the whole tree; bl_ui_units_x = 24
   WHITTLE_PT_chats       New Chat, the chats in this file, rename and delete;
                          bl_ui_units_x = 18
   WHITTLE_PT_targets     target collection, Replace With Selection, Clear
   WHITTLE_PT_type_prompt the Shift+Alt+C popup: the composer's field, one line,
-                         already in edit mode (§3.12); bl_ui_units_x = 20
+                         already in edit mode (§3.12); bl_ui_units_x = 22
 
 Menus:
   whittle.turn_menu      per-message ⋯ menu: an operator (node property) whose invoke
@@ -146,7 +147,8 @@ render size, then, after half a separator, Style Notes (`scene.whittle.poly_budg
 `self_check_rounds`, `render_size`, `style_file`). The next session runs with them instead of the
 preferences' Defaults. They sit here rather than in the chat menu because they change how
 the agent runs, like the model and the session lines above them, and apply to every chat
-in the file. Self-check rounds and render size are cost levers as much as quality ones,
+while the scene is active. An override belongs to the scene, so another scene in the file
+reads the preferences. Self-check rounds and render size are cost levers as much as quality ones,
 so a file can raise them for a hero prop or lower them for quick blockouts. An unset one
 shows the preference's value with "(default)" after its name, so the field always says
 what Claude gets; typing a value sets it, even the same value (an empty Style Notes is a
@@ -889,7 +891,7 @@ reach the agent.
 
 Each chat runs on a model of its own, as in the Claude apps: the button beside Send
 names it (`Opus 5.5 ▾`) and opens the model menu. A new chat starts on the add-on's
-**Model** preference (`claude-opus-5-5` unless changed); a chat's first turn keeps the
+**Model for New Chats** preference (`claude-opus-5-5` unless changed); a chat's first turn keeps the
 model it was sent with, so changing the preference later moves only chats that have no
 turn yet. Changing a chat's model applies from its next turn, in the same Claude
 session (the conversation carries on); the button is hidden while a turn runs, which
@@ -1338,6 +1340,7 @@ Added for per-file settings (§3.1):
 | Id | Label | Does |
 |---|---|---|
 | `whittle.file_setting_reset` | Use Default | `key` (`poly_budget`, `self_check_rounds`, `render_size`, `style_file`): the file uses the preference again; undo step |
+| `whittle.style_guide_read` | Read Now | `path`: reads the guide, so its files are listed before anything is sent; no undo step |
 
 `scene.whittle.poly_budget` (IntProperty, min 10), `self_check_rounds` (IntProperty,
 0 to 10), `render_size` (IntProperty, 64 to 1024) and `style_file` (StringProperty,
@@ -1502,7 +1505,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `asking` | 4.4; question not red and said once; Stop alone; placeholder `Ask Claude…` |
 | `conversation` | 4.5; older turn collapsed; two expanded; one ⋯ per message; text wraps to the width; each render shows what its reply says (the slot carved in the front, then the darker wood and lighter lid) |
 | `markdown` | a Markdown reply: no `**`, `#` or `- ` markers; bold heading with a line under it; bold and italic words; bullets and numbers in a margin; the whole reply shown; the render shows the two horns |
-| `markdown_stress` | a stress test shown whole (the 8-line cap lifted): headings told apart by their rules and dimming (H1 over a double line, H2 a line, H3 and H4 bold, H5 and H6 dim); struck text with a line through it; inline code monospace; escapes without backslashes; task boxes; nested quotes indented and dim with their list, a bar per quote level; indented and fenced code in boxes, each with a copy button on its first row, `python` dim beside it; a boxed table with a bold header, aligned columns and a wrapped cell; maths as symbols, the block centred; a closed "Click to expand" section; HTML styled, entities decoded; emoji without boxes; link text underlined; a link button at the end of a line with one link, and a menu button on the line with two; the bare Wikipedia address keeping its `(bar)`; superscript footnote references and the dim notes at the end; no raw markers |
+| `markdown_stress` | a stress test shown whole: headings told apart by their rules and dimming (H1 over a double line, H2 a line, H3 and H4 bold, H5 and H6 dim); struck text with a line through it; inline code monospace; escapes without backslashes; task boxes; nested quotes indented and dim with their list, a bar per quote level; indented and fenced code in boxes, each with a copy button on its first row, `python` dim beside it; a boxed table with a bold header, aligned columns and a wrapped cell; maths as symbols, the block centred; a closed "Click to expand" section; HTML styled, entities decoded; emoji without boxes; link text underlined; a link button at the end of a line with one link, and a menu button on the line with two; the bare Wikipedia address keeping its `(bar)`; superscript footnote references and the dim notes at the end; no raw markers |
 | `branched` | 4.6; switcher in the bubble's last row left of ⋯: ◂ 2/2 with a dim ▸; the render shows the rope handles |
 | `branch_edit` | after Edit & Resend: later-turns row with Return to Latest, Send reading `Branch` whole, prompt brought back |
 | `interrupted` | thumbnail, then one dim "Stopped, changes kept" |
@@ -1519,7 +1522,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `history_popover` | 13-turn tree, two branches: one indentation step per level, siblings at equal indentation, lines flat, each branch's first row marked ↳ (no disclosure triangles), branch points say "2 branches", titles whole including the current row, current row highlighted, one ⋯ per row |
 | `turn_menu` | the ⋯ menu opened on a turn, Edit & Resend first, then Go Back to This Turn; no item hovered |
 | `agent_popover` | §3.1; Agent, Model and Effort lines and For This File starting in one column (no agent yet, so no Chats line); For This File with `Triangle Budget (default)` and `Render Size (default)`, their resets greyed; `Self-check Rounds` and `Style Notes` without "(default)", their resets enabled; after a small gap, the Style Notes field on its own line under its label, the label at the field's left edge, with its file icon; under it the dim `Sent with each turn:`, `crates.md` and `base.md`, then the warning that `@props.md` was not found, whole on `ERROR` lines; every reset on its field's line, all in one column; Start Agent and Preferences… |
-| `guide_warning` | a finished turn whose style guide has a missing import: the conversation shows `Part of the guide did not load` once, not in red |
+| `guide_warning` | a finished turn whose style guide has a missing import: the conversation shows `Part of the style guide did not load` once, not in red |
 | `developer` | Developer Extras on: Development panel shown; off (every other scenario): absent |
 | `chat_menu` | three chats, the second-newest current: New Chat first; Conversations; each entry's title whole, its dim `N turns · <age> · <size>` line; ✓ on the current entry (marked by its check mark only, not highlighted), 🗑 on the others; the footer total and three items; nothing red |
 | `chat_menu_many` | 25 chats of varied age and size: 20 entries then `Show 5 More`; long titles shortened with `…` at a word's end, the ✓/🗑 column aligned on every row; ages from `just now` to `over a year ago` |
@@ -1529,7 +1532,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `open_elsewhere` | §3.11: one dim line at the top, `This file is open in another Blender; chats here won't merge with it.`, wrapped, not red |
 | `delete_confirm` | the confirmation of 🗑 on a chat: its title, turns and size, "leaves this file the next time you save" |
 | `delete_many` | the Delete Chats dialog on `Older Than a Month`, with the count and size line |
-| `model_menu` | the model menu over a chat on Sonnet 5.5: Opus 5.5, Sonnet 5.5 (✓), Haiku 5.5, Fable 5.1, then Older Models ▸ and Other Model…, `Use Sonnet 5.5 for New Chats`, the dim source line `Listed by the Models API 1 hour ago`; names whole, icons in one column; no item hovered |
+| `model_menu` | the model menu over a chat on Sonnet 5.5: Opus 5.5, Sonnet 5.5 (✓), Haiku 5.5, Fable 5.1, then Older Models ▸ and Other Model…, the dim Effort heading, Low, Medium, High (✓), `Use Sonnet 5.5 for New Chats`, the dim source line `Listed by the Models API 1 hour ago`; names whole, icons in one column; no item hovered |
 | `hero` | the whole window at 1600×1000, no desktop around it: the crate with its lid and rope handles in matcap shading, no selection outlines; white strokes over it (the latch's outline, a slot, an edge, a side panel and an arrow); the sidebar widened, in sketch mode, scrolled to its end: the last turn with its render, the sketch row, `6 strokes · 2 views`, the prompt typed |
 | `model_menu_older` | the Older Models submenu with the chat on Opus 4.6: one column per family under its dim name, newest first, ✓ on Opus 4.6; no title or rule over the first column alone |
 

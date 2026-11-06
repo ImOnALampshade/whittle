@@ -24,7 +24,7 @@ whittle/                          repo root
 │   ├── caches.py                 stdlib only: each file's hidden chats cache, its id and cleanup (§14)
 │   ├── markdown.py               stdlib only: Claude's Markdown (and its TeX, HTML) as Lines for the sidebar
 │   ├── models.py                 stdlib only: model ids by family and version, the model list's cache (§15)
-│   ├── style.py                  stdlib only: reading a style guide with its @ imports, and how the prompt words it
+│   ├── style.py                  stdlib only: reading a style guide with its @ imports, its portable paths, and how the prompt words it
 │   ├── venv.py                   stdlib only: venv status, setup commands, the VenvSetup state machine
 │   ├── platforms.py              stdlib only: what differs on Windows and macOS (spawn flags, process trees, pid probe, replace, stale resume folders, lock markers)
 │   ├── requirements.lock         byte-identical copy of agent_env/requirements.lock (packaging step)
@@ -35,7 +35,7 @@ whittle/                          repo root
 │   │   ├── setup.py              the venv on the Blender side: checks, timer, install/cancel operators
 │   │   ├── start.py              start points (existing, blank, primitive, asset) and their helpers
 │   │   ├── refs.py               reference images: clearing sent ones, pinning, image empties
-│   │   ├── props.py              Scene PropertyGroup (scene.whittle)
+│   │   ├── props.py              Scene PropertyGroup (scene.whittle); keeps a // style path on its guide through Save As and undo
 │   │   ├── process.py            AgentProcess: spawn, handshake, crash detection, shutdown
 │   │   ├── bridge.py             Bridge: listening socket, framing, pending calls, tick()
 │   │   ├── commands.py           handlers for agent→Blender calls (exec, inspect, render, …)
@@ -62,7 +62,7 @@ whittle/                          repo root
 │   │   ├── editors.py            showing an image or text in an editor from the sidebar
 │   │   ├── operators.py          WHITTLE_OT_* operators
 │   │   ├── shortcut.py           Shift+Alt+C: the sidebar plus a prompt popup, ready to type
-│   │   ├── keys.py               default sketch keys (Shift+Alt+D/N/V/Enter) in the 3D View keymap
+│   │   ├── keys.py               default sketch keys (Shift+Alt+D/V/Enter) in the 3D View keymap
 │   │   └── ui.py                 WHITTLE_PT_* panels and plain draw functions
 │   └── agent/                    agent process; NEVER imports bpy
 │       ├── __init__.py
@@ -78,6 +78,7 @@ whittle/                          repo root
 │       └── plugin/               local plugin (Claude Code plugin format) carrying the recipe skills
 │           ├── .claude-plugin/plugin.json      {"name": "whittle", "version": …, "description": …}
 │           └── skills/<skill-name>/SKILL.md
+├── .github/                      CI on GitHub-hosted runners: workflows/ (ci.yml, release.yml, test.yml), scripts/
 ├── agent_env/requirements.lock   pinned, hashed lock (uv's output, plus pywin32 by hand: the header says why)
 ├── tests/
 │   ├── agent/                    unittest, run with .venv/bin/python
@@ -98,6 +99,9 @@ whittle/                          repo root
 ├── AGENTS.md                     the working guide for coding agents and contributors
 ├── LICENSE                       GPL-3.0 (the project is GPL-3.0-or-later)
 └── docs/
+    ├── architecture.md           this file; with ui.md, decisions.md, design.md and progress.md, the specs and the record
+    ├── prompting.md              how agent-facing text is written
+    ├── modeling-practices.md     the research behind the system prompt's modeling practice and the mesh skills
     ├── images/                   the README's screenshots, made by ./screens.sh --docs
     └── site/                     the documentation site (Sphinx, MyST); none of it is in the zip
         ├── conf.py, index.md     the site, and its pages by section in quickstart.md, walkthrough.md,
@@ -111,7 +115,7 @@ Rules:
 
 - Every source file starts with `# SPDX-License-Identifier: GPL-3.0-or-later` (after a
   shebang), and the manifest says `license = ["SPDX:GPL-3.0-or-later"]`.
-- `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `models.py`, `style.py`, `venv.py`, `platforms.py` and everything under `agent/`
+- `whittle/__init__.py`, `protocol.py`, `formats.py`, `tree.py`, `chats.py`, `caches.py`, `markdown.py`, `models.py`, `style.py`, `venv.py`, `platforms.py` and everything under `agent/`
   import only the stdlib at module level. `agent/runner.py` imports `claude_agent_sdk`,
   and `tools.build_servers` does when the real runner calls it; nothing else does, so the
   fake agent and the formats code run under any Python 3.13 or 3.14, including Blender's.
@@ -251,8 +255,8 @@ own block and have what follows read as Whittle's prompt.
 
 `prefs.session_settings` adds `style_guide` (the text) and `style_incomplete` (whether there
 were problems) from the last read. `TurnController.launch_settings` compares session
-settings, so a changed text restarts the idle agent before that turn with no special case; a
-changed path with the same text does too, as any changed setting does. The agent gets only
+settings with the path left out (above), so a changed text restarts the idle agent before
+that turn with no special case, and a changed path with the same text does not. The agent gets only
 the boolean, not the problems, so local paths do not reach it that way.
 
 For the user, `prefs.draw_style_guide` draws the files and the problems under the field
@@ -510,7 +514,7 @@ Every message has `"v": 1` and `"type"`:
 |---|---|---|
 | `exec` | `code` (str), `label` (str, short, for the UI) | `{"stdout": str, "error": {type, message, traceback} \| null, "diff": SceneDiff, "notes": [str]}` |
 | `inspect` | `query` (`"summary"`, `"object"`, `"materials"`, `"node_groups"`, `"scene"`), `name` (str, for `"object"`) | query-specific JSON (see `commands.py`), always plain JSON, plus `"notes": [str]` |
-| `render` | `view` (int or null; the request's views and those of the running turn's amendments), `camera` (`{location: [x,y,z], look_at: [x,y,z], lens_mm: float}` or null), `mode` (`"shaded"`, `"wireframe"`, `"matcap"`, `"overlay"`), `size` (int, default from settings, 16..1024) | `{"path": str, "strokes_path": str \| null, "width": int, "height": int, "ms": float, "notes": [str]}` |
+| `render` | `view` (int or null; the request's views and those of the running turn's amendments), `camera` (`{location: [x,y,z], look_at: [x,y,z], lens_mm: float}` or null), `mode` (`"shaded"`, `"wireframe"`, `"matcap"`, `"overlay"`), `size` (int, default from settings, 64..1024) | `{"path": str, "strokes_path": str \| null, "width": int, "height": int, "ms": float, "notes": [str]}` |
 | `checkpoint` | `label` | `{"checkpoint_id": str, "label": str, "restorable": true, "objects": [names], "notes": [str]}` — snapshots the turn's targets plus the objects it created to `nodes/<turn>/checkpoints/c<k>.blend`; ids `c1`, `c2`, … start again each turn; `bad_request` outside a turn |
 | `restore_checkpoint` | `checkpoint_id` | `{"restored": [object names], "removed": [object names], "notes": [str]}` — puts the checkpoint back and removes the objects the agent made after it; `not_found` for an id not taken this turn, `bad_request` outside a turn |
 | `ask` | `question`, `choices` (list of str, may be empty) | `{"answer": str, "notes": [str]}` — the result is sent when the user answers; `notes` carries any note that came up during the pause. In background Blender (nobody to answer) it returns at once with `{"answer": "", "unattended": true}` |
@@ -731,7 +735,8 @@ class Runner(Protocol):
     async def submit(self, turn_id: str, bundle_dir: str, prompt: str,
                      context: tuple[str, ...] = (), model: str | None = None,
                      effort: str | None = None) -> None
-    async def amend(self, turn_id: str, text: str, bundle_dir: str | None) -> None
+    async def amend(self, turn_id: str, text: str, bundle_dir: str | None,
+                    number: int | None) -> None
     async def interrupt(self, turn_id: str) -> None
     async def close(self) -> None
 ```
@@ -883,12 +888,12 @@ turn, pending notes).
 
 | full name | server / tool | input schema | behaviour |
 |---|---|---|---|
-| `mcp__blender__exec` | blender / `exec` | `{code: str, label: str}` | bridge `exec`; text = stdout, error, diff, notes |
+| `mcp__blender__exec` | blender / `exec` | `{code: str, label?: str}` | bridge `exec`; text = stdout, error, diff, notes |
 | `mcp__blender__inspect` | blender / `inspect` | `{query: str, name?: str}` | bridge `inspect`; JSON text |
-| `mcp__blender__render` | blender / `render` | `{mode: str, view?: int, camera?: object, size?: int}` | bridge `render`; reads the PNG(s) and returns `{"type": "image", "data": <base64>, "mimeType": "image/png"}` blocks plus a text caption |
+| `mcp__blender__render` | blender / `render` | `{mode: str, view?: int, camera?: object, size?: int}` | bridge `render`; reads the PNG and returns one `{"type": "image", "data": <base64>, "mimeType": "image/png"}` block plus a text caption |
 | `mcp__blender__checkpoint` | blender / `checkpoint` | `{label: str}` | bridge `checkpoint` |
 | `mcp__blender__restore_checkpoint` | blender / `restore_checkpoint` | `{checkpoint_id: str}` | bridge `restore_checkpoint` |
-| `mcp__whittle__request` | whittle / `request` | `{amend?: int}` | reads the bundle **from disk** (no bridge call): request.json + strokes.json as text, each view's `overlay.png` as an image |
+| `mcp__whittle__request` | whittle / `request` | `{amend?: int}` | reads the bundle **from disk** (no bridge call): request.json + strokes.json as text, each view's `overlay.png` and any reference images as images |
 | `mcp__whittle__ask` | whittle / `ask` | `{question: str, choices?: [str]}` | bridge `ask` with no timeout; emits `status waiting_user` |
 
 Input schemas are full JSON Schema dicts (`{"type": "object", "properties": …,
@@ -1091,7 +1096,7 @@ ghost) and `addon/snapshot.py`, on top of `formats.SessionDir`.
   `undo_post`/`redo_post` handler (`history.sync_from_scene`) copies it back into
   `session.json`'s `current`. An empty mirror (a scene from before the first turn)
   means the root; a node the tree lacks changes nothing and logs a warning. The same
-  handler, `addon._after_undo`, also runs `history.release_folded_strokes` (§5) and
+  handler, `addon._after_undo`, also runs `history.release_folded_strokes` (§4) and
   `transcript.after_undo`, which drops a transcript Text an undo step brought back when its
   chat is gone: undo steps hold the Text, but chats are never undone.
 - **File load**: restores write `session.json` at once, but the mirror reaches disk only
@@ -1216,8 +1221,10 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
   and storing a new view (or clearing them) drops it. `prune_views` keeps the current
   view.
 - **View tagging**: curve-domain INT attribute `whittle_view` on each drawing. While a
-  sketch session is active, a 0.25 s timer (`SketchSession.poll`) looks for strokes
-  with view 0; when there are some it builds a candidate view from the active viewport,
+  sketch session is active, a `depsgraph_update_post` handler looks for strokes with view 0
+  as soon as the draw tool adds one, before the user can orbit away, and a 0.25 s timer
+  (`SketchSession.poll`) does the same as a fallback for strokes added without an update.
+  When there are some it builds a candidate view from the active viewport,
   stores it if it is substantially different from the current view (or there is none),
   and tags the untagged strokes with the current view. Tagging keys on `view == 0`, never
   on stroke counts or order, so draw-on-back insertion and erasing are harmless.
@@ -1250,7 +1257,7 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
   Inner Selected, read at each draw, opaque), and hides the marker of the view the viewport is at (`views.same_place`:
   within 1° and 1 % of the view distance). The gizmo map handles events before the
   Draw tool's keymap, so a click on a marker snaps instead of starting a stroke.
-- **Active viewport**: a timer has no context, so the watcher picks the 3D viewport
+- **Active viewport**: neither the handler nor the timer has a viewport in its context, so the watcher picks the 3D viewport
   region whose view matrix changed most recently across polls, or the largest one when
   none has changed. With one viewport this is exact; with several, a stroke drawn in a
   still viewport just after orbiting another can be tagged with the wrong view.
@@ -1398,8 +1405,9 @@ snapshot uses; a restore replaces the ones of those names the file has).
 `{"v": 1, "type": "local", "name": …, "data": …}`: `submit` (node, prompt, bundle_dir,
 targets, parent, context — the first line of each node), `amend` (amend, text, bundle_dir, strokes),
 `amend_returned` (amend, reason), `answer` (question, answer), `interrupt` (mode
-`keep` | `restore`), `restored` (objects), `target_edited` (edits: [{name, kind}]) and
-`warning` (text).
+`keep` | `restore`), `restored` (objects) and `warning` (text). An older session can also
+hold `target_edited` (edits: [{name, kind}]), which the transcript text still reads and
+nothing writes.
 
 ### Request bundle
 
@@ -1493,7 +1501,8 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
   The validator caps each permission text at 64 characters, hence the short `files` text.
   plus `[build] paths_exclude_pattern = ["__pycache__/", "/.git/", "/*.zip"]`.
 - Build: `./build.sh [OUT]` checks that `whittle/requirements.lock` is byte-identical to
-  `agent_env/requirements.lock` (it never copies it: a difference is reported), runs
+  `agent_env/requirements.lock` and `whittle/LICENSE` to `LICENSE` (it never copies them: a
+  difference is reported), runs
   `blender --command extension validate whittle`, then `extension build --source-dir whittle
   --output-dir OUT` (default `build/`, gitignored), giving `whittle-<version>.zip`.
 
@@ -1548,7 +1557,7 @@ scene camera's, and `width`/`height` are its render resolution × percentage (§
   folder, no marker. `on_finish` runs once at the end.
 - **Guard** (`setup.begin`): refuses, with a message for the user, when a setup is
   already running, a turn is running or waiting (`TurnController.busy`), `venv.compatible()`
-  objects (Python 3.13 or 3.14, `venv.PYTHONS`, on Linux x86_64, Windows AMD64 or macOS arm64, `venv.SUPPORTED`: the
+  objects (Python 3.13 or 3.14, `venv.PYTHONS`, on Linux x86_64 or arm64, Windows AMD64 or macOS arm64, `venv.SUPPORTED`: the
   lock has a wheel for those of every pin that applies there; an Intel Mac gets its own message naming
   `cryptography`), Blender's Python
   has no `ensurepip`, the folder is `foreign`, the venv is `ready` and this is not a
@@ -1680,7 +1689,7 @@ Details settled while building the agent and bridge, beyond the sections above.
   folder, since the agent runs in the session folder. A busy controller is always kept. An idle one with another
   fake script is closed and replaced. An idle one whose agent was started with other
   launch settings (`TurnController.launch_settings()`: the Python, fake script, a
-  digest of the API key and the session settings with the style guide's text, recorded at
+  digest of the API key, the usage-data choice and the session settings with the style guide's text, recorded at
   `start()`; `launch_changed`) has its agent stopped, so the next run starts a new
   process with the new settings and resumes the conversation from the history.
 - **`whittle.view3d_override()`** raises in background Blender: the startup screen's
@@ -1706,8 +1715,8 @@ never writes Blender data.
 - **`WHITTLE_PT_main`**: no label of its own; the header's left side is the current
   chat's title opening the chat menu (`WHITTLE_PT_chats`, §14), its right side the
   agent indicator
-  (an icon-only popover button for `WHITTLE_PT_agent`: state, model, session folder,
-  Start/Stop Agent, Preferences). The body, top to bottom: an attention box only when
+  (an icon-only popover button for `WHITTLE_PT_agent`: state, model, effort, the file
+  storing the chats, For This File, Start/Stop Agent, Preferences). The body, top to bottom: an attention box only when
   the user must act (environment missing or broken → **Set Up…**, invoked with its
   confirmation; a setup running → progress and Cancel; a crashed or failed agent →
   **Restart**; no API key, or `TurnController.key_problem` → Preferences and Get a Key), the target line, the
@@ -1752,7 +1761,7 @@ never writes Blender data.
     turn, or **Edit** (`whittle.history_branch`) for a `too_large` one (`ui.draw_failure`).
     A tool error the agent recovered from is never red.
   - Older turns are one closed `layout.panel(f"whittle_turn_{node}")` each, headed by
-    the prompt; past six, the oldest go into "N earlier turns".
+    the prompt; past three, the oldest go into "N earlier turns".
   - When the current node has children, "N later turns" with **Return to Latest**
     (`whittle.branch_switch` to the newest leaf).
   - The running turn ends with its phase ("Starting Claude…", "Working…" only while no
@@ -1863,7 +1872,7 @@ first turn then finds the root and leaves it alone. Labels: "Start", "Blank",
   a `Whittle Target` collection, a ground grid and a scale reference; that read as clutter.)
   `REFERENCE_PROP = "whittle_reference"` marks the reference image empties in `Whittle
   References`, and `targets.eligible()` refuses anything carrying it. The system prompt's
-  "Helpers in the scene" convention tells the agent never to edit them.
+  "Scene safety" convention tells the agent to leave them as they are.
 - **References** (`addon/refs.py`, `WhittleRef.pinned`): `run_sketch` remembers the
   reference paths it sent; a successful sketch turn calls `refs.clear_sent`, which removes
   the unpinned ones among them at the point the sent strokes are cleared. Failed and
@@ -2021,7 +2030,8 @@ rebuilt from the chat folders (`chat.json` and `session.json`).
 
 **Packed zip** (`chats.pack`): every file under the chat folder except `compare/`
 (a comparison's scratch), `nodes/*/checkpoints/` (only used during their turn; 0.83 of
-2.8 MB in the manual crate session) and partial files (`.tmp` names). `.png` and
+2.8 MB in the manual crate session), partial files (`.tmp` names) and anything with a
+dot at the start of a path part (`.system_prompt.md` among them). `.png` and
 `.blend` members are `ZIP_STORED` (already compressed: snapshots are written with
 `compress=True`), the rest `ZIP_DEFLATED`. A `.jsonl` that is being appended to is
 read up to its last newline. Member paths are relative and checked on unpack (no
@@ -2293,7 +2303,7 @@ the line, with or without chats, since every Blender on a saved file has a mark.
 `ui.md` §3.13 is the sidebar's side.
 
 **Which model a turn runs on.** `Entry.model` (also in `chat.json`, so a rebuilt index
-and the `.blend` keep it) is the chat's model; null follows the add-on's **Model**
+and the `.blend` keep it) is the chat's model; null follows the add-on's **Model for New Chats**
 preference (`models.default_model()`), which is what a new chat starts on. A turn's
 start, once the agent accepts it (`chats.turn_began(..., model)` → `Chats.began`), records the model it went with
 on a chat that had none, so a later change to the preference leaves chats with turns

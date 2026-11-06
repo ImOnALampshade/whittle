@@ -265,7 +265,7 @@ After **Edit & Resend**: the prompt is back in its box, and the button reads **B
 ## Sketch
 
 The **Sketch** button sits between the conversation and the prompt box. Press it to draw
-over the model. It stays pressed while you sketch, **Capture View** appears beside it. There
+over the model. It stays pressed while you sketch, and **Capture View** appears beside it. There
 is nothing to pick first: draw, then say in the prompt what your strokes mean.
 
 A **view** is a saved viewpoint. Each stroke belongs to the view it was drawn from, so Claude

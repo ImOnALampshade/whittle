@@ -298,8 +298,8 @@ in `tests/agent/test_tools.py` against a stub connection. See {doc}`Development 
 `string.Template` and appends a section on the recipes. The runner builds it once, when a
 session starts, because the prompt and tool list stay fixed for a session, and writes it to
 `.system_prompt.md` in the session folder for the CLI to read: a full-size style guide would not
-fit on a command line. A changed setting or style guide restarts the agent before the next turn;
-see {doc}`Settings <../guides/settings>`.
+fit on a command line. A changed setting, or a change in the style guide's text, restarts the agent before the next
+turn, and a changed path alone does not; see {doc}`Settings <../guides/settings>`.
 
 | Section | Sets |
 |---|---|

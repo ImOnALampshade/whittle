@@ -166,11 +166,13 @@ bundled CLI runs with a configuration folder of Whittle's own
 (`…/extensions/.user/user_default/whittle/claude/`), so it never sees your own Claude
 login, settings, hooks or MCP servers.
 
-**Cost**: every turn is billed to the key's account at the model's API price. A turn's
-cost shows at the end of the turn in the conversation (`· $0.0123`). The model, the
-**Self-check Rounds** and the **Render Size** are the main levers: Opus is the most
-capable and the most expensive per token, Haiku the cheapest, and each self-check round
-sends renders back to the model. Set spending limits in the Console.
+**Cost**: every turn is billed to the key's account at the model's API price. A finished
+turn's cost is the dim last line of its last tool group (open **Used N tools**:
+`3 steps · $0.0123`), and every turn's is in its transcript. The model, the **Self-check
+Rounds** and the **Render Size** are the main levers: Fable is the most capable and the most
+expensive per token, then Opus and Sonnet, with Haiku the cheapest, and each self-check round
+sends renders back to the model. A style guide's text goes with every request, so keep guides
+short. Set spending limits in the Console.
 
 **Model for New Chats** is the model a new chat starts on, `claude-opus-5-5` by default;
 it suggests the models last reported for your key and the ones Whittle knows, and takes any other model id. The **Defaults** box
@@ -186,8 +188,8 @@ can import others with a line holding only `@path`, so a project's base look is 
 once. `//` at the start of the path means the `.blend`'s folder. Empty leaves the look to
 Claude. Claude reads the guide as your preferences for that file, not as rules: a request's
 prompt or sketch still wins. Only `.md` and `.txt` files load, up to 128 KiB in all, since
-a `.blend` from someone else could name any file on your computer; the agent popover lists
-what is sent. A file that cannot load is a warning, and the turn still runs. Guides are read
+a `.blend` from someone else could name any file on your computer; the agent popover names
+what is sent, the first ten files and then how many more. A file that cannot load is a warning, and the turn still runs. Guides are read
 again before each turn, so an edit applies from the next one.
 [Style guides](docs/site/guides/settings.md#style-guides) has a worked example.
 
@@ -196,7 +198,8 @@ again before each turn, so an edit applies from the next one.
 Open the 3D viewport sidebar (N) → **Whittle**. It reads like a chat: what Claude is working
 on, the conversation, a sketch strip and a prompt box. The panel's header shows the
 current chat's title (click it for the chat menu, step 8); the icon beside it is the
-agent's state: click it for the model, the session folder and Start/Stop.
+agent's state: click it for that state, the chat's model and effort, this file's settings,
+Start/Stop and the Preferences.
 
 1. **Target**: with **Auto** on (the default) Claude works on whatever is selected (or the
    active object); with nothing at all it makes new objects. Turn Auto off to pick targets
@@ -217,8 +220,9 @@ agent's state: click it for the model, the session folder and Start/Stop.
    toggles Sketch mode, **Shift+Alt+V** captures a view and **Shift+Alt+Enter** sends (and, while Claude works, amends the turn
    with what you typed or drew since). Rebind them in Preferences → Keymap
    (3D View → 3D View (Global)).
-4. **Describe**: type a prompt (Shift+Enter adds a line); 📎 adds reference images. Pin a reference to send it with
-   every request; its ⋯ menu places it in the scene as a half-transparent image empty.
+4. **Describe**: type a prompt (Shift+Enter adds a line); the image button beside the prompt
+   box adds reference images. Click a reference's chip to pin it, so it goes with every
+   request, or to place it in the scene as a half-transparent image empty.
    **Shift+Alt+C** from anywhere, in any mode, opens the sidebar and a prompt field under
    the pointer, ready to type with no mouse: Enter sends, Esc closes. While a turn runs it
    amends the turn, and while Claude asks it answers. Rebind it in Preferences → Keymap
@@ -233,9 +237,9 @@ agent's state: click it for the model, the session folder and Start/Stop.
 6. **Send** (Enter, or the Send button), then watch the turn. While it works, type into the
    field or draw more strokes and press Enter, Shift+Alt+Enter or **Amend**,
    answer Claude's questions, or **Stop ▾** (keep the changes or undo the turn).
-7. **History** lives on the turns: ✎ edits and resends a turn as a new branch, ‹ 1/2 ›
-   switches between branches, and ⋯ goes back to a turn, compares it, shows a ghost or opens
-   its render and transcript. The 🕘 button beside Send shows the whole tree.
+7. **History** lives on the turns: each turn's ⋮ menu has Edit & Resend (a new branch), Go
+   Back, Compare, Ghost, Open Render and Open Transcript, and ‹ 1/2 › switches between
+   branches. The 🕘 button beside Send shows the whole tree.
 8. **Chats**: the title in the header opens the chat menu. **New Chat** starts an empty
    conversation with a fresh Claude session and its own history, from the scene as it
    is. Clicking an earlier chat goes back to its conversation and Claude session; the
@@ -284,7 +288,11 @@ environment sets that variable. What a turn sends:
 - what Claude looks at while it works: scene information it asks for (object names,
   transforms, mesh statistics, materials, modifiers, node groups), the output and errors
   of the Python it runs, and the self-check renders it makes of the target;
-- the text of the style guide, if the file has one: every file the agent popover lists;
+- details of the request: the target's object names, this file's triangle budget and
+  self-check rounds, the file names of your references, and folder paths on your computer,
+  which can include your user name;
+- the text of the style guide, if the file has one: every file it loads, of which the agent
+  popover names the first ten and counts the rest;
 - Whittle's system prompt and recipe skills, and the conversation so far.
 
 Anthropic's handling of API data is set out in its
@@ -300,12 +308,14 @@ also kept locally, in the chat cache and in the `.blend` when you save it, so a 
   read and write your files, start programs and reach the network. That is what lets it
   model, and it is also why what it reads matters.
 - **Be careful with files you did not make.** Claude reads the scene (object, material
-  and collection names), your reference images and, when you continue a chat, that chat's
-  whole conversation. A `.blend` from someone else can carry chats too, and continuing
+  and collection names), your reference images, the style guide and, when you continue a
+  chat, that chat's whole conversation. A `.blend` from someone else can carry chats too, and continuing
   one replays its conversation to Claude as if it were its own. Text planted in any of
   these could try to steer Claude. That is why a chat made on another machine asks
   before it sends anything (see Use): start a **New Chat** on a file from elsewhere
   rather than continuing its chats, and do not run Whittle on files you do not trust.
+  Check **Style Notes** in the agent popover first, with **Read Now** if it offers it: the
+  `.blend` stores that path, and what it loads is sent with your turns.
 - Blender's **Auto Run Python Scripts** setting does not cover Whittle: it only stops
   scripts stored in a file. Nothing Whittle stores in a file runs code by itself.
 - Links in Claude's replies open only `http`, `https` and `mailto` addresses.

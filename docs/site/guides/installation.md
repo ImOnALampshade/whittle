@@ -8,8 +8,9 @@ covers both parts, then updating and removing them. When you are done, go on to
 
 ## What you need
 
-- Blender 5.2 or later, whose Python is 3.13 or 3.14. blender.org's builds bundle 3.13. See
-  [Platforms](#platforms) for the systems it runs on.
+- Blender 5.2, whose Python is 3.13 or 3.14. blender.org's builds bundle 3.13. A later Blender
+  may install, but it is untested, and it needs the same Python. See [Platforms](#platforms)
+  for the systems it runs on.
 - An internet connection for setup, and about 320 MB of disk space for the agent environment.
   The largest download is about 114 MB.
 - An {doc}`Anthropic API key <api-key>`, before your first turn.

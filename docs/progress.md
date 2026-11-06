@@ -154,7 +154,7 @@ watch a turn, steer it and stop it from the sidebar.
     of the session's running total.
   - The fake agent gained `wait_amend`, `read_amend` and `after_amend`, and its sleep
     is cut short by an interrupt.
-  - The system prompt has a "Mid-turn messages" section.
+  - The system prompt has a "Steering and context" section.
 
 **History** (design §6, §9 item 4). Every turn leaves a node in a tree the user can
 restore, branch from and compare against, and each branch has its own SDK conversation.
@@ -275,12 +275,12 @@ session can start from the scene, from nothing, from a primitive or from an asse
   when it is `ready`; a stale or broken one is the `needs_setup` reason, and the main
   panel then shows a setup box instead of Restart Agent. Finishing a setup clears
   `needs_setup`.
-- `addon/prefs.py`: four boxes. Claude (the API key, where the key in use comes from on
-  a row of its own so it is never cut off, a Get an API Key link under it, the model for new chats, the Powered by Claude line),
+- `addon/prefs.py`: five boxes. Claude (the API key, where the key in use comes from on
+  a row of its own so it is never cut off, a Get an API Key link under it, the model for new chats, Send Claude CLI usage data, the Powered by Claude line),
   Agent Environment (folder, status on rows of its own, wrapped to the window and a long
   path broken after a folder, Install / Reinstall / Cancel, the setup log),
   Defaults (triangle budget, self-check rounds, render size, style notes, with what the
-  guide sends under its field) and Development (agent Python). Every default comes from
+  guide sends under its field), Files (Save Chats in the .blend) and Development (agent Python). Every default comes from
   `DEFAULTS`; the style notes are empty, which leaves the look to the agent.
 - **Per-file settings** (design §10 guardrails, ui.md §3.1): `scene.whittle.poly_budget`,
   `self_check_rounds`, `render_size` and `style_file` override
@@ -343,8 +343,8 @@ session can start from the scene, from nothing, from a primitive or from an asse
   part of the scene the user starts from.
   Whittle's helpers carry `whittle_reference` and are never targets.
 - `request.json` gained an optional `target_collection`; the request tool tells the agent
-  "New objects go in collection '…'", and the system prompt has a "Helpers in the scene"
-  rule.
+  "New objects go in collection '…'", and the system prompt has a "Scene safety"
+  convention.
 - `addon/refs.py`: references can be pinned (`WhittleRef.pinned`); a successful sketch
   turn removes the unpinned references it sent. **Place** makes a half-transparent image
   empty from a reference, aligned front, right, top or to the view.
@@ -363,7 +363,7 @@ these are fixed, each with a regression test.
 
 - **Settings changes restart an idle agent**: `operators.controller()` compares what the
   running agent was started with (`TurnController.launch_settings()`: Python, fake script,
-  API key digest, model, session settings, the style guide's text among them) with the
+  API key digest, usage-data choice, session settings, the style guide's text among them) with the
   settings now. A changed fake script
   replaces the controller; anything else stops the idle agent, so the next run starts a
   fresh one and resumes the conversation from the history. A busy controller is never
@@ -434,10 +434,7 @@ shot in a GUI Blender without a person at the keyboard.
   item shows as hovered (a menu keeps its last hovered item lit when the pointer moves onto
   nothing, and lets go of it when the window loses focus; the popup stays open), and the
   window is shot again and cropped to what changed.
-- `tests/screens/scenarios.py`: 24 states (empty, start, prompt_typed, prompt_only_done,
-  sketching, streaming, conversation, branched, branch_edit, asking, interrupted,
-  error_turn, folded_failure, too_large, crashed, setup_needed, key_needed, comparing, manual_targets,
-  long_session, history_popover, turn_menu, references, developer), reached through
+- `tests/screens/scenarios.py`: 41 states (`tests/screens/catalog.py` lists them), reached through
   `operators.submit_sketch`, `branch_node`, `compare_node`, `interrupt`, `targets`,
   `sketch.start_session` and the controller's state, never through the layout, with fake
   agent scripts written per scenario. The fake agent's call step has `"delay"` so a call can
@@ -520,8 +517,8 @@ it serves, and red is kept for real failures.
 - One panel, `WHITTLE_PT_main`; the Start, Sketch, Request, Activity and History
   sub-panels are gone. Everything is said once: a running turn's progress is in the
   conversation only (the header icon is an hourglass only while the agent starts or
-  stops outside a turn, else a gear), a draft only in its field. The header icon opens `WHITTLE_PT_agent` (state, why it stopped, model, session
-  folder, Start/Stop, Preferences). A box appears at the top only when the user must
+  stops outside a turn, else a gear), a draft only in its field. The header icon opens `WHITTLE_PT_agent` (state, why it stopped, model, effort, the
+  Chats line, For This File, Start/Stop, Preferences). A box appears at the top only when the user must
   act, and says it once: set up the environment (neutral, red only after a failed
   setup; Send is disabled meanwhile), a crash (one red line and **Restart and Retry**,
   which resends the turn the crash ended; that turn shows a dim "Interrupted"), a
@@ -699,7 +696,7 @@ neither side matched.
 
 The live tests (`tests/blender/test_live.py`) run Blender with `--online-mode` and start
 the real agent from `.venv/bin/python` on `claude-haiku-5-5`, with a $0.10 cap per
-test (about $0.003 in all). They need `ANTHROPIC_API_KEY` in the environment (billed to
+test (about $0.01 in all). They need `ANTHROPIC_API_KEY` in the environment (billed to
 that key) and are skipped without it.
 - The smoke test checks that `print(2 + 2)` reached Blender and printed `4`.
 - The amend test sends an amendment right after `turn_started` and checks it was
@@ -895,8 +892,6 @@ them at each save. Nothing is written beside the `.blend`.
     a button is drawn. Popup menus remember their last item, so keyboard navigation in
     them is not used either, except the Asset Browser's context menu, whose last entry is
     Whittle's.
-  - The add-on is registered from the repository, not installed as an extension, so its
-    preferences (and the settings restart they cause) are left to the tests and a person.
 - **Screenshot harness**: the images are reviewed by eye, not diffed. Sketch strokes in the
   `sketching` scenario come from the data API (the crate fixture's strokes), not the draw
   tool. Shots are at UI scale 1 and the factory theme, with region overlap and tooltips off
@@ -913,7 +908,7 @@ them at each save. Nothing is written beside the `.blend`.
   - Text is measured with font 0 at the UI style's widget size times the UI scale,
     checked in the screenshots at 280 and 448 px and UI scale 1. A custom interface
     font or another scale may measure slightly off; Blender then shows its own `...`.
-  - Collapsed turns, tool groups and "More" are layout panels: their open state is kept
+  - Collapsed turns and tool groups are layout panels: their open state is kept
     per region by Blender and cannot be set from Python, so the screenshots show them
     closed. The view list uses a window-manager property for that reason.
   - The popover and menu screenshots open them with `wm.call_panel` and the menu operator,
@@ -1066,10 +1061,12 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     says how big they are, nothing is sent, the prompt and chips stay, and the next turn takes
     the same number. With `too_large.json`, Send: the turn ends with its reason in red and
     **Edit** in Retry's place; Edit brings the request back to change.
-15. **A style guide across files**: point two saved `.blend` files at guides that import one
+15. **A style guide across files** (real agent only: the fake agent writes no
+    `.system_prompt.md`): point two saved `.blend` files at guides that import one
     base file (`style_notes_picker` covers picking a file, one missing import, and Read Now after
     reopening). Both list the base under Style Notes. Edit the base and send a turn in each: the agent restarts
-    first, and `.system_prompt.md` in the session folder holds the edit. Clear the field: it
-    says no guide is set. In an unsaved file, a `//` path warns and a turn still runs.
+    first, and `.system_prompt.md` in the session folder (`<user dir>/cache/<file id>/chats/<chat id>/`)
+    holds the edit. Clear the field and send: nothing shows under the field, and
+    `.system_prompt.md` then says no guide is set. In an unsaved file, a `//` path warns and a turn still runs.
     Save As into another folder through the file browser: the field shows the rewritten path
     and the guide stays listed, and Ctrl+Z and Ctrl+Shift+Z across it leave the guide listed. A `.blend` and guides shared with a Windows machine read there too.

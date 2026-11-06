@@ -120,8 +120,8 @@ Only turns are billed. Starting the agent lists the models your key can use, whi
 tokens, and an idle agent costs nothing.
 
 A turn costs what its model charges for everything it reads and writes: your prompt, the
-sketch and references, the conversation so far, Claude's thinking and the renders it looks
-at. So it depends on the request, and Whittle can't tell you the price before you send.
+sketch and references, the [style guide](settings.md#style-guides), the conversation so far,
+Claude's thinking and the renders it looks at. So it depends on the request, and Whittle can't tell you the price before you send.
 Anthropic's [pricing page](https://platform.claude.com/docs/en/about-claude/pricing) has the
 price per token. The surest guide is to run one turn of the kind you plan to do and read its
 cost.
@@ -161,6 +161,9 @@ less per turn:
   once other views have strokes. See {doc}`Sketching <sketching>`.
 - **Unpin references you're done with.** A pinned image goes out with every request. See
   {doc}`Reference images <references>`.
+- **Keep style guides short.** A guide's text, up to 128 KiB, goes with every request of
+  every turn. A changed guide also means the next turn reads everything without the
+  [prompt cache](models.md)'s discount. See [Style guides](settings.md#style-guides).
 - **Start a new chat for unrelated work.** Each turn carries its chat's conversation, so
   a long chat costs more per turn. See {doc}`Chats <chats>`.
 - **Stop a turn that has gone wrong**, rather than letting it finish, or amend it to change

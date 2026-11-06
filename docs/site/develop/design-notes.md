@@ -48,13 +48,13 @@ the history), the sketching model, the agent's shape, history, start points and 
 phases. Read it for intent, and treat its details as history. A banner at the top lists what
 has since gone: the target lock (a warning whenever the user touched the target during a
 turn), the `<name>.whittle/` folder beside the `.blend`, the Blank start point's ground grid
-and scale reference, and Blender 4.2. Its §10 lists the open questions that `decisions.md`
+and scale reference, stroke types, and Blender 4.2. Its §10 lists the open questions that `decisions.md`
 resolves, and the first five areas in `progress.md` still cite its sections and build phases.
 
 ### decisions.md
 
 Short entries saying what was chosen and why, grouped as Environment, Agent process,
-Behaviour, Shortcut, Sketch keys and view markers, and Chats. This is the place for the
+Behaviour, Shortcut, Sketching, Sketch keys and view markers, Chats, and Continuous integration. This is the place for the
 reasons the code cannot show: why there are no Intel Macs (a pinned dependency has no wheel
 for them), why the target lock was removed (it fired far too often: even changing the
 viewport's shading counted), why Shift+Alt+C opens a popup instead of the sidebar's box
@@ -68,7 +68,7 @@ is the way in; this is the full version. Its sections:
 
 | § | Covers |
 |---|---|
-| 1 | Repository layout, the system prompt, the recipe skills |
+| 1 | Repository layout, the system prompt, style guides, the recipe skills |
 | 2 | Processes and lifecycle, including authentication |
 | 3 | The bridge protocol |
 | 4 | The main-thread command queue on the Blender side, `exec` and render |
@@ -147,8 +147,9 @@ The state of the project, in four parts:
 
 ## Keeping them current
 
-Update `README.md`, `architecture.md`, `ui.md`, `decisions.md` and `progress.md` in the same
-change as the code, and [`AGENTS.md`] when what it says changes. If `AGENTS.md` and a doc
+Update `README.md`, `architecture.md`, `ui.md`, `decisions.md`, `progress.md` and the site's
+pages in `docs/site/` in the same change as the code, and [`AGENTS.md`] when what it says
+changes. If `AGENTS.md` and a doc
 disagree, the doc wins, and `AGENTS.md` is the one to fix. For what a new tool, skill or
 preference touches, see [Extending Whittle](extending.md). A new key goes in
 `whittle/addon/keys.py`, with a check in `tests/blender/test_keys.py` and a row in `ui.md`, the

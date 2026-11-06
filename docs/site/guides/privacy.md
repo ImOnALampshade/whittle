@@ -25,7 +25,7 @@ sends:
   self-check rounds, the file names of your references, and folder paths on your computer,
   which can include your user name;
 - the text of the [style guide](settings.md#style-guides), if the file has one: every file
-  listed under **Style Notes** in the agent popover;
+  it loads. **Style Notes** in the agent popover names the first ten and counts the rest;
 - Whittle's instructions to Claude, and the conversation so far.
 
 The target is the objects you pick for Claude to change: see
@@ -75,7 +75,9 @@ in that process's environment. Whittle writes it nowhere else, so it is never in
 **Your chats** are in two places: inside the `.blend` when you save it, and in a hidden
 copy in Whittle's user folder while you work. Nothing is written beside your file. A chat
 holds your prompts, Claude's replies and the code it ran, your reference images, its
-renders, and snapshots of the objects it worked on.
+renders, and snapshots of the objects it worked on. Each turn's stored request also records
+the path of the style guide in use, one from **Defaults** included, so that path travels with
+the chat and stays there after you clear the field. Deleting the chat removes it.
 
 **Whittle's user folder** is `extensions/.user/user_default/whittle/` in Blender's
 configuration folder:
@@ -91,7 +93,7 @@ If you installed Whittle into another extension repository, that repository's na
 
 | In the user folder | What it holds | How long |
 |---|---|---|
-| `cache/` | The working copy of each file's chats | Deleted once unused for 30 days, never for the open file |
+| `cache/` | The working copy of each file's chats. Each chat also has a copy of its system prompt with the style guide's text in it, which stays on this computer and is not packed into the `.blend` | Deleted once unused for 30 days, never for the open file |
 | `claude/` | The bundled program's own state and transcripts | A chat's go when the chat is deleted or its cache expires |
 | `agents/` | On Windows only, a record of each running agent: its process number and start time | Removed when the agent exits, or by a later start if it was killed |
 | `logs/` | Agent logs, and a log of each setup | The last ten agent logs are kept |
@@ -205,8 +207,10 @@ With a file from someone else:
 - Start a **New Chat** rather than pressing **Continue**. See [Chats](chats.md).
 - A new chat still reads the scene, so don't run Whittle at all on a file you don't trust.
 - Check **Style Notes** in the agent popover before you send, pressing **Read Now** to list
-  the files. The `.blend` stores that path, and the files listed under it are sent with your
-  turns. Only `.md` and `.txt` files load, but a private note of that kind could. See
+  the files. The `.blend` stores that path, and what it loads is sent with your turns. Only
+  `.md` and `.txt` files load, but a private note of that kind could. The list names only the
+  first ten files: **and N more files** means more is sent than you can see, so in a file you
+  don't trust, clear **Style Notes** rather than send. See
   [Style guides](settings.md#style-guides).
 
 Links in Claude's replies open only `http`, `https` and `mailto` addresses. Any other link

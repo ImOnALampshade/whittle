@@ -129,7 +129,9 @@ def load_guide(path: str) -> Guide:
     its imports in place of their @ lines. Import paths are relative to the
     file importing them, and portable_path reads them. A file reached twice counts the first time only,
     which also ends import loops. Nothing here fails: what cannot load is a
-    problem in the result, and the rest of the guide still counts."""
+    problem in the result, and the rest of the guide still counts, up to
+    MAX_GUIDE_BYTES. There the walk stops: what came before stays, and the
+    file over the limit and all that follows are left out."""
     out: list[str] = []
     files: list[str] = []
     problems: list[str] = []

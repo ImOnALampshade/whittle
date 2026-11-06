@@ -14,7 +14,7 @@ This page is a map of the package, then the generated listing. The
 **Settings and files**
 
 - {py:mod}`~whittle.addon.prefs`: the add-on preferences, with defaults when the add-on is not registered, and the last read of each style guide.
-- {py:mod}`~whittle.addon.props`: per-scene state, `scene.whittle`.
+- {py:mod}`~whittle.addon.props`: per-scene state, `scene.whittle`, and keeping a file's `//` style guide path naming the same guide through Save As and undo.
 - {py:mod}`~whittle.addon.paths`: where Whittle keeps its files and which Python runs the agent.
 - {py:mod}`~whittle.addon.setup`: sets up the agent's private venv, and holds the operators behind the preferences' buttons.
 
@@ -89,16 +89,18 @@ way `bridge` speaks {py:mod}`whittle.protocol`, `bundle` writes through
 The imports at the top of these modules have no cycle. They stack like this, foundations first:
 
 ```text
-bridge  prefs  views  stream  enter  keys  editors  previews  meshcheck    import no add-on module
+bridge  prefs  views  stream  keys  editors  previews  meshcheck    import no add-on module
 paths  sketch  execution  conversation  transcript
 process  render  targets  chats  viewmarks
-bundle  refs  models  props
+bundle  refs  models
 snapshot
 commands  history
 compare
 turn
-operators  setup  autotarget
-start  shortcut
+setup  autotarget
+operators
+enter  start  shortcut
+props
 ui
 __init__
 ```
@@ -136,11 +138,13 @@ them out. They are all persistent, and each does little more than call into a mo
 | Blender handler | What runs |
 | --- | --- |
 | `load_pre`, `exit_pre` | End the sketch session, close the controller, `chats.release` |
-| `load_post` | Drop any comparison and [ghost](../guides/history.md#see-the-last-change-as-a-ghost) (the wireframe of the turn before), `chats.after_load`, then `history.sync_from_scene` |
+| `load_post` | `compare.reset`, `props.forget_style_moves`, drop any [ghost](../guides/history.md#see-the-last-change-as-a-ghost) (the wireframe of the turn before), `history.invalidate`, `chats.after_load`, `history.sync_from_scene`, then `prefs.read_own_style_guide` |
 | `load_post_fail` | `chats.load_failed` |
-| `save_pre`, `save_post`, `save_post_fail` | `chats.before_save`, `chats.after_save`, `chats.save_failed` |
+| `save_pre` | `props.rebase_style_paths`, `transcript.keep_out_of_file`, `chats.before_save` |
+| `save_post` | `props.settle_style_paths`, `chats.after_save`, `prefs.refresh_style_guides` |
+| `save_post_fail` | `props.settle_style_paths`, `chats.save_failed` |
 | `undo_pre` | `TurnController.before_undo` |
-| `undo_post`, `redo_post` | `history.sync_from_scene`, `compare.forget`, `sketch.after_undo`, `TurnController.after_undo` |
+| `undo_post`, `redo_post` | `props.follow_style_paths`, `history.sync_from_scene`, `history.release_folded_strokes`, `compare.forget`, `sketch.after_undo`, `transcript.after_undo`, `TurnController.after_undo` |
 
 [Undo](../guides/undo.md) describes what the user sees of the undo handlers, and
 [Chats](../guides/chats.md) what the save and load ones keep.

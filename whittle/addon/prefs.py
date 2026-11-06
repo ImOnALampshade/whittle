@@ -375,8 +375,8 @@ def refresh_style_guides(scene=None) -> None:
 def read_own_style_guide() -> None:
     """The one read when a file opens: the preferences' path, which is the
     user's own. Opening a file is no act of the user's on what it stores, and
-    that path could name a network share, so the file's own is read at the
-    first Send or Read Now. A // path counts as the file's: the file decides
+    that path could name a network share, so the file's own is read at a
+    Send, a Read Now or a save. A // path counts as the file's: the file decides
     where it leads."""
     path = get().style_file
     if not path.strip().startswith("//"):
