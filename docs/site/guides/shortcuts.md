@@ -27,9 +27,10 @@ work on it, and *amending* adds to a turn that is still running.
 - While Claude asks a question it sends your answer, once you have typed one. With no
   answer typed, strokes drawn since the turn began amend the turn.
 - With nothing to send it does nothing.
-- It also does nothing while [comparing turns](history.md#compare-with-an-earlier-turn), or
-  in a [chat from another machine](chats.md#open-a-chat-made-on-another-machine) you
-  haven't continued. Hold the pointer over the dim Send button to see why.
+- It also does nothing while [comparing turns](history.md#compare-with-an-earlier-turn), in a
+  [chat from another machine](chats.md#open-a-chat-made-on-another-machine) you
+  haven't continued, or while a [style guide](settings.md#approving-a-guide) waits for your
+  answer. Hold the pointer over the dim Send button to see why.
 - If Claude has no API key, it shows an error saying what's missing.
 - If Claude isn't set up, the first press shows an error and the box offers the setup. After
   that it does nothing, as Send is dim, until it finds the environment: it looks again at each
@@ -51,7 +52,7 @@ The Ask Claude popup. A draft already in the field opens selected.
 
 | Key in the popup | What it does |
 |---|---|
-| **Enter** | Sends, as Enter in the sidebar's box does |
+| **Enter** | Sends, as Enter in the sidebar's box does. When Send can't, as in the cases [above](#the-keys), the hint still says Enter sends, but the popup only closes, and your text stays in the sidebar's box |
 | **Esc** | Closes the popup and leaves the field as it was |
 | **End** | Keeps a draft that opened selected, and puts the cursor after it, so you add to it |
 | Any other typing | Replaces a selected draft |

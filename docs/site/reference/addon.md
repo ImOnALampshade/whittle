@@ -13,8 +13,8 @@ This page is a map of the package, then the generated listing. The
 
 **Settings and files**
 
-- {py:mod}`~whittle.addon.prefs`: the add-on preferences, with defaults when the add-on is not registered, and the last read of each style guide.
-- {py:mod}`~whittle.addon.props`: per-scene state, `scene.whittle`, and keeping a file's `//` style guide path naming the same guide through Save As and undo.
+- {py:mod}`~whittle.addon.prefs`: the add-on preferences, with defaults when the add-on is not registered, the last read of each style guide, and which guides may be read.
+- {py:mod}`~whittle.addon.props`: per-scene state, `scene.whittle`, and keeping a file's `//` style guide path naming the same guide through a first save, Save As and undo.
 - {py:mod}`~whittle.addon.paths`: where Whittle keeps its files and which Python runs the agent.
 - {py:mod}`~whittle.addon.setup`: sets up the agent's private venv, and holds the operators behind the preferences' buttons.
 
@@ -138,7 +138,7 @@ them out. They are all persistent, and each does little more than call into a mo
 | Blender handler | What runs |
 | --- | --- |
 | `load_pre`, `exit_pre` | End the sketch session, close the controller, `chats.release` |
-| `load_post` | `compare.reset`, `props.forget_style_moves`, drop any [ghost](../guides/history.md#see-the-last-change-as-a-ghost) (the wireframe of the turn before), `history.invalidate`, `chats.after_load`, `history.sync_from_scene`, then `prefs.read_own_style_guide` |
+| `load_post` | `compare.reset`, `props.forget_style_moves`, `prefs.forget_approvals`, drop any [ghost](../guides/history.md#see-the-last-change-as-a-ghost) (the wireframe of the turn before), `history.invalidate`, `chats.after_load`, `history.sync_from_scene`, then `prefs.read_own_style_guide` |
 | `load_post_fail` | `chats.load_failed` |
 | `save_pre` | `props.rebase_style_paths`, `transcript.keep_out_of_file`, `chats.before_save` |
 | `save_post` | `props.settle_style_paths`, `chats.after_save`, `prefs.refresh_style_guides` |

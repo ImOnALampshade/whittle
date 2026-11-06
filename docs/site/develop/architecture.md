@@ -248,7 +248,9 @@ result  ---------------------------------> tool result  ----------->
 record the node, undo step
 ```
 
-1. **Send.** `TurnController.run_sketch` starts the agent if it has to, then writes the
+1. **Send.** `operators.refuse_send` raises while the chat waits for Continue or the style
+   guide for its approval, and every route that sends a turn comes through it first. Then
+   `TurnController.run_sketch` starts the agent if it has to, and writes the
    request bundle (prompt, strokes, views, references) into the next node's `request/`
    folder. It is written now, not when the agent is ready, so strokes drawn while the agent
    starts stay pending for a later turn.

@@ -49,9 +49,10 @@ The agent popover. Triangle Budget and Render Size follow the Preferences, so th
 ```
 
 A field with "(default)" after its name shows the value from the Preferences, so it always
-says what Claude will get. Typing sets a value for this file, even the same value. That
-includes an empty one: clear **Style Notes** and this file has no style guide, whatever the
-Preferences say.
+says what Claude will get. Typing a number sets it for this file, even the same number.
+**Style Notes** takes only a different path: confirm the one it already shows and it stays
+"(default)", so a later change to **Defaults** moves this file too. Empty counts as a value:
+clear **Style Notes** and this file has no style guide, whatever the Preferences say.
 
 To go back to the Preferences, press the reset button at the end of the field's line.
 
@@ -124,8 +125,12 @@ network share in it only means something on the machine it was written on.
 
 In a file that has never been saved, the file browser writes an absolute path, as there is no
 folder to count from. The first save turns it into a `//` path, in every scene that sets one
-under **For This File**, so it needn't stay that way. A **Save Copy** of such a file does this for the
+under **For This File**. A **Save Copy** of such a file does this for the
 copy only. It stays absolute only where no `//` path reaches, as onto another Windows drive.
+
+A `//` path travels only as far as the folders it goes through. A guide outside the repository
+becomes something like `//../../notes/crates.md`, which leads somewhere else on a clone, and
+nothing warns you, as the path is no longer absolute. Move the guide into the repository first.
 
 A path you set absolute in a file already saved is left alone, and **Style Notes** warns that it
 won't travel with the file:
@@ -147,10 +152,17 @@ since a `//` path would read that backslash as a slash. A **Save As** onto anoth
 drive also leaves an absolute path, as no `//` path reaches across drives.
 
 Moving a `.blend` in a file manager or with `git mv` fixes nothing, because Blender saves
-nothing: the path is now counted from the new folder, **Style Notes** warns that the guide was
-not found, and turns run without it until you pick it again. To move a `.blend` on its own,
-open it and use **Save As** instead. Moving a whole folder with its guides inside it is fine:
-the path between them stays the same.
+nothing: the path is now counted from the new folder, a place this computer has not approved.
+So the file opens with the [**Use this style guide?** box](#approving-a-guide), showing a path
+that leads nowhere, and **Send** is disabled. **Read Now** says the guide was not found. Pick
+the guide again under **For This File** rather than press **Use This Guide**, which would
+approve the dead path and leave you with turns that run without the guide. To move a `.blend`
+on its own, open it and use **Save As** instead.
+
+Moving or renaming a whole folder with its guides inside it keeps every `//` path working: the
+path between them stays the same. An approval is of where a guide is, though, so each guide
+asks once more from its new place, and **Send** is disabled in each file until you answer.
+That is expected: press **Use This Guide**.
 
 ### Set up a guide for a project
 
@@ -159,14 +171,20 @@ For a repository of `.blend` files that share a look:
 1. Put the guides in the repository, with the `.blend` you are setting up.
 2. Click the gear at the right of the panel's header. Under **For This File**, pick the guide
    with the icon at the end of **Style Notes**.
-3. Save the `.blend` in the repository, and check that the field starts with `//`. If it doesn't,
-   pick the guide again with **Relative Path** ticked in the file browser.
+3. Save the `.blend` in the repository, and check that the field starts with `//` and that its
+   `../` steps don't climb out of the repository. If it doesn't start with `//`, pick the guide
+   again with **Relative Path** ticked in the file browser.
 4. Commit the `.blend` and the guides.
 5. Repeat for each `.blend`, and for each scene in it. There is no way to set many at once,
    and a new `.blend` has no guide until you set one.
 
-On each other machine with a clone, the first file that names a guide asks about it once.
-[Approving a guide](#approving-a-guide) says how that works.
+On each other machine with a clone, two things ask. A file can show both boxes, one above the
+other, and **Send** waits for both:
+
+| Box | How often | What to do | What it changes |
+|---|---|---|---|
+| **Use this style guide?** | Once on each machine for each guide a `.blend` names directly | **Use This Guide**: see [Approving a guide](#approving-a-guide) | Nothing in the `.blend`, so `git` sees no change |
+| **Continue this chat?** | Once on each machine for each chat made on another one, so again for each new chat made there | **Continue**, or **New Chat**: see [Open a chat made on another machine](chats.md#open-a-chat-made-on-another-machine) | The chat records it, so the `.blend` differs at your next save, as it does after a turn |
 
 **Defaults** rarely fits a repository. A `//` path there counts from each open file's own
 folder, so it only works if every `.blend` sits at the same depth, and an absolute path only
@@ -188,9 +206,11 @@ A file naming a guide this computer has not approved.
 - **Read Now** lists the files it would send, and approves nothing. A file from outside the
   guide's folder comes first and in full, as does the guide itself if the path is a link that leads
   out of it.
-- **Go Without It** empties **Style Notes** for this file, so it sends no guide. Save the file to keep that;
-  Ctrl+Z brings the path back. A scene linked from another file can't keep it, as a file doesn't save
-  what it links: the box returns when you reopen, and Whittle says so.
+- **Go Without It** empties **Style Notes** for this file, so it sends no guide, and none from
+  **Defaults** either. Ctrl+Z brings the path back. This changes the file: any save keeps it, and
+  in a repository your next commit then takes the guide away from that file on every machine.
+  Without a save the box returns when you reopen. A scene linked from another file can't keep it,
+  as a file doesn't save what it links: the box returns when you reopen, and Whittle says so.
 
 ```{figure} ../images/guides-settings/guide-gate-read.png
 :alt: The same box after Read Now. Under It would send it lists /home/artist/notes/palette.md in full, then crates.md and base.md, then a warning that @props.md was not found.
@@ -214,18 +234,26 @@ Which never do:
 
 You approve a guide once on each computer, not once per file. The approval is kept with
 Whittle's own files, as the path the guide is at, and nothing is added to the `.blend`, so
-hundreds of `.blend` files sharing one guide ask once, and `git` sees no change. Clone the repository on another
+hundreds of `.blend` files sharing one guide ask once, and `git` sees no change. That is the
+guide's question only: a chat's **Continue** is saved with the chat, as
+[the table above](#set-up-a-guide-for-a-project) shows. Clone the repository on another
 machine and each guide asks once there. A second clone in another folder on the same machine is
-another path, so it asks once too.
+another path, so it asks once too, as does each guide after the folder moves or is renamed.
 
-Choosing a guide yourself counts as approving it: typing the path, or picking it, in **For
-This File** or **Defaults**. So does anything you run that changes the field, Claude's own Python
-included, as that can read your files anyway. Clicking into the field to read a long path and leaving it as it
-was doesn't count, and neither does pressing Enter there. A first save and Save As keep the approval, and never ask. A
+Changing the field to a guide yourself counts as approving it: typing the path, or picking it, in
+**For This File** or **Defaults**. So does anything you run that changes the field, Claude's own
+Python included, as that can read your files anyway. Leaving the text as it was doesn't count:
+clicking into the field to read a long path, pressing Enter there, or picking the file it already
+names. Use **Use This Guide** for those. A first save and Save As keep the approval, and never ask. A
 `//` path you typed before the first save and replaced by then isn't approved.
 
-Approving a guide also covers the files it imports, which is why **Read Now** lists them. The
-approval is of the path: later edits to the guide, a new import in it included, are not
+Approving a guide also covers what it imports when it is read, which is why **Read Now** lists
+those files. The files themselves aren't approved: one that a `.blend` names directly is a guide
+of its own and asks, however many approved guides import it. In the [example](#example) below,
+approving `reef-clans.md` doesn't stop `harbour_crane.blend` asking about `saltwrights.md`. So
+count what asks by the guides your `.blend` files name directly, not by the files in the tree.
+
+The approval is of the path: later edits to the guide, a new import in it included, are not
 asked about.
 
 ### Import other files

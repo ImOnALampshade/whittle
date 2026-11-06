@@ -187,15 +187,18 @@ A chat from another machine. The prompt typed below it stays there until you cho
 
 You have two choices:
 
-- **Continue**: click it in the box. The box goes, Send works, and you are not asked about this
-  chat again. The whole conversation goes to Claude with your next turn, so continue only chats
-  from files you trust.
+- **Continue**: click it in the box. The box goes, and you are not asked about this chat again.
+  Send works, unless the [**Use this style guide?** box](settings.md#approving-a-guide) is open
+  too: each needs its own answer. The whole conversation goes to Claude with your next turn, so
+  continue only chats from files you trust. The chat records this, so in a repository the
+  `.blend` differs at your next save.
 - **New Chat**: start fresh from the chat menu, with none of that conversation sent. This is the
   safer choice for a file from someone else. [Privacy and safety](privacy.md) explains why.
 
 Whittle tells chats apart by a random id it keeps for this install, which names no person or
 machine. If Whittle's user folder was reset, it gets a new id, so your own chats ask too. Chats
-from files saved before Whittle recorded this never ask.
+from files saved before Whittle recorded this never ask. For a repository on two machines, see
+[Set up a guide for a project](settings.md#set-up-a-guide-for-a-project) for what asks and how often.
 
 ## The same file open in another Blender
 

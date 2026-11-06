@@ -35,7 +35,7 @@ whittle/                          repo root
 │   │   ├── setup.py              the venv on the Blender side: checks, timer, install/cancel operators
 │   │   ├── start.py              start points (existing, blank, primitive, asset) and their helpers
 │   │   ├── refs.py               reference images: clearing sent ones, pinning, image empties
-│   │   ├── props.py              Scene PropertyGroup (scene.whittle); keeps a // style path on its guide through Save As and undo
+│   │   ├── props.py              Scene PropertyGroup (scene.whittle); keeps a // style path on its guide through a first save, Save As and undo
 │   │   ├── process.py            AgentProcess: spawn, handshake, crash detection, shutdown
 │   │   ├── bridge.py             Bridge: listening socket, framing, pending calls, tick()
 │   │   ├── commands.py           handlers for agent→Blender calls (exec, inspect, render, …)
@@ -203,17 +203,19 @@ the user. Why it works this way is in decisions.md, Behaviour.
   included, and the rest still counts.
 
 `prefs.read_style_guide(path)` adds what needs `bpy`: empty means no guide, a `//` path in
-an unsaved file is a problem, anything else goes through `portable_path` and
-`bpy.path.abspath`. A field's own
+an unsaved file is a problem, and anything else goes to `style.load_guide` through
+`prefs._resolved`, which counts a `//` path from the file's real folder with `style.resolved`,
+the same string an approval's key starts from. A field's own
 relative path that is not `//` is a problem too (`load_guide` takes an absolute path or `~`).
 Each read is kept in `prefs._guides`, by path as written and `.blend` path since a `//` path
 means another file in another folder, the last `MAX_GUIDES_KEPT` only. `prefs.style_guide` gives
 the last read and never touches the disk, so draw code can ask.
 
 The disk is read by the fields' update callbacks (the preference and the scene property),
-`whittle.file_setting_reset`, `whittle.style_guide_read` (**Read Now**), `save_post` (a `//`
+`whittle.file_setting_reset`, `whittle.style_guide_read` (**Read Now**),
+`whittle.style_guide_approve` (**Use This Guide**), `save_post` (a `//`
 path now means another folder) and `operators.controller`, through
-`prefs.refresh_style_guides`. The controller reads after its busy check, so a running turn
+`prefs.refresh_style_guides` but for Read Now, which calls `prefs.read_style_guide`. The controller reads after its busy check, so a running turn
 and its amendments keep their guide; an amend's bundle takes `prefs.session_values`, which
 never reads. `load_post` reads only the preferences' own path, and not a `//` one
 (`prefs.read_own_style_guide`): nothing the user did asked for what the file stores, and it

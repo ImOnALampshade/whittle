@@ -32,7 +32,7 @@ they stay testable without Blender, and just the add-on uses them.
 | `protocol` | Bridge messages: framing, envelopes, method, event and error names | add-on, agent | [The bridge](../develop/protocol.md#the-bridge) |
 | `formats` | Request bundles, the session folder, node ids, atomic JSON writes | add-on, agent | [Files on disk](../develop/protocol.md#files-on-disk) |
 | `models` | Reading model ids, the model menu's list, efforts and defaults | add-on, agent | [Models and effort](../guides/models.md) |
-| `style` | Reading a style guide with its `@` imports, its portable paths, and how the prompt words it | add-on, agent | [Style guides](../guides/settings.md#style-guides) |
+| `style` | Reading a style guide with its `@` imports, its portable paths, the record of approved guides, and how the prompt words it | add-on, agent | [Style guides](../guides/settings.md#style-guides) |
 | `tree` | The history tree in `session.json`, and which Agent SDK session a submit continues | add-on | [session.json](../develop/protocol.md#sessionjson), [History and branches](../guides/history.md) |
 | `chats` | A file's chats, their index, and packing a chat into a zip for the `.blend` | add-on | [The packed zip](../develop/protocol.md#the-packed-zip), [Chats](../guides/chats.md) |
 | `caches` | Each file's hidden cache folder, the file id, the install id | add-on | [Chat storage](../develop/protocol.md#chat-storage) |

@@ -252,7 +252,8 @@ itself.
    [Install the extension](#install-the-extension). Blender replaces the old version.
 3. Open **Preferences → Add-ons → Whittle**, and read the status.
 
-An update keeps your preferences, your API key, your chats and the agent environment.
+An update keeps your preferences, your API key, your chats, the style guides you approved and the
+agent environment.
 
 If the new version ships the same lock, the status stays **Ready**. If its lock is different, the
 environment no longer matches.
@@ -289,7 +290,7 @@ Uninstalling removes:
 
 - the extension;
 - Whittle's user folder: the environment if it is in the default place, the setup and agent logs,
-  and the chat cache;
+  the chat cache and the record of the style guides you approved;
 - Whittle's preferences, your API key among them.
 
 It leaves:
@@ -298,5 +299,6 @@ It leaves:
 - an **Environment Folder** you chose yourself. Delete that folder by hand.
 
 If you install Whittle again later, it counts as a new install, so chats in older files open
-with Send disabled until you continue them: see
-[Open a chat made on another machine](chats.md#open-a-chat-made-on-another-machine).
+with Send disabled until you continue them, and every style guide a file names asks again: see
+[Open a chat made on another machine](chats.md#open-a-chat-made-on-another-machine) and
+[Approving a guide](settings.md#approving-a-guide).

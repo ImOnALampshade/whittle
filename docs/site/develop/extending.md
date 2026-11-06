@@ -261,6 +261,21 @@ What the `asking` scenario above produces.
 The `sketching` scenario, another sidebar state: Capture View shows only while sketching.
 ```
 
+## A way to send a turn
+
+A new route to Claude, a key, a button or a script, has to respect the two questions a file can
+raise: a chat from another install and a style guide this install has not approved.
+
+1. Call `operators.refuse_send(context)` first, before anything changes, as `submit_sketch` and
+   `run_bundle` do. It raises the line to report.
+2. A control that can stay disabled goes through the `whittle.submit` poll, as `key_send` does,
+   or asks `ui.can_send` in draw code. Both check the same two gates.
+3. Read no guide yourself. `prefs.session_settings` gives no text for a held guide
+   (`prefs.held_guide`), and `prefs.refresh_style_guides` skips one, so a route that uses them
+   sends nothing unasked. The approvals are in the user folder's `guides.json`: see
+   [Protocol and file formats](protocol.md#guidesjson).
+4. Add the route to `tests/blender/test_guide_gate.py`, which walks every route that sends.
+
 ## A GUI check
 
 Background tests cannot reach some things: a real Ctrl+Z, the draw tool, a modal transform, a

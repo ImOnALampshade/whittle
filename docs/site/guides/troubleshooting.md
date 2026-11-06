@@ -278,13 +278,20 @@ or until you pick the file again.
 The box **Use this style guide?** over the prompt means this file, or a `//` path in your
 **Defaults**, leads to a guide this computer has not approved, and **Send** stays disabled until you answer. You will see it once for each guide on each
 computer: after a clone, in a file from someone else, or in a second clone in another folder,
-which is another path. It also appears when a guide or the `.blend` moves, since the path is what was approved.
+which is another path. It also appears when a file comes to name a place this computer has not
+approved: after you move a `.blend` outside Blender, move or rename the folder that holds it, or
+pull a path changed on another machine. If **Read Now** says the guide was not found, pick it
+again under **For This File** rather than approve the path.
 [Approving a guide](settings.md#approving-a-guide) says what each button does.
+
+A guide you moved on this computer doesn't ask, while the file still names its old place: that
+path stays approved, and **Style Notes** says `was not found`. Pick the guide again.
+
+**Enter** and **Shift+Alt+Enter** do nothing while the box is open, and your draft stays where it is.
 
 If it asks again for a guide you approved, on the same computer and at the same path, Whittle could not keep the
 approval: check that it can write to its [user folder](privacy.md). A warning says so when you approve; the approval
-then lasts until Blender closes. **Enter** and **Shift+Alt+Enter** do nothing while the
-box is open, and your draft stays where it is.
+then lasts until Blender closes. A user folder that was deleted or reset takes every approval with it.
 
 ## Send is dim
 

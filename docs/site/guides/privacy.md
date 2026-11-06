@@ -150,8 +150,8 @@ Four things to watch:
 4. On Windows, delete any `claude-resume-*` folders in the temporary folder.
 
 Whittle makes what it needs again. With its folder gone you will have to set up the agent
-environment again, and chats in your `.blend` files will count as made elsewhere and ask to
-be continued.
+environment again, chats in your `.blend` files will count as made elsewhere and ask to
+be continued, and every style guide will ask to be approved again.
 
 ## Claude runs Python as you
 

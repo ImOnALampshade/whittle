@@ -60,7 +60,7 @@ Whittle is young (0.1.0); expect rough edges.
   as a real Ctrl+Z during a turn, strokes drawn with the real draw tool, File → Recover
   and Whittle's preferences as an installed extension, run in `./gui_checks.sh` (GUI
   checks, below). What still needs a person, such as
-  tablet pressure and clicking the sidebar's own buttons, is the manual checklist in
+  tablet pressure and clicking most of the sidebar's own buttons, is the manual checklist in
   [docs/progress.md](docs/progress.md).
 
 ### Platforms
@@ -190,15 +190,16 @@ A style guide is a `.md` or `.txt` file saying how things should look: colours, 
 materials, mood, in your own words. Many `.blend` files can point at one guide, and a guide
 can import others with a line holding only `@path`, so a project's base look is written
 once. `//` at the start of the path means the `.blend`'s folder, and a file's first save
-turns a picked path into one where it can, so it works on a clone; a saved file's absolute
-path has a warning. Empty leaves the look to Claude. Claude reads the guide as your preferences for that file, not as rules: a request's
+turns a picked path into one where it can, which works on a clone if the guide is inside the
+repository; a saved file's absolute path has a warning. Empty leaves the look to Claude. Claude reads the guide as your preferences for that file, not as rules: a request's
 prompt or sketch still wins. Only `.md` and `.txt` files load, up to 128 KiB in all, since
 a `.blend` from someone else could name any file on your computer; the agent popover names
 what is sent, the first ten files and then how many more. For the same reason Send stays disabled
 for a guide this computer has not approved, under a box with **Use This Guide**, **Read Now**
 and **Go Without It**: you are asked once per guide on each computer, not once per file, and
 nothing is added to the `.blend`. Choosing a guide yourself counts as approving it, leaving the
-field as it was does not, and approving it covers what it imports. A file that cannot load is a warning, and the turn still runs. Guides are read
+field as it was does not, and approving it covers what it imports when it is read, though a
+file a `.blend` names directly asks for itself. A file that cannot load is a warning, and the turn still runs. Guides are read
 again before each turn, so an edit applies from the next one.
 [Style guides](docs/site/guides/settings.md#style-guides) has a worked example.
 
@@ -273,7 +274,8 @@ merge.
 
 A chat that was made on another machine (someone else's file, or your own from another
 computer) opens with a box asking **Continue this chat?**: Send stays disabled until you
-press **Continue**, and **New Chat** is there instead. You are asked once per
+press **Continue**, and **New Chat** is there instead. A style guide waiting for approval
+has a box of its own, and Send waits for both. You are asked once per
 chat; chats from files saved before Whittle recorded this never ask. The mark is a random
 id Whittle keeps for its install in its user folder (`install.json`); it names no person
 or machine.

@@ -441,7 +441,7 @@ shot in a GUI Blender without a person at the keyboard.
   item shows as hovered (a menu keeps its last hovered item lit when the pointer moves onto
   nothing, and lets go of it when the window loses focus; the popup stays open), and the
   window is shot again and cropped to what changed.
-- `tests/screens/scenarios.py`: 41 states (`tests/screens/catalog.py` lists them), reached through
+- `tests/screens/scenarios.py`: 45 states (`tests/screens/catalog.py` lists them), reached through
   `operators.submit_sketch`, `branch_node`, `compare_node`, `interrupt`, `targets`,
   `sketch.start_session` and the controller's state, never through the layout, with fake
   agent scripts written per scenario. The fake agent's call step has `"delay"` so a call can
@@ -782,8 +782,11 @@ them at each save. Nothing is written beside the `.blend`.
   CI's Blender bundles Python 3.13, so it can only exercise the cp313 wheel of 311; the
   cp314 wheel is not exercised by CI.
 - **Style guides**: a `.blend` moved outside Blender (a file manager, `git mv`) gets no
-  save, so its `//` Style Notes path is not rewritten: the guide then shows a not-found
-  warning and the turn runs. A Save As with Remap Relative off
+  save, so its `//` Style Notes path is not rewritten: that is a new key, so the box asks
+  about a path that leads nowhere, and Use This Guide there gives a not-found warning and
+  turns without the guide; picking it again is the way out. A guide outside the repository
+  picked before a first save becomes a `//` path that climbs out of it, which no warning
+  catches and which breaks on a clone. A Save As with Remap Relative off
   rewrites the path all the same, since the handlers cannot see that option. The file browser does not filter to `.md` and `.txt`, so another file
   can be picked and is then refused with a warning; a filter needs a custom operator. A file
   that would pass the 128 KiB cap ends the guide there, the rest of the files still open
@@ -922,9 +925,10 @@ them at each save. Nothing is written beside the `.blend`.
   - The draw tool places points short of a surface seen at a slant, along the line of
     sight (exact head-on; about 1 cm above a cube's top seen at 11° from 2.5 m, growing
     with distance and obliquity); the on-surface flag allows for it.
-  - The checks run the sidebar's operators as its buttons would (in the sidebar's region,
-    with an undo step), not by clicking the buttons: Blender has no Python API for where
-    a button is drawn. Popup menus remember their last item, so keyboard navigation in
+  - The checks mostly run the sidebar's operators as its buttons would (in the sidebar's
+    region, with an undo step), not by clicking the buttons: Blender has no Python API for
+    where a button is drawn. `guide_gate` does click Read Now and Use This Guide, finding each
+    by hovering down the sidebar until Blender names its operator. Popup menus remember their last item, so keyboard navigation in
     them is not used either, except the Asset Browser's context menu, whose last entry is
     Whittle's.
 - **Screenshot harness**: the images are reviewed by eye, not diffed. Sketch strokes in the

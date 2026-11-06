@@ -126,7 +126,8 @@ live session first. See [Models and effort](../guides/models.md).
 
 `settings` is `prefs.session_settings()`: integers `poly_budget`, `self_check_rounds` and
 `render_size`, strings `style_file` and `style_guide` (the path and the guide's text as last
-read), the boolean `style_incomplete` (part of the guide did not load), and optionally
+read, or no text at all for a guide this install has not approved, whatever a Read Now
+found), the boolean `style_incomplete` (part of the guide did not load), and optionally
 `max_turns` and `max_budget_usd`, which go to the SDK. `resume`, `fork` and `resume_at`
 come from `tree.session_plan`; see [Node](#node) below.
 
@@ -499,6 +500,7 @@ it is saved. Nothing is ever written beside the `.blend`. How this looks to a us
 ```text
 <user dir>/
   install.json                 this install's id
+  guides.json                  the style guides this install approved
   cache/open-<key>.json        a running Blender's mark: the saved file it has open
   cache/<file id>/             the cache root
     cache.json                 the file it belongs to
@@ -591,6 +593,17 @@ dead process, so it does not count.
 `open-<key>.json` sits beside the caches, one per running Blender with a saved file open, with
 or without a cache, so two Blenders on one file see each other even when it has no chats. It
 goes when the file closes, and the cache clean-up removes a crashed Blender's.
+
+### guides.json
+
+```json
+{"format": "whittle.guides", "version": 1, "guides": ["/home/you/project/style/crates.md"]}
+```
+
+Each entry is a `style.guide_key`: an approved guide's absolute path, tidied, in the
+platform's case. It is read and written by `style.read_approved` and `style.write_approved`.
+A record that cannot be read, or from a later version, approves nothing, and a later version's
+is never overwritten. Nothing about approvals goes in the `.blend`.
 
 ### The packed zip
 

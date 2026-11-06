@@ -57,6 +57,8 @@ WHITTLE_PT_main          sidebar panel, category "Whittle", no label of its own
                          comparison bar (only while comparing)
                          start row (only before anything is sent)
                          conversation
+                         Continue box (only in a chat not continued here, §3.11)
+                         guide box (only with a style guide to approve, §4.13)
                          sketch (button, tools while sketching, stroke count)
                          composer (reference chips, prompt, Send/Stop, model ▾, 🕘)
 WHITTLE_PT_debug         "Development"  child of main, DEFAULT_CLOSED,
@@ -151,8 +153,9 @@ while the scene is active. An override belongs to the scene, so another scene in
 reads the preferences. Self-check rounds and render size are cost levers as much as quality ones,
 so a file can raise them for a hero prop or lower them for quick blockouts. An unset one
 shows the preference's value with "(default)" after its name, so the field always says
-what Claude gets; typing a value sets it, even the same value (an empty Style Notes is a
-value too: "no style guide for this file"). The reset button (`LOOP_BACK`,
+what Claude gets; typing a number sets it, even the same number. Style Notes takes only a
+different path, since Blender sets a text field on any confirm: the path it already shows
+writes no override (an empty Style Notes is a value, "no style guide for this file"). The reset button (`LOOP_BACK`,
 `whittle.file_setting_reset`) sits at the end of each field's line, all in one column, and
 is greyed out while the setting is unset. Style Notes takes its own line under its label,
 which sits at the field's left edge: a path beside a label would have little room.
@@ -610,7 +613,8 @@ mode, Draw Mode included; listed and rebindable in Preferences → Keymap under 
   hook for Enter, so `whittle.enter_send` sits on the release of Enter in the Window
   keymap and sends the field confirmed just before it (`addon/enter.py`): Send for the
   prompt, Amend while a turn runs, Answer while Claude asks. A click away never sends,
-  blank text never sends, and when sending is not possible (a comparison) the text stays.
+  blank text never sends, and when sending is not possible (a comparison, a chat not
+  continued, a guide to approve) the text stays.
 - **Shift+Alt+C** types into this field from anywhere without the mouse (§3.12); the
   field's tooltip says so.
 - **Button row** (`scale_y=1.4`): `whittle.submit` with icon `PLAY`, text `Send`, or
@@ -621,8 +625,9 @@ mode, Draw Mode included; listed and rebindable in Preferences → Keymap under 
   history popover (`popover("WHITTLE_PT_history", text="", icon="RECOVER_LAST")`, a
   clock with a back arrow, in a fixed-width part of a `split` so the icon is never
   squeezed; tooltip from the panel's `bl_description`, starting `History`). Send is
-  enabled when there is a prompt, a pending stroke or a reference, no comparison and no
-  setup needed. Pressing Send clears the prompt once the turn is accepted (the text is
+  enabled (`ui.can_send`) when there is a prompt, a pending stroke or a reference, no
+  comparison, no setup needed, no chat waiting for Continue (§3.11) and no style guide
+  waiting for approval (§4.13). Pressing Send clears the prompt once the turn is accepted (the text is
   in the user bubble); a run that never starts puts it back.
 
 **While a turn runs**:
@@ -840,8 +845,8 @@ Send is disabled, its tooltip `This chat was made on another machine: Continue i
 send, or start a New Chat`; Enter and Shift+Alt+C leave the text in the box. The draft,
 sketch and references can still be prepared. **Continue** (`whittle.chat_continue`,
 `CHECKMARK`; tooltip: its whole conversation goes to Claude with the next turn, so only
-for files you trust) marks the chat as continued here, for good: the box goes and Send
-works. New Chat in the chat menu stays available. Chats from files saved before
+for files you trust) marks the chat as continued here, for good: the box goes, and Send works unless a guide's box (§4.13) still waits for its
+own answer. New Chat in the chat menu stays available. Chats from files saved before
 Whittle recorded where a chat was made never ask.
 
 Going back in the chat's history stays allowed before Continue, though it changes the
@@ -878,8 +883,8 @@ straight to typing a prompt:
    dropping its last parts whole (`shortcut.hint`). Typing starts at once.
 3. **Enter sends** exactly as Enter in the sidebar's box does: the field confirms and
    the popup closes on the press, and `whittle.enter_send` sends on the release (§3.9).
-   Blank text and a send that is not possible (a comparison) leave the text in the
-   sidebar's box, as there. **Esc** closes the popup and leaves the field as it was.
+   Blank text and a send that is not possible (a comparison, a chat not continued, a guide
+   to approve) leave the text in the sidebar's box, as there, though the hint stays as it is. **Esc** closes the popup and leaves the field as it was.
 
 The field follows the composer: `prompt`, `amend_text` while a turn runs, `ask_answer`
 while Claude asks. The title is `Ask Claude` for all three, as the placeholder is: the

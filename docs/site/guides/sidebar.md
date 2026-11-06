@@ -316,10 +316,10 @@ one and it is still grey, the reason is one of these:
 - Send found no agent environment: use the attention box.
 - A comparison is open: press **Done** in the comparison bar.
 - The chat came from another machine: see [below](#notices-about-the-chat-or-the-file).
+- A style guide needs your answer: see [below](#notices-about-the-chat-or-the-file).
 - A turn is running: Send has made way for Stop.
 
-Hovering over the disabled button gives the reason for a comparison and for a chat from
-another machine.
+Hovering over the disabled button says which of these it is.
 
 ## While Claude works
 
@@ -406,11 +406,12 @@ next Send: [History and branches](history.md#failed-turns-and-retry) says when e
 
 ## Notices about the chat or the file
 
-Three more things can appear, each saying something about the chat or the file.
+Four more things can appear, each saying something about the chat or the file.
 
 A chat made on another machine, in someone else's file or your own from another computer,
 opens with Send disabled. A box above the Sketch button asks **Continue this chat?**, and Send
-stays disabled until you press **Continue**. You can still write a draft, sketch and add references
+stays disabled until you press **Continue**, and answer the style guide's box if that is open too.
+You can still write a draft, sketch and add references
 meanwhile. Continue only for files you trust: the chat's whole conversation goes to Claude
 with your next turn.
 
@@ -421,7 +422,7 @@ A chat from another machine. **New Chat** in the chat menu is the other way forw
 ```
 
 A file naming a style guide this computer has not approved shows a box there too, **Use this
-style guide?**, and Send stays disabled until you answer it: see
+style guide?**, below the chat's if there is one, and Send stays disabled until you answer it: see
 [Approving a guide](settings.md#approving-a-guide).
 
 If the same file is open in another Blender, a dim line at the top of the panel says so,

@@ -20,8 +20,9 @@ The crate is the target and a prompt is ready to send.
 **Send** is available once there is a prompt, a stroke not yet sent or a reference image,
 so a sketch on its own is a complete request ([Sketching](sketching.md),
 [Reference images](references.md)). It is greyed out while you
-[compare with an earlier turn](history.md), and in a
-[chat from another machine](chats.md) until you continue it. Clicking away from the box
+[compare with an earlier turn](history.md), in a
+[chat from another machine](chats.md) until you continue it, and while a
+[style guide](settings.md#approving-a-guide) waits for your answer. Clicking away from the box
 never sends, and Enter in a blank box does nothing.
 
 If the turn cannot start, for example because there is no [API key](api-key.md), your
