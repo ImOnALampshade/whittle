@@ -132,3 +132,28 @@ Resolutions of the open questions in `design.md` §10, plus environment facts.
 - **The Blender archive's cache is restored and saved in separate steps**, since
   `actions/cache` saves only when a job passes and a failing platform would otherwise
   download Blender on every run.
+- **CI publishes the documentation site** (2026-11-05), from `docs.yml`, to GitHub Pages at
+  <https://imonalampshade.github.io/whittle/>. Why CI and not a hand: what goes public is then
+  always a strict build of a commit on `main`, from the hash-pinned lock, with no `gh-pages`
+  branch of generated files to review, and nothing is ever pushed from a machine. As with a
+  release, the job holding the write permissions (`pages: write`, `id-token: write`) checks
+  nothing out and has them alone.
+- **The site tracks `main`, not the latest release** (2026-11-05), so it can describe things
+  newer than what a user has installed. Why: there is one version of it to keep right, and a
+  fix to a page reaches readers at once. The home page and the README say so.
+- **A docs failure gates nothing** (2026-11-05): `docs.yml` stands alone, and `ci.yml` and
+  `release.yml` do not know it. A failure leaves the site behind until the next good build,
+  which can be many commits: nothing else builds the site, so a warning that reaches `main`
+  fails every run until it is fixed, and a failed run is not retried. A stale site still beats
+  a warning holding back a release. A run under way is never cancelled, so a deploy finishes;
+  a run still waiting gives way to a newer one. One run per ref at a time keeps an older push
+  from landing last, though re-running an old run rebuilds its own commit and puts that site
+  back.
+- **The docs job sets up an exact Python** (2026-11-05), 3.14.8, the one the site was first
+  built on. The lock's Sphinx needs 3.13 or later, and `ubuntu-latest`'s own Python need not be.
+- **No `.nojekyll`** (2026-11-05): a Pages site deployed by Actions serves the uploaded
+  artifact as it is and runs no Jekyll, so `_static`, `_images`, `_modules` and `_sources`
+  arrive whole. `upload-pages-artifact` drops dotfiles, which here is only Sphinx's `.buildinfo`.
+- **Pull requests do not build the site** (2026-11-05): a broken page shows up when it reaches
+  `main`, or on a `ci/**` push before that, and leaves the site behind until the next good
+  build.

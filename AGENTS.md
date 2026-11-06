@@ -142,7 +142,13 @@ WHITTLE_GUI=1 ./run_tests.sh   # the suite, then every GUI check
   both call `test.yml` (offline suite and `build.sh`, one job per runner); `release.yml`
   also checks the tag (`.github/scripts/release_tag.py`) and publishes from a job with no
   checkout. `ubuntu-latest` gates; `windows-latest` and `macos-latest` use
-  `continue-on-error`, and `publish` does not need them. Blender comes from
+  `continue-on-error`, and `publish` does not need them. `docs.yml` stands alone: on a push
+  to `main` touching what the site is built from, or by hand, it builds with
+  `./docs.sh --strict` and deploys to GitHub Pages at
+  `https://imonalampshade.github.io/whittle/` from a job with no checkout; `ci/**` pushes
+  touching those paths build only, and neither `ci.yml` nor `release.yml` waits for it. The
+  repository's Pages source must be GitHub Actions, set once by hand before `docs.yml` first
+  reaches `main` (else start it by hand on `main` after). Blender comes from
   `.github/scripts/fetch_blender.py`, with its version and hashes pinned there. Actions
   are first-party and pinned to a commit: `tests/agent/test_ci.py` checks that and the
   rest. How to cut a release is in the README.

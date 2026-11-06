@@ -35,6 +35,9 @@ myst_heading_anchors = 3
 
 html_theme = "sphinx_book_theme"
 html_title = "Whittle"
+# GitHub Pages serves the site from a project subpath. Only canonical links use
+# this; every link between pages is relative, so a local build works anywhere.
+html_baseurl = "https://imonalampshade.github.io/whittle/"
 html_theme_options = {
     "repository_url": MANIFEST["website"],
     "path_to_docs": "docs/site",

@@ -284,6 +284,8 @@ warnings. `./run_tests.sh -k test_docs_site` checks what the source promises wit
 building it: every module is in the reference, every page is in a toctree, and every image
 exists.
 
+You don't publish the site: [CI](#ci-and-releases) does, from `main`.
+
 ### Its screenshots
 
 ```sh
@@ -332,7 +334,18 @@ pushes to `main` and `ci/**` and on pull requests; `release.yml` runs on tags. B
 `test.yml`, which downloads a pinned Blender (`.github/scripts/fetch_blender.py` checks its
 SHA-256 before unpacking it), makes `.venv` from Blender's Python, installs the lock, and
 runs `./run_tests.sh` and `./build.sh`. The GUI checks and the screenshots are not part of
-CI, because they need `kwin_wayland`, and neither is this site.
+CI, because they need `kwin_wayland`.
+
+`docs.yml` publishes this site to <https://imonalampshade.github.io/whittle/>. On a push to
+`main` that changes what the site is built from, or when started by hand, it makes `.venv-docs`
+from the lock and runs `./docs.sh --strict`, so a warning fails the run, and a second job
+deploys the result to GitHub Pages. A push to `ci/**` touching those paths builds without
+deploying, which is how to try a change to the workflow. Nothing waits for it: a failure leaves
+the site as it was until the next good build, and holds back neither CI nor a release. The site
+follows `main`, so it can describe things newer than the latest release. The repository's Pages
+source must be GitHub Actions, set once in Settings → Pages → Build and deployment before
+`docs.yml` first reaches `main`. If that push comes first, its deploy job fails and the setting
+starts nothing, so start `docs.yml` by hand on `main` afterwards.
 
 Linux x64 (`ubuntu-latest`) is the gate. Windows x64 and macOS on Apple silicon run too, but
 their failures count for nothing yet, and a release does not wait for them. Linux arm64 has

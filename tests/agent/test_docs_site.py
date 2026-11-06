@@ -113,6 +113,25 @@ class PagesTest(unittest.TestCase):
             for image in image_paths(path):
                 self.assertTrue(image.is_file(), f"{doc} shows {image}")
 
+    def test_the_docs_workflow_watches_every_image_shown(self):
+        workflow = (REPO / ".github" / "workflows" / "docs.yml").read_text(encoding="utf-8")
+        entries = [path.removesuffix("**") for path in re.findall(r"(?m)^      - '?(!?[\w./*-]+)'?$", workflow)]
+        watched = tuple(path for path in entries if not path.startswith("!"))
+        ignored = tuple(path[1:] for path in entries if path.startswith("!"))
+        self.assertIn("docs/site/", watched)
+        for path in pages().values():
+            for image in image_paths(path):
+                shown = image.relative_to(REPO).as_posix()
+                self.assertTrue(shown.startswith(watched), f"{path}: {image}")
+                self.assertFalse(shown.startswith(ignored), f"{path}: {image}")
+
+    def test_the_canonical_links_are_where_pages_serves_the_repository(self):
+        website = re.search(r'(?m)^website = "https://github.com/([^/"]+)/([^/"]+)"$',
+                            (REPO / "whittle" / "blender_manifest.toml").read_text(encoding="utf-8"))
+        owner, repository = website.groups()
+        self.assertIn(f'html_baseurl = "https://{owner.lower()}.github.io/{repository}/"\n',
+                      (SITE / "conf.py").read_text(encoding="utf-8"))
+
     def test_every_shot_is_shown_on_its_page(self):
         by_slug = {shots.page_slug(doc): path for doc, path in pages().items()}
         for spec_path in shots.spec_paths():

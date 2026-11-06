@@ -78,7 +78,7 @@ whittle/                          repo root
 │       └── plugin/               local plugin (Claude Code plugin format) carrying the recipe skills
 │           ├── .claude-plugin/plugin.json      {"name": "whittle", "version": …, "description": …}
 │           └── skills/<skill-name>/SKILL.md
-├── .github/                      CI on GitHub-hosted runners: workflows/ (ci.yml, release.yml, test.yml), scripts/
+├── .github/                      CI on GitHub-hosted runners: workflows/ (ci.yml, release.yml, test.yml, docs.yml), scripts/
 ├── agent_env/requirements.lock   pinned, hashed lock (uv's output, plus pywin32 by hand: the header says why)
 ├── tests/
 │   ├── agent/                    unittest, run with .venv/bin/python
@@ -103,7 +103,7 @@ whittle/                          repo root
     ├── prompting.md              how agent-facing text is written
     ├── modeling-practices.md     the research behind the system prompt's modeling practice and the mesh skills
     ├── images/                   the README's screenshots, made by ./screens.sh --docs
-    └── site/                     the documentation site (Sphinx, MyST); none of it is in the zip
+    └── site/                     the documentation site (Sphinx, MyST), published to GitHub Pages by docs.yml; none of it is in the zip
         ├── conf.py, index.md     the site, and its pages by section in quickstart.md, walkthrough.md,
         │                         guides/, develop/ and reference/ (autodoc, from the docstrings)
         ├── requirements.in, .lock  the site's tools, hash-pinned, for .venv-docs/ only

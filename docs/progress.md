@@ -661,6 +661,8 @@ autodoc builds from the docstrings.
 - `docs.sh` builds it offline from `.venv-docs/`, a docs-only venv from
   `docs/site/requirements.lock`, with Blender and the SDK mocked. `--strict` makes warnings
   errors, `--out` keeps a build wholly in one folder. None of it is in the zip.
+- `.github/workflows/docs.yml` publishes it from `main` to
+  <https://imonalampshade.github.io/whittle/> (CI and releases, below).
 - `docs_shots.sh` shoots the committed screenshots from a spec per page
   (`docs/site/shots/`; `tests/docshots/` runs them, sharing `tests/screens/steps.py` with the
   scenarios). Each Blender has a hidden session and folders of its own, within a
@@ -669,11 +671,14 @@ autodoc builds from the docstrings.
   every image and shot on its page), `test_docshots.py`.
 
 **CI and releases** (README, CI and releases; decisions, Continuous integration).
-- `.github/workflows/`: `ci.yml`, `release.yml` and the shared `test.yml`.
+- `.github/workflows/`: `ci.yml`, `release.yml` and the shared `test.yml`, and `docs.yml`,
+  which stands alone and publishes the documentation site to GitHub Pages from `main`.
   `.github/scripts/`: `fetch_blender.py`, `release_tag.py` and the `timeout` shim.
 - Tests: `tests/agent/test_ci.py` (pinned first-party actions, hosted runners only,
   permissions, time limits, no expression in a shell script, the gate, the tag rules, the
-  Blender pins, downloads cut off or wrong against a local server, the shim).
+  Blender pins, downloads cut off or wrong against a local server, the shim, and for
+  `docs.yml` deploying from `main` only, the lock, the strict build and that nothing waits
+  for it).
 
 ## How to run
 
@@ -753,6 +758,18 @@ them at each save. Nothing is written beside the `.blend`.
   the headless runner: Blender stops on an access violation, which has not been looked into,
   so the job fails before the build, and real use there is untested too. Linux arm64 has no
   CI because blender.org publishes no build for it.
+- **The documentation site on GitHub Pages**: `docs.yml` has not run yet, so the real deploy
+  and the live URL are untested. It watches itself, so the push that adds it starts its first
+  run: set the repository's Pages source to GitHub Actions before that push, once, by hand
+  (Settings → Pages → Build and deployment → Source). If the push comes first, the deploy job
+  fails, nothing else notices, the README's link 404s, and changing the setting starts nothing.
+  Then start `docs.yml` by hand on `main`; **Re-run failed jobs** works only for a day, while
+  the uploaded site lasts (`upload-pages-artifact`'s `retention-days` default).
+- **Two dead links in the site's module source index**: `_modules/index.html` lists
+  `whittle.addon.operators` and `whittle.addon.start`, but neither has a source page, nor
+  `[source]` links in the reference. Sphinx's parser cannot read the list comprehension in an
+  `EnumProperty` annotation (`operators.py` `key`, `start.py` `kind`), which `viewcode`
+  swallows without a warning. Moving each list to a module constant should cure it.
 - **The `pywin32` pin**: changing the lock makes every existing install `stale` on every
   platform, even where pip installs the same 30 packages, so each one needs **Reinstall**.
   CI's Blender bundles Python 3.13, so it can only exercise the cp313 wheel of 311; the

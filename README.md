@@ -7,6 +7,10 @@ scene while you watch and steer. Every turn becomes a node in a branching histor
 Whittle is powered by Claude, through your own Anthropic API key. It is an independent
 open-source project, not made by, endorsed by or affiliated with Anthropic.
 
+**[Read the documentation](https://imonalampshade.github.io/whittle/)**: a quickstart, a
+walkthrough, the guides and an API reference. It follows `main`, so it can describe things
+newer than the latest release.
+
 ## Why I made this
 
 I made this because Claude Design is going away, and I found it extremely useful for quick modeling tasks when using my Wacom tablet to draw redlines over a 3D object. This project is the evolution of that feature. Everything here has been vibe coded over the course of a few days, so don’t expect it to be perfect - but it does everything I need it to, so I’m happy with it.
@@ -467,9 +471,10 @@ to that key): they use `claude-haiku-5-5` with a tiny prompt, and `run_tests.sh`
 
 ## Documentation
 
-The documentation site is a Sphinx project in `docs/site/`: a quickstart, a walkthrough, a
-guide per topic, the development pages and an API reference generated from the source. None
-of it ships in the extension. It has a venv of its own, `.venv-docs/` (gitignored), made from
+The [documentation site](https://imonalampshade.github.io/whittle/) is a Sphinx project in
+`docs/site/`: a quickstart, a walkthrough, a guide per topic, the development pages and an
+API reference generated from the source. CI publishes it from `main` (CI and releases, below).
+None of it ships in the extension. It has a venv of its own, `.venv-docs/` (gitignored), made from
 its own hash-pinned lock, `docs/site/requirements.lock`; the build needs neither Blender nor
 the network.
 
@@ -500,6 +505,17 @@ from download.blender.org, or a public mirror if that refuses the runner
 (`.github/scripts/fetch_blender.py` checks its SHA-256 before unpacking it), makes `.venv` from Blender's Python, installs the lock, and runs
 `./run_tests.sh` and `./build.sh`. The GUI checks and screenshots are not part of CI: they
 need `kwin_wayland`.
+
+`docs.yml` publishes the documentation site. On a push to `main` that changes what the site
+is built from, or when started by hand, it makes `.venv-docs` from the hash-pinned lock, runs
+`./docs.sh --strict`, and a second job deploys the result to GitHub Pages at
+<https://imonalampshade.github.io/whittle/>. A push to `ci/**` touching those paths builds
+without deploying, and so does starting it by hand on another branch. Nothing waits for it: a
+failure leaves the site as it was until the next good build, and holds back neither CI nor a
+release. It needs one setting, made once by hand before `docs.yml` first reaches `main`:
+Settings → Pages → Build and deployment → Source: GitHub Actions. If that push comes first,
+its deploy job fails and the setting starts nothing, so start `docs.yml` by hand on `main`
+afterwards.
 
 Linux x64 (`ubuntu-latest`) is the gate. Windows x64 and macOS on Apple silicon run too,
 but their failures count for nothing yet, and a release does not wait for them. Linux

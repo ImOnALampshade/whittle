@@ -11,6 +11,11 @@ chats, all stored in the `.blend`. It needs Blender 5.2 and your own Anthropic A
 
 Powered by Claude. Licensed GPL-3.0-or-later.
 
+```{note}
+This site follows Whittle's `main` branch, so it can describe things newer than the
+[latest release](https://github.com/ImOnALampshade/whittle/releases/latest).
+```
+
 ```{toctree}
 :maxdepth: 1
 :caption: Getting started

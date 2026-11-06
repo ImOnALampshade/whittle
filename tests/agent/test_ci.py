@@ -66,8 +66,8 @@ def run_blocks(text: str) -> list[str]:
 
 
 class WorkflowTest(unittest.TestCase):
-    def test_there_are_the_three_workflows(self):
-        self.assertEqual(set(workflows()), {"ci.yml", "release.yml", "test.yml"})
+    def test_there_are_the_four_workflows(self):
+        self.assertEqual(set(workflows()), {"ci.yml", "docs.yml", "release.yml", "test.yml"})
 
     def test_every_action_is_first_party_and_pinned_to_a_commit(self):
         for name, text in workflows().items():
@@ -116,13 +116,15 @@ class WorkflowTest(unittest.TestCase):
             self.assertEqual(found.group(0), "permissions:\n  contents: read\n", name)
         granted = {(name, job): block for name, text in workflows().items()
                    for job, block in jobs(text).items() if "permissions:" in block or ": write" in block}
-        self.assertEqual(set(granted), {("release.yml", "publish")})
+        self.assertEqual(set(granted), {("release.yml", "publish"), ("docs.yml", "deploy")})
         self.assertRegex(granted["release.yml", "publish"],
                          r"(?m)^    permissions:\n      contents: write\n    steps:$")
+        self.assertRegex(granted["docs.yml", "deploy"],
+                         r"(?m)^    permissions:\n      pages: write\n      id-token: write\n    environment:$")
 
-    def test_the_publishing_job_runs_nothing_from_the_repository(self):
-        publish = jobs(workflows()["release.yml"])["publish"]
-        self.assertNotIn("actions/checkout", publish)
+    def test_the_publishing_jobs_run_nothing_from_the_repository(self):
+        for job in (jobs(workflows()["release.yml"])["publish"], jobs(workflows()["docs.yml"])["deploy"]):
+            self.assertNotIn("actions/checkout", job)
 
     def test_only_the_linux_job_gates_a_release(self):
         release = jobs(workflows()["release.yml"])
@@ -158,12 +160,69 @@ class WorkflowTest(unittest.TestCase):
     def test_ci_runs_are_superseded_but_releases_never_are(self):
         self.assertIn("cancel-in-progress: true", workflows()["ci.yml"])
         self.assertIn("cancel-in-progress: false", workflows()["release.yml"])
+        self.assertIn("cancel-in-progress: false", workflows()["docs.yml"])
 
     def test_no_expression_is_pasted_into_a_shell_script(self):
         # A tag or branch name is the pusher's text: it goes through env.
         for name, text in workflows().items():
             for block in run_blocks(text):
                 self.assertNotIn("${{", block, name)
+
+
+class DocsWorkflowTest(unittest.TestCase):
+    def setUp(self):
+        self.text = workflows()["docs.yml"]
+        self.build = jobs(self.text)["build"]
+        self.deploy = jobs(self.text)["deploy"]
+
+    def test_only_a_push_or_a_hand_starts_it(self):
+        triggers = re.findall(r"(?m)^  (\w+):", self.text[self.text.index("\non:\n"):self.text.index("\npermissions:\n")])
+        self.assertEqual(triggers, ["push", "workflow_dispatch"])
+        self.assertIn("branches: [main, 'ci/**']\n", self.text)
+
+    def test_it_runs_when_what_the_site_is_built_from_changes(self):
+        # The whole list, in order: a negation undoes the entries above it, so a path
+        # being listed does not say that a change to it starts a run.
+        block = self.text[self.text.index("    paths:\n"):self.text.index("  workflow_dispatch:")]
+        self.assertEqual(re.findall(r"(?m)^      - (.+)$", block), [
+            "docs/site/**", "'!docs/site/shots/**'", "docs/images/**", "whittle/**", "docs.sh",
+            ".github/workflows/docs.yml"])
+
+    def test_runs_of_a_ref_queue_so_an_older_push_cannot_deploy_last(self):
+        self.assertIn("\nconcurrency:\n  group: docs-${{ github.ref }}\n  cancel-in-progress: false\n", self.text)
+
+    def test_only_main_deploys(self):
+        self.assertIn("\n    needs: build\n    if: github.ref == 'refs/heads/main'\n", self.deploy)
+        self.assertEqual(re.findall(r"(?m)^    if:", self.build), [])
+
+    def test_the_deploy_job_is_the_only_one_that_deploys(self):
+        self.assertIn("actions/deploy-pages@", self.deploy)
+        self.assertNotIn("actions/deploy-pages@", self.build)
+        self.assertIn("environment:\n      name: github-pages\n"
+                      "      url: ${{ steps.deployment.outputs.page_url }}\n", self.deploy)
+        self.assertIn("id: deployment\n", self.deploy)
+
+    def test_the_venv_comes_from_the_hash_pinned_lock(self):
+        install = ".venv-docs/bin/pip install --require-hashes --only-binary :all: --no-deps " \
+                  "-r docs/site/requirements.lock"
+        self.assertIn(install, "\n".join(run_blocks(self.build)))
+        self.assertIn(install, (REPO / "docs.sh").read_text(encoding="utf-8"))
+
+    def test_python_is_exact_and_one_the_lock_s_sphinx_runs_on(self):
+        self.assertRegex(self.build, r"python-version: '3\.1[34]\.\d+'\n")
+
+    def test_a_warning_fails_the_build_and_its_html_is_what_ships(self):
+        self.assertIn("run: ./docs.sh --strict --out build/site\n", self.build)
+        self.assertIn("actions/upload-pages-artifact@", self.build)
+        self.assertIn("path: build/site/html\n", self.build)
+
+    def test_ci_and_releases_do_not_wait_for_the_site(self):
+        for name, text in workflows().items():
+            self.assertNotIn("workflow_run", text, name)
+            if name != "docs.yml":
+                self.assertNotIn("docs.yml", text, name)
+                self.assertNotIn("docs.sh", text, name)
+        self.assertNotIn("workflow_call", self.text)
 
 
 class ReleaseTagTest(unittest.TestCase):
