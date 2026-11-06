@@ -1385,7 +1385,9 @@ with `"format"` and
 `"version"` keys. Matrices are 4×4 row-major lists of floats. Paths inside JSON are
 relative to the file's own folder. `formats.py` defines dataclasses plus
 `to_json()/from_json()` and a `validate()` that checks required keys and types (no
-jsonschema dependency on the Blender side).
+jsonschema dependency on the Blender side). `formats.read_json` refuses a file
+nested past `MAX_JSON_DEPTH` (1000) without parsing it: inside Blender on macOS the parser can run
+out of stack before it raises, which ends Blender.
 
 ### Session folder
 

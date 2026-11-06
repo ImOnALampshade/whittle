@@ -388,7 +388,7 @@ class GateBoxTest(GateCase):
         layout = self.draw()
         self.assertIn(ui.GUIDE_TITLE, layout.labels())
         self.assertIn("go to Claude", layout.text())
-        self.assertIn(os.path.basename(path), layout.text())
+        self.assertIn(os.path.basename(path), "".join(layout.labels()), "a long path wraps")
         self.assertEqual([c["idname"] for c in layout.operators()
                           if c["idname"].startswith("whittle.style_guide")],
                          ["whittle.style_guide_approve", "whittle.style_guide_read", "whittle.style_guide_skip"])

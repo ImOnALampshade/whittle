@@ -4,6 +4,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from whittle import formats
@@ -29,6 +30,23 @@ class JsonFileTest(unittest.TestCase):
         self.path.write_text("[" * 200000)
         with self.assertRaises(FormatError):
             formats.read_json(self.path)
+
+    def test_nesting_is_refused_before_the_parser_sees_it(self):
+        self.path.write_text('{"a":' * 200000)
+        with mock.patch.object(formats.json, "loads", side_effect=AssertionError("parsed")):
+            with self.assertRaises(FormatError):
+                formats.read_json(self.path)
+
+    def test_nesting_up_to_the_limit_reads(self):
+        depth = formats.MAX_JSON_DEPTH - 1
+        self.path.write_text('{"a":' + "[" * depth + "]" * depth + "}")
+        self.assertIn("a", formats.read_json(self.path))
+
+    def test_only_nesting_counts(self):
+        many = formats.MAX_JSON_DEPTH * 2
+        obj = {"siblings": [[] for _ in range(many)], "text": "[{" * many, "quote": '"[' * many}
+        formats.write_json_atomic(self.path, obj)
+        self.assertEqual(formats.read_json(self.path), obj)
 
 
 class BundleTest(unittest.TestCase):

@@ -18,6 +18,11 @@ REQUEST_FORMAT = "whittle.request"
 STROKES_FORMAT = "whittle.strokes"
 TARGET_FORMAT = "whittle.target"
 VERSION = 1
+# Past this a file is refused unparsed. Inside Blender on macOS the parser can
+# run out of stack before its RecursionError, which ends Blender, and a chat
+# packed in a .blend from someone else is read through here.
+MAX_JSON_DEPTH = 1000
+JSON_NESTING = re.compile(r'"(?:[^"\\]|\\.)*"|[\[\]{}]', re.DOTALL)
 
 RENDER_MODES = ("shaded", "wireframe", "matcap", "overlay")
 # The image files the agent attaches to a tool result; others stay on disk.
@@ -60,13 +65,31 @@ def write_json_atomic(path, obj) -> None:
         raise
 
 
+def too_deep(text: str) -> bool:
+    """Whether JSON text nests past MAX_JSON_DEPTH, counted without parsing it."""
+    if text.count("[") + text.count("{") <= MAX_JSON_DEPTH:
+        return False
+    depth = 0
+    for token in JSON_NESTING.findall(text):
+        if token in ("[", "{"):
+            depth += 1
+            if depth > MAX_JSON_DEPTH:
+                return True
+        elif token in ("]", "}"):
+            depth -= 1
+    return False
+
+
 def read_json(path) -> dict:
     """Reads a JSON file that must hold an object; FormatError if it is missing or holds
     anything else."""
     path = Path(path)
     try:
         with open(path, encoding="utf-8") as f:
-            obj = json.load(f)
+            text = f.read()
+        if too_deep(text):
+            raise FormatError(f"{path}: invalid JSON: nested too deeply")
+        obj = json.loads(text)
     except FileNotFoundError:
         raise FormatError(f"{path}: missing") from None
     except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:

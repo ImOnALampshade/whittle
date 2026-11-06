@@ -236,6 +236,7 @@ out. `too_large` is true when the turn failed because its images were too big fo
 Most JSON files have `format` and `version` keys; `camera.json`, `in-use.json`, the
 `open-<key>.json` marks and the `packed/` records do not. All are UTF-8. `formats.write_json_atomic` writes a temp file,
 then replaces the target through `platforms.replace`, so a reader never sees half a file.
+`formats.read_json` refuses a file nested more than 1000 deep without parsing it.
 Validators raise `FormatError`, naming the file and the key.
 
 Times differ by file. `session.json` is to the second (`2026-11-04T21:41:08+0000`, from
