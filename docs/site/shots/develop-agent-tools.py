@@ -89,12 +89,12 @@ def one_turn(stage):
     render_row = ui._render_row
     ui._render_row = lambda layout, path: None if path.endswith("-strokes.png") else render_row(layout, path)
     stage.crate()
-    obj = sketch.ensure_sketch_layers(stage.scene)
+    obj = sketch.ensure_sketch_layer(stage.scene)
     bundle = formats.read_bundle(CRATE_BUNDLE)
     for view_id in sorted(bundle.views):
         views.add_view(obj.data, lambda _i, view=bundle.views[view_id]: view)
     for stroke in bundle.strokes:
-        add_stroke(obj, stroke.type, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
+        add_stroke(obj, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
                    cyclic=stroke.cyclic, view=stroke.view)
     yield from stage.turns(["Add a lid to the crate."], stage.script("tools", [TURN]))
     yield 0.3

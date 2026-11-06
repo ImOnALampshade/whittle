@@ -26,8 +26,8 @@ WORK = (58, 78, 1235, 828)
 COMPARING = (300, 78, 990, 620)
 # Parts of the sidebar, as (x, y, width, height); in Draw Mode it runs on, empty,
 # to the window's end. Each follows from the turns above it.
-SKETCH_START = (0, 300, 420, 68)
-SKETCH_STRIP = (0, 300, 420, 300)
+SKETCH_START = (0, 300, 420, 44)
+SKETCH_STRIP = (0, 300, 420, 276)
 QUESTION = (0, 300, 420, 330)
 SKETCHED_TURN = (0, 300, 420, 400)
 LATER_TURN = (0, 540, 420, 315)
@@ -158,21 +158,21 @@ def hand_drawn(points, closed: bool = False, step: float = 0.012, wobble: float 
     return drawn
 
 
-# Each is (type, closed, points), in world space, a little off the surfaces.
+# Each is (closed, points), in world space, a little off the surfaces.
 FRONT_STROKES = [
     # The latch, on the front below the lid.
-    ("add", True, [(-0.06, -0.262, 0.47), (0.06, -0.262, 0.47), (0.06, -0.262, 0.38), (-0.06, -0.262, 0.38)]),
+    (True, [(-0.06, -0.262, 0.47), (0.06, -0.262, 0.47), (0.06, -0.262, 0.38), (-0.06, -0.262, 0.38)]),
     # A finger slot in the lid.
-    ("carve", True, [(-0.13, -0.035, 0.552), (0.13, -0.035, 0.552), (0.13, 0.035, 0.552), (-0.13, 0.035, 0.552)]),
+    (True, [(-0.13, -0.035, 0.552), (0.13, -0.035, 0.552), (0.13, 0.035, 0.552), (-0.13, 0.035, 0.552)]),
     # The lid's front edge.
-    ("crease", False, [(-0.28, -0.282, 0.552), (0.28, -0.282, 0.552)]),
-    # A note pointing at the latch: the shaft, then the head.
-    ("note", False, [(-0.42, -0.36, 0.66), (-0.28, -0.32, 0.54), (-0.08, -0.275, 0.44)]),
-    ("note", False, [(-0.15, -0.3, 0.41), (-0.08, -0.275, 0.44), (-0.12, -0.3, 0.5)]),
+    (False, [(-0.28, -0.282, 0.552), (0.28, -0.282, 0.552)]),
+    # An arrow pointing at the latch: the shaft, then the head.
+    (False, [(-0.42, -0.36, 0.66), (-0.28, -0.32, 0.54), (-0.08, -0.275, 0.44)]),
+    (False, [(-0.15, -0.3, 0.41), (-0.08, -0.275, 0.44), (-0.12, -0.3, 0.5)]),
 ]
 SIDE_STROKES = [
     # The side panel to paint.
-    ("region", True, [(-0.262, -0.2, 0.04), (-0.262, 0.2, 0.04), (-0.262, 0.2, 0.18), (-0.262, -0.2, 0.18)]),
+    (True, [(-0.262, -0.2, 0.04), (-0.262, 0.2, 0.04), (-0.262, 0.2, 0.18), (-0.262, -0.2, 0.18)]),
 ]
 
 
@@ -181,10 +181,8 @@ def draw(stage, strokes, view: int) -> None:
     from whittle.addon import sketch
 
     obj = sketch.find_sketch_object()
-    for stroke_type, closed, points in strokes:
-        sketch.set_active_type(obj, stroke_type)
-        add_stroke(obj, stroke_type, hand_drawn(points, closed), radius=0.006, cyclic=closed, view=view)
-    sketch.ensure_region_fills(obj)
+    for closed, points in strokes:
+        add_stroke(obj, hand_drawn(points, closed), radius=0.006, cyclic=closed, view=view)
 
 
 def to_top(stage) -> None:
@@ -337,9 +335,9 @@ SHOTS = [
     shot("first-running", "The first turn running: a call in flight.", sidebar()),
     shot("first-done", "The first turn finished.", sidebar()),
     shot("first-done-view", "The crate with soft edges and a lid.", viewport(crop=AROUND)),
-    shot("sketch-start", "Sketch pressed: the stroke types, nothing drawn yet.", sidebar(crop=SKETCH_START)),
-    shot("sketch-front", "Add, carve, crease and note strokes from the front.", viewport(crop=AROUND)),
-    shot("sketch-side", "A region stroke from the side, the first strokes still in place.", viewport(crop=AROUND)),
+    shot("sketch-start", "Sketch pressed, nothing drawn yet.", sidebar(crop=SKETCH_START)),
+    shot("sketch-front", "Strokes from the front: the latch, the slot, the edge and an arrow.", viewport(crop=AROUND)),
+    shot("sketch-side", "A stroke around the side panel, the first strokes still in place.", viewport(crop=AROUND)),
     shot("sketch-ready", "Six strokes over two views and the prompt, ready to send.", sidebar(crop=SKETCH_STRIP)),
     shot("question", "The turn paused on a question with two choices.", sidebar(crop=QUESTION)),
     shot("sketch-done", "The sketched turn finished.", sidebar(crop=SKETCHED_TURN)),

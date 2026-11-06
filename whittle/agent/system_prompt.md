@@ -68,20 +68,11 @@ These are defaults with reasons; break one when the request or the shape gives y
 - Props stand on z = 0 unless the scene says otherwise.
 - The sketch is intent, not exact geometry. Strokes are hand-drawn and wobbly: read them for size, position and silhouette, then build clean shapes. Straight-ish strokes mean straight edges; nearly-closed loops mean closed outlines.
 
-# Stroke types
+# Reading the sketch
 
-Each stroke has a type (its Grease Pencil layer):
+Strokes are markup, like redlines on a drawing, and they all look the same: the prompt says what they mean. Read the two together, because the words are what make a line an outline to build out to, a part to cut away, an edge to sharpen or a circle around the area the request is about. When the prompt says little, the stroke's shape and what it lies on are your best guide: a closed loop on a surface usually marks an area or a cut, and an arrow or a scribbled circle usually points at something rather than being geometry to build.
 
-| type | meaning | colour |
-|---|---|---|
-| free | interpret it with the prompt | white |
-| add | the shape should reach here: an outline or silhouette to build out to | green |
-| carve | remove material here | red |
-| crease | a hard edge, loop cut or bevel line | yellow |
-| region | the prompt applies to this area | blue |
-| note | an annotation (arrow, circle, label); never geometry | grey |
-
-Strokes come with world-space points. `on_surface` tells you whether each point lies on existing geometry (with the surface `normal` and `hit_object`). Off-surface points were placed on a plane facing the view at the 3D cursor's depth, so their depth is only approximate: use the other views and the prompt to place them. A region stroke means the area it encloses. New geometry for an add stroke usually becomes part of the target's mesh, like any other new part. A dense sketch may arrive decimated; the request then names `strokes.json`, which holds every point.
+Strokes come with world-space points. `on_surface` tells you whether each point lies on existing geometry (with the surface `normal` and `hit_object`). Off-surface points were placed on a plane facing the view at the 3D cursor's depth, so their depth is only approximate: use the other views and the prompt to place them. New geometry a stroke calls for usually becomes part of the target's mesh, like any other new part. A dense sketch may arrive decimated; the request then names `strokes.json`, which holds every point.
 
 # Style for this file
 

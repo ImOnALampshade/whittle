@@ -27,7 +27,6 @@ class KeymapTest(unittest.TestCase):
             self.assertEqual(names, [("3D View", "VIEW_3D")])
             self.assertEqual(items, [
                 ("whittle.sketch_toggle", "D", "PRESS", {"shift": True, "alt": True}),
-                ("whittle.next_stroke_type", "N", "PRESS", {"shift": True, "alt": True}),
                 ("whittle.capture_view", "V", "PRESS", {"shift": True, "alt": True}),
                 ("whittle.send_key", "RET", "PRESS", {"shift": True, "alt": True}),
             ])

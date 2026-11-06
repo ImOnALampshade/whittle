@@ -52,7 +52,7 @@ class ChatCase(HistoryTurnCase):
 
     def send(self, prompt: str) -> tuple:
         """Types the prompt, draws a stroke and presses Send; waits for the turn."""
-        add_stroke(self.obj, "free", STROKE, view=1, radius=0.01)
+        add_stroke(self.obj, STROKE, view=1, radius=0.01)
         self.props.prompt = prompt
         ctl, node = operators.submit_sketch(bpy.context, self.fake)
         if ctl not in self.controllers:
@@ -116,7 +116,7 @@ class NewChatTest(ChatCase):
         self.assertEqual(self.store.entry(b).title, "Add a lid")
 
     def test_new_chat_waits_for_the_turn(self):
-        add_stroke(self.obj, "free", STROKE, view=1, radius=0.01)
+        add_stroke(self.obj, STROKE, view=1, radius=0.01)
         self.props.prompt = "Make the crate bigger."
         self.fake = str(FAKE_SCRIPTS / "history_interrupt.json")
         ctl, node = operators.submit_sketch(bpy.context, self.fake)
@@ -273,7 +273,7 @@ class FoldedStrokesTest(ChatCase):
 
         # This chat's turn with the same number kept its strokes: the fold
         # in the other chat is not theirs.
-        add_stroke(self.obj, "free", STROKE, view=1, radius=0.01)
+        add_stroke(self.obj, STROKE, view=1, radius=0.01)
         sketch.stamp_strokes(self.obj, number)
         self.assertEqual(self.props.chat, b)
         addon._after_undo()

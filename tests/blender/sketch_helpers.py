@@ -12,10 +12,17 @@ from whittle import formats
 from whittle.addon import render, sketch, views
 
 
-def add_stroke(obj, stroke_type, points, *, radius=None, opacity=None, cyclic=False, view=0, turn=0):
-    """Appends a stroke to the type's layer (positions are layer-local) and
-    returns its index in that layer's drawing."""
-    layer, drawing = sketch.ensure_layer(obj.data, stroke_type)
+def older_layer(obj, name):
+    """The drawing of a layer other than the sketch's own, such as the per-kind
+    layers of a file sketched in an earlier version, made if missing."""
+    layer = obj.data.layers.get(name) or obj.data.layers.new(name, set_active=False)
+    return sketch._sketch_frame(layer, create=True).drawing
+
+
+def add_stroke(obj, points, *, radius=None, opacity=None, cyclic=False, view=0, turn=0, layer=None):
+    """Appends a stroke to the sketch's layer, or to the older layer named
+    (positions are layer-local), and returns its index in that drawing."""
+    drawing = older_layer(obj, layer) if layer else sketch.ensure_layer(obj.data)[1]
     drawing.add_strokes([len(points)])
     index = len(drawing.strokes) - 1
     stroke = drawing.strokes[index]

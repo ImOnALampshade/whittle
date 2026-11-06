@@ -212,7 +212,7 @@ Auth and Distribution).
   against ui.md §10's checks.
 - **Keys** (`addon/keys.py`, ui.md §3.8 and §3.12): add-on keymap items, all on
   Shift+Alt so they stay clear of Blender's own keys and fit a tablet's express keys:
-  Shift+Alt+D toggles Sketch mode, N picks the next stroke type, V captures a view, and
+  Shift+Alt+D toggles Sketch mode, V captures a view, and
   Enter (`whittle.send_key`) does what Enter in the prompt box does (Send, Amend during a
   turn, Answer while Claude asks). Shift+Alt+C (`addon/shortcut.py`, the Window keymap)
   opens the "Ask Claude" prompt under the pointer. Each is rebindable in Preferences →
@@ -260,9 +260,6 @@ Auth and Distribution).
 - **A flow only a GUI shows** (a real undo, a key, a file browser, a restart): a check
   in `tests/gui/catalog.py` and `checks.py`, its description in the catalog, and the
   lists in the README's GUI checks and progress.md.
-- **A stroke type**: `formats.STROKE_TYPES`, colours in `addon/sketch.py`, meanings in
-  `addon/operators.py` `STROKE_MEANINGS`, icons in `addon/ui.py` `STROKE_ICONS`, the table in
-  `agent/system_prompt.md`, and architecture §7.
 - **A preference**: `addon/prefs.py` (`WhittlePreferences`, `DEFAULTS`), session
   defaults in `agent/prompt.py` `DEFAULTS` if the agent uses it, tests in
   `tests/blender/test_prefs.py`, and the README. A session setting a file may override

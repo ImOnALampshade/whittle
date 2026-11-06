@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Whittle Sketch Grease Pencil object: one layer per stroke type, strokes
-tagged with the view they were drawn from and the turn they were sent with,
-and the sketch session that watches the viewport while the user draws."""
+"""The Whittle Sketch Grease Pencil object: strokes tagged with the view they
+were drawn from and the turn they were sent with, and the sketch session that
+watches the viewport while the user draws."""
 
 import logging
 import time
@@ -21,29 +21,23 @@ log = logging.getLogger("whittle")
 
 SKETCH_NAME = "Whittle Sketch"
 MATERIAL_NAME = "Whittle Stroke"
+# New strokes go on this layer. Files sketched in earlier versions also hold a
+# layer per stroke kind; every layer is read, so those strokes still count.
+LAYER_NAME = "Strokes"
 # Curve-domain INT attributes. 0 means untagged / pending.
 VIEW_ATTRIBUTE = "whittle_view"
 TURN_ATTRIBUTE = "whittle_turn"
 # The amendment a stroke was sent with during its turn; 0 for the turn's own
 # request (or a pending stroke).
 AMEND_ATTRIBUTE = "whittle_amend"
-# Built-in: strokes sharing a non-zero fill id are filled together.
+# Built-in: strokes sharing a non-zero fill id are filled together. Whittle no
+# longer sets it, but strokes from earlier versions can have one.
 FILL_ATTRIBUTE = "fill_id"
 # Built-in: a stroke with this set draws no outline.
 HIDE_ATTRIBUTE = "hide_stroke"
-LAYER_TYPES = formats.STROKE_TYPES
-LAYER_COLOURS = {
-    "free": (1.0, 1.0, 1.0),
-    "add": (0.1, 0.85, 0.15),
-    "carve": (0.95, 0.1, 0.05),
-    "crease": (1.0, 0.85, 0.0),
-    "region": (0.1, 0.4, 1.0),
-    "note": (0.55, 0.55, 0.55),
-}
-# Region fills are translucent so the model shows through them.
-FILL_ALPHA = 0.35
+STROKE_COLOUR = (1.0, 1.0, 1.0)
 POLL_INTERVAL = 0.25
-# Every type layer keeps its one drawing keyed at Blender's lowest frame, so the
+# Every layer keeps its one drawing keyed at Blender's lowest frame, so the
 # sketch is the same wherever the playhead is and the draw tool, which paints
 # into the key at or before the current frame, always reaches it.
 SKETCH_FRAME = -1048574
@@ -78,20 +72,17 @@ def _stroke_material():
     if mat is None or mat.grease_pencil is None:
         mat = bpy.data.materials.new(MATERIAL_NAME)
         bpy.data.materials.create_gpencil_data(mat)
-    mat.grease_pencil.color = (1.0, 1.0, 1.0, 1.0)
-    # Only strokes with a fill id are filled (region strokes); the material's
-    # show_fill flag no longer decides that.
-    mat.grease_pencil.fill_color = (1.0, 1.0, 1.0, FILL_ALPHA)
+    mat.grease_pencil.color = (*STROKE_COLOUR, 1.0)
     return mat
 
 
-def ensure_layer(gp, stroke_type: str):
-    """(layer, drawing) for a stroke type, made if missing: the layer tinted in
-    the type's colour and unlit, the drawing its sketch key's."""
-    layer = gp.layers.get(stroke_type)
+def ensure_layer(gp):
+    """(layer, drawing) for new strokes, made if missing: the layer tinted, so a
+    brush's own colour never shows, and unlit, the drawing its sketch key's."""
+    layer = gp.layers.get(LAYER_NAME)
     if layer is None:
-        layer = gp.layers.new(stroke_type, set_active=False)
-    layer.tint_color = LAYER_COLOURS[stroke_type]
+        layer = gp.layers.new(LAYER_NAME, set_active=False)
+    layer.tint_color = STROKE_COLOUR
     layer.tint_factor = 1.0
     # Lit strokes come out about a quarter as bright in Workbench renders.
     layer.use_lights = False
@@ -117,50 +108,27 @@ def _sketch_frame(layer, *, create: bool = False):
     return next(f for f in layer.frames if f.frame_number == SKETCH_FRAME)
 
 
-def ensure_sketch_layers(scene):
-    """The sketch object with all six type layers; 'free' is active when no
-    type layer is."""
+def ensure_sketch_layer(scene):
+    """The sketch object with its layer active, so the draw tool puts strokes
+    there. Any other layer gets its sketch key too, or its strokes would not
+    be read."""
     obj = ensure_sketch_object(scene)
     gp = obj.data
-    for stroke_type in LAYER_TYPES:
-        ensure_layer(gp, stroke_type)
-    if gp.layers.active is None or gp.layers.active.name not in LAYER_TYPES:
-        gp.layers.active = gp.layers["free"]
-    return obj
-
-
-# -- the active stroke type ---------------------------------------------------
-
-def active_type(obj) -> str:
-    """The stroke type new strokes go on: the active layer's, else 'free'."""
-    layer = obj.data.layers.active
-    return layer.name if layer is not None and layer.name in LAYER_TYPES else "free"
-
-
-def set_active_type(obj, stroke_type: str) -> None:
-    """Makes the type's layer active, so the draw tool puts new strokes on it."""
-    if stroke_type not in LAYER_TYPES:
-        raise ValueError(f"unknown stroke type {stroke_type!r}")
-    layer, _drawing = ensure_layer(obj.data, stroke_type)
-    obj.data.layers.active = layer
+    layer, _drawing = ensure_layer(gp)
+    for other in gp.layers:
+        _sketch_frame(other, create=True)
+    gp.layers.active = layer
     obj.active_material_index = 0
-
-
-def next_type(obj) -> str:
-    """The stroke type after the active one, wrapping at the end; nothing is
-    made active."""
-    i = LAYER_TYPES.index(active_type(obj))
-    return LAYER_TYPES[(i + 1) % len(LAYER_TYPES)]
+    return obj
 
 
 # -- reading strokes ----------------------------------------------------------
 
 @dataclass
 class SketchStroke:
-    """One stroke as read from a drawing: where it lives (layer, drawing and
-    index there), its view, turn and amendment tags (0 for none), and its
-    per-point values."""
-    layer: str
+    """One stroke as read from a drawing: where it lives (drawing and index
+    there), its view, turn and amendment tags (0 for none), and its per-point
+    values."""
     drawing: object
     index: int
     view: int
@@ -172,10 +140,9 @@ class SketchStroke:
     opacity: list
 
 
-def _type_layers(obj, include_hidden: bool):
-    for stroke_type in LAYER_TYPES:
-        layer = obj.data.layers.get(stroke_type)
-        if layer is None or (layer.hide and not include_hidden):
+def _sketch_layers(obj, include_hidden: bool):
+    for layer in obj.data.layers:
+        if layer.hide and not include_hidden:
             continue
         frame = _sketch_frame(layer)
         if frame is None:
@@ -199,10 +166,10 @@ def _curve_ints(drawing, name: str) -> list[int]:
 
 
 def iter_strokes(obj, *, include_hidden: bool = False) -> Iterator[SketchStroke]:
-    """Strokes of each type layer's sketch drawing, in type order then stroke
+    """Strokes of each layer's sketch drawing, in layer order then stroke
     order. radius, opacity and cyclic only exist as attributes once something
     has written them; until then every stroke has the defaults."""
-    for layer, drawing in _type_layers(obj, include_hidden):
+    for layer, drawing in _sketch_layers(obj, include_hidden):
         count = len(drawing.strokes)
         if count == 0:
             continue
@@ -224,8 +191,7 @@ def iter_strokes(obj, *, include_hidden: bool = False) -> Iterator[SketchStroke]
             points = local if identity else [list(matrix @ Vector(p)) for p in local]
             stroke = drawing.strokes[i] if radius is None or opacity is None or cyclic is None else None
             yield SketchStroke(
-                layer=layer.name, drawing=drawing, index=i, view=view_ids[i], turn=turns[i],
-                amend=amends[i],
+                drawing=drawing, index=i, view=view_ids[i], turn=turns[i], amend=amends[i],
                 cyclic=bool(cyclic[i]) if cyclic is not None else bool(stroke.cyclic),
                 points=points,
                 radius=(radius[start:end].tolist() if radius is not None
@@ -236,8 +202,8 @@ def iter_strokes(obj, *, include_hidden: bool = False) -> Iterator[SketchStroke]
 
 
 def read_strokes(obj) -> list[dict]:
-    """Strokes of the sketch object as plain dicts (type, view, points)."""
-    return [{"type": s.layer, "view": s.view, "points": s.points}
+    """Strokes of the sketch object as plain dicts (view, points)."""
+    return [{"view": s.view, "points": s.points}
             for s in iter_strokes(obj, include_hidden=True)]
 
 
@@ -255,7 +221,7 @@ def _set_where(obj, name: str, value: int, predicate, *, include_hidden: bool = 
     """Sets the curve attribute `name` to value on strokes whose current value
     satisfies predicate; returns how many changed."""
     changed = 0
-    for _layer, drawing in _type_layers(obj, include_hidden):
+    for _layer, drawing in _sketch_layers(obj, include_hidden):
         current = _curve_ints(drawing, name)
         hits = [i for i, v in enumerate(current) if predicate(v)]
         if not hits:
@@ -270,7 +236,7 @@ def _set_where(obj, name: str, value: int, predicate, *, include_hidden: bool = 
 def untagged(obj) -> list[tuple[object, int]]:
     """(drawing, stroke index) of every stroke with no view yet, hidden ones
     included."""
-    return [(drawing, i) for _layer, drawing in _type_layers(obj, True)
+    return [(drawing, i) for _layer, drawing in _sketch_layers(obj, True)
             for i, v in enumerate(_curve_ints(drawing, VIEW_ATTRIBUTE)) if v == 0]
 
 
@@ -286,7 +252,7 @@ def _stamp(obj, select: Callable[[int, int], bool], turn_number: int, amend: int
     """Sets (turn, amend) on the strokes whose current (turn, amend) satisfy
     select; returns how many changed."""
     changed = 0
-    for _layer, drawing in _type_layers(obj, include_hidden):
+    for _layer, drawing in _sketch_layers(obj, include_hidden):
         current = zip(_curve_ints(drawing, TURN_ATTRIBUTE), _curve_ints(drawing, AMEND_ATTRIBUTE))
         hits = [i for i, (t, a) in enumerate(current) if select(t, a)]
         if not hits:
@@ -330,7 +296,7 @@ def unstamp_amend(obj, turn_number: int, amend: int) -> int:
 def stroke_counts(obj) -> dict[int, int]:
     """Visible strokes per turn stamp; 0 counts the pending ones."""
     counts = Counter()
-    for _layer, drawing in _type_layers(obj, False):
+    for _layer, drawing in _sketch_layers(obj, False):
         counts.update(_curve_ints(drawing, TURN_ATTRIBUTE))
     return dict(counts)
 
@@ -347,7 +313,7 @@ def isolate_strokes(obj, keep: Callable[[int, int], bool]):
     they were, absent ones removed again."""
     saved = []
     try:
-        for _layer, drawing in _type_layers(obj, True):
+        for _layer, drawing in _sketch_layers(obj, True):
             stamps = zip(_curve_ints(drawing, TURN_ATTRIBUTE), _curve_ints(drawing, AMEND_ATTRIBUTE))
             hidden = [i for i, (t, a) in enumerate(stamps) if not keep(t, a)]
             if not hidden:
@@ -393,7 +359,7 @@ def remove_turn_strokes(obj, turn_number: int) -> int:
     """Deletes the strokes stamped with this turn, hidden ones included; returns
     how many went."""
     removed = 0
-    for _layer, drawing in _type_layers(obj, True):
+    for _layer, drawing in _sketch_layers(obj, True):
         hits = [i for i, v in enumerate(_curve_ints(drawing, TURN_ATTRIBUTE)) if v == turn_number]
         if hits:
             drawing.remove_strokes(indices=hits)
@@ -413,33 +379,8 @@ def view_depth(obj, view: formats.View) -> float | None:
 
 def used_views(obj) -> set[int]:
     """Ids of the views that strokes are tagged with, hidden strokes included."""
-    return {v for _layer, drawing in _type_layers(obj, True)
+    return {v for _layer, drawing in _sketch_layers(obj, True)
             for v in _curve_ints(drawing, VIEW_ATTRIBUTE) if v}
-
-
-def ensure_region_fills(obj) -> int:
-    """Gives each unfilled region stroke its own fill id, so it renders as a
-    translucent area. The draw tool leaves fill ids at 0."""
-    layer = obj.data.layers.get("region")
-    if layer is None:
-        return 0
-    changed = 0
-    for frame in layer.frames:
-        drawing = frame.drawing
-        ids = _curve_ints(drawing, FILL_ATTRIBUTE)
-        next_id = max(ids, default=0) + 1
-        missing = [i for i, v in enumerate(ids) if v == 0]
-        if not missing:
-            continue
-        data = ensure_int_attribute(drawing, FILL_ATTRIBUTE).data
-        for i in missing:
-            data[i].value = next_id
-            next_id += 1
-        changed += len(missing)
-    if changed:
-        for frame in layer.frames:
-            frame.drawing.tag_positions_changed()
-    return changed
 
 
 def clear_strokes(obj) -> None:
@@ -467,33 +408,30 @@ def add_strokes(scene, strokes: list[formats.Stroke]):
 
 def _write_strokes(scene, strokes: list[formats.Stroke], *, append: bool):
     obj = ensure_sketch_object(scene)
-    gp = obj.data
-    by_type: dict[str, list[formats.Stroke]] = {t: [] for t in LAYER_TYPES}
-    for stroke in strokes:
-        by_type[stroke.type].append(stroke)
-    for stroke_type, group in by_type.items():
-        if not group and (append or gp.layers.get(stroke_type) is None):
-            continue
-        _layer, drawing = ensure_layer(gp, stroke_type)
-        if not append and len(drawing.strokes):
-            drawing.remove_strokes()
-        if not group:
-            continue
-        first = len(drawing.strokes)
-        drawing.add_strokes([len(s.points) for s in group])
-        view_data = ensure_int_attribute(drawing, VIEW_ATTRIBUTE).data
-        turn_data = ensure_int_attribute(drawing, TURN_ATTRIBUTE).data
-        for i, src in enumerate(group, start=first):
-            dst = drawing.strokes[i]
-            dst.cyclic = src.cyclic
-            dst.material_index = 0
-            for point, co, radius, opacity in zip(dst.points, src.points, src.radius, src.opacity):
-                point.position = co
-                point.radius = radius
-                point.opacity = opacity
-            view_data[i].value = src.view
-            turn_data[i].value = 0
-    ensure_region_fills(obj)
+    if not append:
+        # A layer keyed elsewhere must reach the sketch key, or its strokes stay.
+        for layer in obj.data.layers:
+            _sketch_frame(layer, create=True)
+        for _layer, drawing in _sketch_layers(obj, True):
+            if len(drawing.strokes):
+                drawing.remove_strokes()
+    if not strokes:
+        return obj
+    _layer, drawing = ensure_layer(obj.data)
+    first = len(drawing.strokes)
+    drawing.add_strokes([len(s.points) for s in strokes])
+    view_data = ensure_int_attribute(drawing, VIEW_ATTRIBUTE).data
+    turn_data = ensure_int_attribute(drawing, TURN_ATTRIBUTE).data
+    for i, src in enumerate(strokes, start=first):
+        dst = drawing.strokes[i]
+        dst.cyclic = src.cyclic
+        dst.material_index = 0
+        for point, co, radius, opacity in zip(dst.points, src.points, src.radius, src.opacity):
+            point.position = co
+            point.radius = radius
+            point.opacity = opacity
+        view_data[i].value = src.view
+        turn_data[i].value = 0
     return obj
 
 
@@ -542,7 +480,7 @@ class SketchSession:
     def enter(self, context) -> None:
         """Starts sketching: the sketch becomes the active object in Draw Mode with
         the user's tool settings saved and replaced, and the watcher starts."""
-        obj = ensure_sketch_layers(self.scene)
+        obj = ensure_sketch_layer(self.scene)
         view_layer = context.view_layer
         current = view_layer.objects.active
         if current is not None and current is not obj and current.mode != "OBJECT":
@@ -654,7 +592,6 @@ class SketchSession:
             if current is None or views.substantially_different(current, candidate, distance):
                 current = views.add_view(obj.data, lambda view_id: candidate)
             tag_strokes(obj, current.id)
-            ensure_region_fills(obj)
         except Exception:
             log.exception("sketch watcher step failed")
         finally:

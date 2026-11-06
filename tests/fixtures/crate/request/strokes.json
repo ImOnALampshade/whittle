@@ -4,7 +4,6 @@
  "strokes": [
   {
    "index": 0,
-   "type": "add",
    "view": 1,
    "cyclic": true,
    "points": [
@@ -222,7 +221,6 @@
   },
   {
    "index": 1,
-   "type": "add",
    "view": 2,
    "cyclic": false,
    "points": [
@@ -350,7 +348,6 @@
   },
   {
    "index": 2,
-   "type": "carve",
    "view": 2,
    "cyclic": true,
    "points": [

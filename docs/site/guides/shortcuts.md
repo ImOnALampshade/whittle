@@ -9,13 +9,12 @@ own keys and fit a tablet's express keys. You can change any of them.
 |---|---|---|---|
 | **Shift+Alt+C** | Opens the Whittle sidebar and a prompt field under the pointer, ready to type | Anywhere, over any editor | Ask Claude |
 | **Shift+Alt+D** | Starts sketching, or stops | Over the viewport | Toggle Sketch Mode |
-| **Shift+Alt+N** | Picks the next stroke type: Free, Add, Carve, Crease, Region, Note, then Free again | Over the viewport | Next Stroke Type |
 | **Shift+Alt+V** | Captures the current view | Over the viewport | Capture View |
 | **Shift+Alt+Enter** | Sends, amends or answers (see below) | Over the viewport | Send or Amend |
 
-All five work in every mode: Object Mode, Edit Mode and while sketching. "Over the
+All four work in every mode: Object Mode, Edit Mode and while sketching. "Over the
 viewport" means the 3D view itself: with the pointer over the sidebar or a header, the
-four viewport keys do nothing. {doc}`sketching` explains stroke types and views.
+three viewport keys do nothing. {doc}`sketching` explains strokes and views.
 
 **Shift+Alt+Enter** depends on what Whittle is doing. A *turn* is one request and Claude's
 work on it, and *amending* adds to a turn that is still running.
@@ -81,7 +80,7 @@ Ctrl+Z is Blender's own key, and what it does during a turn is on the {doc}`undo
 3. Click the key button on the right of a row, then press the new keys.
 
 ```{figure} ../images/guides-shortcuts/keymap.png
-:alt: Blender's Preferences on the Keymap section, filtered by Whittle, listing Ask Claude and two Send on Enter rows under Window, and Send or Amend, Capture View, Next Stroke Type and Toggle Sketch Mode under 3D View.
+:alt: Blender's Preferences on the Keymap section, filtered by Whittle, listing Ask Claude and two Send on Enter rows under Window, and Send or Amend, Capture View and Toggle Sketch Mode under 3D View.
 
 Whittle's keys in the Keymap, found by searching for Whittle. Blender calls the Enter key Return.
 ```
@@ -97,7 +96,7 @@ The other things you can do from a row:
   the default.
 
 Without the search, the keys are in two places: **Window → Ask Claude**, and
-**3D View → 3D View (Global)** for the four viewport keys.
+**3D View → 3D View (Global)** for the three viewport keys.
 
 Leave the two **Send on Enter** rows alone. They are what makes Enter send from the
 prompt box: without them, Enter only ends editing and sends nothing.
@@ -113,7 +112,6 @@ to send a keystroke, and Blender sees it as if you had typed it.
 | Express key | Keystroke |
 |---|---|
 | Sketch on or off | Shift+Alt+D |
-| Next stroke type | Shift+Alt+N |
 | Capture view | Shift+Alt+V |
 | Send | Shift+Alt+Enter |
 
@@ -123,11 +121,10 @@ Keep the pen hovering over the viewport as you press, not over the sidebar. Then
 sketch needs no keyboard:
 
 1. Open the sidebar on the Whittle tab, with **View → Sidebar** or N over the viewport.
-   The Sketch key doesn't open it, and it is where the stroke type's name shows.
+   The Sketch key doesn't open it.
 2. Press Sketch to start. The sidebar shows the sketch tools.
-3. Press Next stroke type until the sidebar names the type you want.
-4. Draw, orbit and draw again. Press Capture view when you want to record an angle.
-5. Press Send. Strokes go without a prompt, or type the prompt first if you want one.
+3. Draw, orbit and draw again. Press Capture view when you want to record an angle.
+4. Press Send. Strokes go without a prompt, or type one first to say what they mean.
 
 Shift+Alt+C is not in the table because it needs a keyboard to type into. While Claude
 works, Send amends the turn with whatever you drew since it began.

@@ -55,7 +55,7 @@ class PromptTest(unittest.TestCase):
 
     def test_conventions_are_present(self):
         text = prompt.build({})
-        for phrase in ("1 Blender unit is 1 metre", "intent, not exact geometry", "| carve |",
+        for phrase in ("1 Blender unit is 1 metre", "intent, not exact geometry", "the prompt says what they mean",
                        "Never touch other objects", "mcp__whittle__request", "Whittle Sketch",
                        "User amendment", "amend=<n>", "Writing to the user", "Don't narrate", "Whittle References",
                        "z = 0", "1 m", "<user_amendment>", "<whittle_context>", "system reminders"):

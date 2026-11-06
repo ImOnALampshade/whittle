@@ -54,16 +54,17 @@ class BundleTest(unittest.TestCase):
         self.addCleanup(setattr, self.scene.unit_settings, "scale_length", 1.0)
         self.tmp = Path(tempfile.mkdtemp(prefix="whittle-bundle-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.obj = sketch.ensure_sketch_layers(self.scene)
+        self.obj = sketch.ensure_sketch_layer(self.scene)
         gp = self.obj.data
         self.view1 = views.add_view(gp, lambda i: look_at_view(i, (1.3, -1.5, 1.1), (0, 0, 0.3)))
         self.view2 = views.add_view(gp, lambda i: look_at_view(i, (0, -2, 0.25), (0, 0, 0.25)))
-        add_stroke(self.obj, "carve", A_POINTS, radius=A_RADIUS, opacity=0.5, view=2)
-        add_stroke(self.obj, "add", B_POINTS, cyclic=True, view=1)
-        add_stroke(self.obj, "note", C_POINTS, view=2)
-        add_stroke(self.obj, "free", D_POINTS)
-        add_stroke(self.obj, "crease", E_POINTS, view=1)
-        gp.layers["crease"].hide = True
+        add_stroke(self.obj, A_POINTS, radius=A_RADIUS, opacity=0.5, view=2)
+        add_stroke(self.obj, B_POINTS, cyclic=True, view=1)
+        add_stroke(self.obj, C_POINTS, view=2)
+        # On its own drawing: writing radius above gives the others a stored 0.
+        add_stroke(self.obj, D_POINTS, layer="plain")
+        add_stroke(self.obj, E_POINTS, view=1, layer="older")
+        gp.layers["older"].hide = True
         self.ref = self.tmp / "my ref!.png"
         shutil.copyfile(Path(__file__).resolve().parents[1] / "fixtures" / "crate" / "request" / "views"
                         / "1" / "overlay.png", self.ref)
@@ -88,7 +89,6 @@ class BundleTest(unittest.TestCase):
         self.assertEqual((req.node, req.parent, req.prompt, req.amend), ("n0003", "n0002", "Carve a slot.", None))
         uid = self.crate[bundle.UID_PROP]
         self.assertEqual(req.target, [{"uid": uid, "name": "Crate", "type": "MESH"}])
-        self.assertEqual(req.stroke_types, ["free", "add", "carve", "note"])
         self.assertEqual(req.views, [1, 2])
         self.assertEqual(req.refs, ["refs/my_ref.png"])
         self.assertEqual((dest / "refs" / "my_ref.png").read_bytes(), self.ref.read_bytes())
@@ -102,9 +102,8 @@ class BundleTest(unittest.TestCase):
 
     def test_strokes(self):
         strokes = self.write().strokes
-        self.assertEqual([(s.index, s.type, s.view) for s in strokes],
-                         [(0, "free", 2), (1, "add", 1), (2, "carve", 2), (3, "note", 2)])
-        d, b, a, c = strokes
+        self.assertEqual([(s.index, s.view) for s in strokes], [(0, 2), (1, 1), (2, 2), (3, 2)])
+        a, b, c, d = strokes
         self.assertTrue(b.cyclic)
         self.assertFalse(a.cyclic)
         for stroke, drawn in ((a, A_POINTS), (b, B_POINTS), (c, C_POINTS), (d, D_POINTS)):
@@ -126,7 +125,7 @@ class BundleTest(unittest.TestCase):
             self.assertEqual(set(stroke.normal), {None})
             self.assertEqual(set(stroke.hit_object), {None})
 
-        drawing = self.obj.data.layers["free"].frames[0].drawing
+        drawing = self.obj.data.layers["plain"].frames[0].drawing
         self.assertEqual(sketch._curve_ints(drawing, sketch.VIEW_ATTRIBUTE), [0],
                          "the writer does not tag strokes")
 
@@ -141,11 +140,12 @@ class BundleTest(unittest.TestCase):
         self.assertGreater(overlay[..., 3].min(), 0.99, "overlays are flattened")
         self.assertEqual(strokes[0, 0, 3], 0.0)
         x, y = views.to_pixel(self.view2, A_POINTS[4], 128, 96)
-        self.assertGreater(patch_max(strokes, x, y, "alpha"), 0.5)
+        self.assertAlmostEqual(patch_max(strokes, x, y, "alpha"), 0.5, delta=0.02, msg="its opacity")
         r, g, b, _a = patch_max(strokes, x, y, "rgb")
-        self.assertGreater(r, max(g, b))
-        r, g, b, _a = patch_max(overlay, x, y, "rgb")
-        self.assertGreater(r, max(g, b))
+        self.assertGreater(min(r, g, b), 0.9, "strokes are white")
+        row, col = overlay.shape[0] - 1 - int(y), int(x)
+        self.assertGreater(overlay[row, col, :3].sum(), overlay[row + 8, col, :3].sum() + 0.3,
+                           "over the render they lighten what they cross")
 
     def test_scene_is_untouched(self):
         before = render.snapshot_settings(self.scene)
@@ -200,7 +200,6 @@ class BundleTest(unittest.TestCase):
         written = self.write(refs=[])
         self.assertEqual(written.strokes, [])
         self.assertEqual(written.request.views, [3])
-        self.assertEqual(written.request.stroke_types, [])
 
         views.clear_views(self.obj.data)
         written = self.write("bare", refs=[])

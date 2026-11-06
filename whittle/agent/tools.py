@@ -289,20 +289,17 @@ def strokes_text(bundle: formats.Bundle, limit: int = STROKES_TEXT_LIMIT) -> tup
     return heading, text
 
 
-def stroke_summary(bundle: formats.Bundle) -> list[str]:
-    """One line per stroke type used: its strokes, their views and how many points
-    lie on a surface."""
-    lines = []
-    for stroke_type in formats.STROKE_TYPES:
-        group = [s for s in bundle.strokes if s.type == stroke_type]
-        if not group:
-            continue
-        points = sum(len(s.points) for s in group)
-        on = sum(sum(s.on_surface) for s in group)
-        view_ids = sorted({s.view for s in group})
-        lines.append(f"  {stroke_type}: {len(group)} stroke{'s' if len(group) != 1 else ''}, "
-                     f"views {', '.join(map(str, view_ids))}, {on} of {points} points on a surface")
-    return lines
+def stroke_summary(bundle: formats.Bundle) -> str:
+    """The strokes in a line: how many, their views and how many points lie on a
+    surface."""
+    strokes = bundle.strokes
+    if not strokes:
+        return "Sketched strokes: none"
+    points = sum(len(s.points) for s in strokes)
+    on = sum(sum(s.on_surface) for s in strokes)
+    view_ids = sorted({s.view for s in strokes})
+    return (f"Sketched strokes: {len(strokes)}, views {', '.join(map(str, view_ids))}, "
+            f"{on} of {points} points on a surface")
 
 
 def describe_bundle(bundle: formats.Bundle) -> list[dict]:
@@ -314,8 +311,7 @@ def describe_bundle(bundle: formats.Bundle) -> list[dict]:
         f"Prompt: {req.prompt or '(none: interpret the sketch)'}",
         "Target: " + (", ".join(f"{t['name']} ({t['type']})" for t in req.target) or "(none: create new objects)"),
         *([f"New objects go in collection '{req.target_collection}'."] if req.target_collection else []),
-        f"Stroke types used: {', '.join(req.stroke_types) or 'none'}",
-        *stroke_summary(bundle),
+        stroke_summary(bundle),
         f"Units: {req.units['system']}, scale_length {req.units['scale_length']}",
         f"Settings: {json.dumps(req.settings)}",
     ]
@@ -470,8 +466,8 @@ TOOLS = {
                                                                             "this turn, e.g. 'c1'."}},
                             "required": ["checkpoint_id"]}, False),
     "request": ("whittle", request_tool,
-                "Returns this turn's request: the prompt, the target objects, the stroke types "
-                "used, unit settings, each sketch view's camera, the strokes as world-space points "
+                "Returns this turn's request: the prompt, the target objects, unit settings, "
+                "each sketch view's camera, the strokes as world-space points "
                 "(with on_surface, and the surface normal and hit_object where a point lies on "
                 "geometry), an overlay image per sketch view (the user's strokes over a render from "
                 "that view) and any reference images. Call it at the start of every turn. With "

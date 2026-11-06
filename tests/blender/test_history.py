@@ -265,15 +265,15 @@ class ButtonsTest(HistoryTurnCase):
         n1 = self.turn(ctl, "Move it.")
         self.assertEqual(sketch.pending_count(self.obj), 0, "a finished turn clears its strokes")
         # Drawn after the turn: it stays, beside the strokes brought back.
-        add_stroke(self.obj, "region", STROKE, view=1, cyclic=True)
+        add_stroke(self.obj, STROKE, view=1, cyclic=True)
         operators.branch_node(bpy.context, n1)
         self.assertEqual(sketch.pending_count(self.obj), 2)
         self.assertEqual(sketch.used_views(self.obj), {1})
         node, sent = self.resubmit(ctl)
         self.assertEqual(ctl.history.node(node).parent, "n0000")
-        self.assertEqual(sorted(s.type for s in sent.strokes), ["free", "region"])
+        self.assertEqual(len(sent.strokes), 2)
         first = formats.read_bundle(ctl.session.request_dir(n1))
-        replayed = next(s for s in sent.strokes if s.type == "free")
+        replayed = next(s for s in sent.strokes if not s.cyclic)
         for a, b in zip(first.strokes[0].points, replayed.points):
             for x, y in zip(a, b):
                 self.assertAlmostEqual(x, y, places=4)
@@ -295,7 +295,7 @@ class ButtonsTest(HistoryTurnCase):
         n1 = self.turn(ctl, "Move it.")
         # A sketch object made afresh numbers its views from 1 again.
         bpy.data.objects.remove(self.obj)
-        self.obj = sketch.ensure_sketch_layers(self.scene)
+        self.obj = sketch.ensure_sketch_layer(self.scene)
         views.add_view(self.obj.data, lambda i: look_at_view(i, (0, -3, 0.5), (0, 0, 0.3)))
         operators.branch_node(bpy.context, n1)
         self.assertEqual(sketch.used_views(self.obj), {2})

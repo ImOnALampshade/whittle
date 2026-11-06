@@ -20,7 +20,7 @@ import bpy
 from bpy.props import IntProperty, StringProperty
 
 from .. import chats as chat_store
-from .. import formats, markdown, tree as trees
+from .. import markdown, tree as trees
 from . import chats, compare, conversation, history, models, operators, paths, prefs, previews, setup, sketch, start
 from . import props, shortcut, targets, turn, viewmarks, views
 from .process import AgentState
@@ -32,8 +32,6 @@ BUSY_STATES = (AgentState.STARTING, AgentState.BUSY, AgentState.STOPPING)
 TOOL_ICONS = {"pending": "SORTTIME", "ok": "CHECKMARK", "error": "CANCEL"}
 NODE_ICONS = {"interrupted": "PAUSE", "failed": "CANCEL", "running": "SORTTIME"}
 NOTE_ICONS = {"note": "INFO", "warning": "ERROR", "error": "ERROR"}
-STROKE_ICONS = {"free": "STROKE", "add": "ADD", "carve": "REMOVE", "crease": "MOD_BEVEL",
-                "region": "SELECT_SET", "note": "TEXT"}
 # One icon button, at UI scale 1.
 UNIT = 20
 # What a box's border and inset take from the text inside it.
@@ -1191,9 +1189,8 @@ def stroke_summary(obj, ctl) -> str:
 
 def draw_sketch(layout, ctx: Ctx) -> None:
     """The Sketch button; while sketching it stays pressed with Capture View
-    beside it, and the stroke types (the active one named) go on a row of
-    their own; and, once there is something drawn, its count over the
-    list of views."""
+    beside it; and, once there is something drawn, its count over the list of
+    views."""
     obj = sketch.find_sketch_object()
     sketching = sketch.current_session() is not None
     if not sketching:
@@ -1206,18 +1203,6 @@ def draw_sketch(layout, ctx: Ctx) -> None:
         row.alignment = "LEFT"
         row.operator("whittle.sketch_stop", text="Sketch", icon="GREASEPENCIL", depress=True)
         row.operator("whittle.capture_view", text="Capture View", icon="CAMERA_DATA")
-        row = layout.row()
-        row.alignment = "LEFT"
-        tools = row.row(align=True)
-        tools.alignment = "LEFT"
-        active = sketch.active_type(obj) if obj is not None else None
-        for stroke_type in formats.STROKE_TYPES:
-            tools.operator("whittle.stroke_type", text="", icon=STROKE_ICONS[stroke_type],
-                           depress=stroke_type == active).type = stroke_type
-        if active:
-            name = row.row()
-            name.active = False
-            name.label(text=active.capitalize())
 
     summary = stroke_summary(obj, ctx.ctl)
     if not summary:

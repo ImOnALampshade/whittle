@@ -263,11 +263,10 @@ alone, the one new strokes go to, and with no views at all there is no `views/` 
 overlay draws all of the bundle's strokes, not only those tagged with its view.
 
 ```{figure} ../images/develop-protocol/overlay.png
-:alt: The crate from a three-quarter view, a green closed add stroke above its top and a red carve stroke on its front face.
+:alt: The crate from a three-quarter view, a white closed stroke above its top and another on its front face.
 
 `views/1/overlay.png` from `n0001`'s bundle, the sketched turn, whose strokes use views 1
-and 2. It is shown in Blender's Image Editor. The green stroke is `add` and the red one
-`carve`.
+and 2. It is shown in Blender's Image Editor.
 ```
 
 ### request.json
@@ -286,7 +285,6 @@ with no strokes, so `views` holds the current view only, here also the latest.
   {"uid": "29d654bc97d143fda6fc9742eee04844", "name": "Crate", "type": "MESH"},
   {"uid": "9c3cff98b5394d5a9a90c6ed0c323571", "name": "Crate_Lid", "type": "MESH"}
  ],
- "stroke_types": [],
  "views": [2],
  "units": {"system": "METRIC", "scale_length": 1.0},
  "settings": {"self_check_rounds": 3, "poly_budget": 2000, "style_notes": "", "palette": "", "bevel_style": ""},
@@ -302,7 +300,6 @@ with no strokes, so `views` holds the current view only, here also the latest.
 | `prompt` | What the user wrote. |
 | `amend` | The amendment number in an amend bundle, else null. |
 | `target` | `uid` is the object's `whittle_uid` property, so a renamed target is still found. |
-| `stroke_types` | The stroke types present, from `formats.STROKE_TYPES`: `free`, `add`, `carve`, `crease`, `region`, `note`. |
 | `views` | View ids, each with a folder under `views/`. |
 | `refs` | Paths inside the bundle. An absolute path, a drive or `..` is refused. |
 | `units` | From `scene.unit_settings`. |
@@ -316,7 +313,7 @@ bundle, cut to its first point:
 
 ```json
 {
- "index": 2, "type": "carve", "view": 2, "cyclic": true,
+ "index": 2, "view": 2, "cyclic": true,
  "points": [[0.09, -0.2501, 0.38]],
  "radius": [0.006],
  "opacity": [1.0],
@@ -329,7 +326,6 @@ bundle, cut to its first point:
 `points` are world-space positions. The other five lists run in parallel with `points`,
 one entry per point; `normal` and `hit_object` are null where the point hit nothing. Every
 stroke needs at least one point and a `view` the request lists.
-[Sketching](../guides/sketching.md) says what each type means to the user.
 
 ### camera.json
 

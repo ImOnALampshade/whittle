@@ -265,18 +265,17 @@ After **Edit & Resend**: the prompt is back in its box, and the button reads **B
 ## Sketch
 
 The **Sketch** button sits between the conversation and the prompt box. Press it to draw
-over the model. It stays pressed while you sketch, **Capture View** appears beside it, and a
-row of stroke types appears below it: Free, Add, Carve, Crease, Region and Note, with the
-active one named at the end.
+over the model. It stays pressed while you sketch, **Capture View** appears beside it. There
+is nothing to pick first: draw, then say in the prompt what your strokes mean.
 
 A **view** is a saved viewpoint. Each stroke belongs to the view it was drawn from, so Claude
 sees your sketch from where you drew it. Whittle makes views as you move around, and
 **Capture View** saves one by hand.
 
 ```{figure} ../images/guides-sidebar/sketching.png
-:alt: Sketch mode. The Sketch button is pressed with Capture View beside it, the six stroke type buttons are below with Carve active, then the stroke count with two views listed and a Markers While Sketching checkbox.
+:alt: Sketch mode. The Sketch button is pressed with Capture View beside it, then comes the stroke count with two views listed and a Markers While Sketching checkbox.
 
-While sketching. Under the stroke types is the count, here of strokes and views. Open it for
+While sketching. Under the Sketch button is the count, here of strokes and views. Open it for
 the list of views. Click a view to go back to it, and ✕ to remove one that has no strokes.
 The trash icon on the count's line clears the sketch.
 ```

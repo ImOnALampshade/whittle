@@ -11,7 +11,7 @@ class BlenderEnvironmentTest(unittest.TestCase):
     def test_grease_pencil_drawings_take_custom_stroke_attributes(self):
         gp = bpy.data.grease_pencils.new("EnvProbe")
         try:
-            drawing = gp.layers.new("free").frames.new(1).drawing
+            drawing = gp.layers.new("Strokes").frames.new(1).drawing
             drawing.add_strokes([2])
             attr = drawing.attributes.new("whittle_view", "INT", "CURVE")
             attr.data[0].value = 3

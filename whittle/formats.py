@@ -19,7 +19,6 @@ STROKES_FORMAT = "whittle.strokes"
 TARGET_FORMAT = "whittle.target"
 VERSION = 1
 
-STROKE_TYPES = ("free", "add", "carve", "crease", "region", "note")
 RENDER_MODES = ("shaded", "wireframe", "matcap", "overlay")
 # The image files the agent attaches to a tool result; others stay on disk.
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -125,16 +124,13 @@ def validate_request(obj: dict, where: str = "request.json") -> None:
     _check_header(obj, where, REQUEST_FORMAT)
     _check(obj, where, {
         "node": str, "parent": (str, None), "prompt": str, "amend": (int, None),
-        "target": list, "stroke_types": list, "views": list, "refs": list,
+        "target": list, "views": list, "refs": list,
         "units": dict, "settings": dict,
     })
     for i, t in enumerate(obj["target"]):
         if not isinstance(t, dict):
             raise FormatError(f"{where}: target[{i}] is not an object")
         _check(t, f"{where}: target[{i}]", {"uid": str, "name": str, "type": str})
-    for st in obj["stroke_types"]:
-        if st not in STROKE_TYPES:
-            raise FormatError(f"{where}: unknown stroke type {st!r}")
     if not all(_type_ok(v, int) for v in obj["views"]):
         raise FormatError(f"{where}: key 'views' must hold integers")
     if not all(isinstance(r, str) for r in obj["refs"]):
@@ -165,12 +161,10 @@ def validate_strokes(obj: dict, where: str = "strokes.json") -> None:
         if not isinstance(s, dict):
             raise FormatError(f"{w} is not an object")
         _check(s, w, {
-            "index": int, "type": str, "view": int, "cyclic": bool, "points": list,
+            "index": int, "view": int, "cyclic": bool, "points": list,
             "radius": list, "opacity": list, "on_surface": list, "normal": list,
             "hit_object": list,
         })
-        if s["type"] not in STROKE_TYPES:
-            raise FormatError(f"{w}: unknown stroke type {s['type']!r}")
         n = len(s["points"])
         if n == 0:
             raise FormatError(f"{w}: no points")
@@ -289,7 +283,6 @@ class Stroke:
     """One sketched stroke, as strokes.json holds it. The per-point lists run parallel to
     points."""
     index: int
-    type: str
     view: int
     cyclic: bool
     points: list
@@ -317,7 +310,6 @@ class Request:
     parent: str | None
     prompt: str
     target: list
-    stroke_types: list
     views: list
     units: dict
     settings: dict

@@ -146,7 +146,7 @@ class SnapToViewTest(unittest.TestCase):
         old = sketch.find_sketch_object()
         if old is not None:
             bpy.data.objects.remove(old)
-        self.obj = sketch.ensure_sketch_layers(bpy.context.scene)
+        self.obj = sketch.ensure_sketch_layer(bpy.context.scene)
         self.addCleanup(lambda: sketch.find_sketch_object() and bpy.data.objects.remove(sketch.find_sketch_object()))
         self.front = views.add_view(self.obj.data, lambda i: look_at_view(i, (0, -3, 0.3), (0, 0, 0.3)))
         self.side = views.add_view(self.obj.data, lambda i: look_at_view(i, (3, 0, 0.3), (0, 0, 0.3)))
@@ -157,12 +157,12 @@ class SnapToViewTest(unittest.TestCase):
             return operators.snap_to_view(bpy.context, view_id), vp
 
     def test_snaps_and_makes_the_view_current(self):
-        add_stroke(self.obj, "free", [(0, 0.5, 0.3), (0.1, 0.5, 0.3)], view=1)
-        pending = add_stroke(self.obj, "add", [(0, 0, 0.3), (0.1, 0, 0.3)])
+        add_stroke(self.obj, [(0, 0.5, 0.3), (0.1, 0.5, 0.3)], view=1)
+        pending = add_stroke(self.obj, [(0, 0, 0.3), (0.1, 0, 0.3)])
         view, vp = self.snap(1)
         self.assertEqual(view.id, 1)
         self.assertEqual(views.current_view(self.obj.data).id, 1)
-        _layer, drawing = sketch.ensure_layer(self.obj.data, "add")
+        _layer, drawing = sketch.ensure_layer(self.obj.data)
         self.assertEqual(sketch._curve_ints(drawing, sketch.VIEW_ATTRIBUTE)[pending], 2,
                          "strokes drawn before the snap belong to the view before it")
         self.assertAlmostEqual(vp.rv3d.view_distance, 3.5, places=4, msg="the pivot at the view's strokes")
@@ -187,9 +187,9 @@ class SnapToViewTest(unittest.TestCase):
         here = fake_viewport(self.front)
         session = sketch.SketchSession(bpy.context.scene, viewport_provider=lambda: here, use_timer=False)
         session.active = True
-        index = add_stroke(self.obj, "free", [(0, 0, 0.3), (0.1, 0, 0.3)])
+        index = add_stroke(self.obj, [(0, 0, 0.3), (0.1, 0, 0.3)])
         session.poll()
-        _layer, drawing = sketch.ensure_layer(self.obj.data, "free")
+        _layer, drawing = sketch.ensure_layer(self.obj.data)
         self.assertEqual(sketch._curve_ints(drawing, sketch.VIEW_ATTRIBUTE)[index], 1)
         self.assertEqual([v.id for v in views.load_views(self.obj.data)], [1, 2], "no new view")
 

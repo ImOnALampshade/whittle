@@ -1,11 +1,11 @@
 ---
 name: bevel-crease
-description: Bevels hard-surface edges and turns crease strokes into bevelled or sharp edges by picking the mesh edges that lie under the stroke. Use for crease (yellow) strokes, for prompts about bevels, chamfers, rounded or sharp edges, and for hard-surface shading.
+description: Bevels hard-surface edges and turns strokes along an edge into bevelled or sharp edges by picking the mesh edges that lie under the stroke. Use when a stroke marks a hard edge, for prompts about bevels, chamfers, rounded or sharp edges, and for hard-surface shading.
 ---
 
 # Bevel and crease edges
 
-Use for crease (yellow) strokes and for general hard-surface polish.
+Use when a stroke marks a hard edge and for general hard-surface polish.
 
 Whole-object bevel, which suits most hard-surface props:
 
@@ -22,11 +22,11 @@ target.data.set_sharp_from_angle(angle=math.radians(40))
 print([m.name for m in target.modifiers])
 ```
 
-Bevelling only the edges under a crease stroke: give those edges a bevel weight and switch the modifier to the WEIGHT limit method. Edges are picked by how close their midpoints lie to the stroke.
+Bevelling only the edges under a stroke: give those edges a bevel weight and switch the modifier to the WEIGHT limit method. Edges are picked by how close their midpoints lie to the stroke.
 
 ```python
 target = bpy.data.objects.get("Crate") or whittle.targets()[0]
-crease_stroke = [(-0.25, -0.25, 0.5), (0.0, -0.25, 0.5), (0.25, -0.25, 0.5)]
+edge_stroke = [(-0.25, -0.25, 0.5), (0.0, -0.25, 0.5), (0.25, -0.25, 0.5)]
 tolerance = 0.03
 
 
@@ -41,7 +41,7 @@ def distance_to_polyline(p, points):
 
 mesh = target.data
 world = target.matrix_world
-stroke = [Vector(p) for p in crease_stroke]
+stroke = [Vector(p) for p in edge_stroke]
 weights = mesh.attributes.get("bevel_weight_edge") or mesh.attributes.new("bevel_weight_edge", "FLOAT", "EDGE")
 picked = 0
 for edge in mesh.edges:

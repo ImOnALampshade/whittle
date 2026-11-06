@@ -1,6 +1,6 @@
 ---
 name: blockout-silhouette
-description: Builds a solid blockout by extruding a closed outline stroke into a prism, with the hand-drawn wobble simplified away. Use when an add or free stroke is the closed silhouette of a flat-sided prop (a crate side, a sign, a door, a tombstone), or for the first rough shape of a prop drawn as an outline.
+description: Builds a solid blockout by extruding a closed outline stroke into a prism, with the hand-drawn wobble simplified away. Use when a stroke is the closed silhouette of a flat-sided prop (a crate side, a sign, a door, a tombstone), or for the first rough shape of a prop drawn as an outline.
 ---
 
 # Blockout from a silhouette

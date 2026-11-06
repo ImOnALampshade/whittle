@@ -193,14 +193,13 @@ def prompt_only_done(stage: Stage):
 @scenario
 def sketching(stage: Stage):
     stage.crate()
-    obj = sketch.ensure_sketch_layers(stage.scene)
+    obj = sketch.ensure_sketch_layer(stage.scene)
     bundle = formats.read_bundle(CRATE_BUNDLE)
     for view_id in sorted(bundle.views):
         views.add_view(obj.data, lambda _i, view=bundle.views[view_id]: view)
     for stroke in bundle.strokes:
-        add_stroke(obj, stroke.type, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
+        add_stroke(obj, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
                    cyclic=stroke.cyclic, view=stroke.view)
-    sketch.set_active_type(obj, "carve")
     bpy.context.window_manager.whittle_show_views = True
     stage.props.prompt = bundle.request.prompt
     stage.run(sketch.start_session)
@@ -210,12 +209,12 @@ def sketching(stage: Stage):
 @scenario(viewport=True)
 def view_markers(stage: Stage):
     stage.crate()
-    obj = sketch.ensure_sketch_layers(stage.scene)
+    obj = sketch.ensure_sketch_layer(stage.scene)
     bundle = formats.read_bundle(CRATE_BUNDLE)
     for view_id in sorted(bundle.views):
         views.add_view(obj.data, lambda _i, view=bundle.views[view_id]: view)
     for stroke in bundle.strokes:
-        add_stroke(obj, stroke.type, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
+        add_stroke(obj, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
                    cyclic=stroke.cyclic, view=stroke.view)
     stage.run(sketch.start_session)
     yield Until(lambda: sketch.current_session() is not None, "sketch mode")
@@ -810,21 +809,20 @@ def model_menu_older(stage: Stage):
 
 # -- the README's hero shot ---------------------------------------------------
 
-# The next request, sketched over the result: a stroke of each kind.
+# The next request, sketched over the result: (view, closed, points).
 HERO_STROKES = [
     # A latch to add on the front, below the lid.
-    ("add", True, [(-0.06, -0.262, 0.47), (0.06, -0.262, 0.47), (0.06, -0.262, 0.38),
-                   (-0.06, -0.262, 0.38)]),
+    (2, True, [(-0.06, -0.262, 0.47), (0.06, -0.262, 0.47), (0.06, -0.262, 0.38), (-0.06, -0.262, 0.38)]),
     # A finger slot to carve into the lid.
-    ("carve", True, [(-0.13 + 0.26 * k / 12, -0.035, 0.552) for k in range(13)]
+    (2, True, [(-0.13 + 0.26 * k / 12, -0.035, 0.552) for k in range(13)]
      + [(0.13 - 0.26 * k / 12, 0.035, 0.552) for k in range(13)]),
     # The lid's front edge to sharpen.
-    ("crease", False, [(-0.28 + 0.56 * k / 10, -0.282, 0.552) for k in range(11)]),
+    (2, False, [(-0.28 + 0.56 * k / 10, -0.282, 0.552) for k in range(11)]),
     # The side panel to paint.
-    ("region", True, [(-0.262, -0.2, 0.04), (-0.262, 0.2, 0.04), (-0.262, 0.2, 0.18), (-0.262, -0.2, 0.18)]),
-    # A note pointing at the latch.
-    ("note", False, [(-0.55, -0.45, 0.78), (-0.4, -0.38, 0.66), (-0.24, -0.32, 0.55), (-0.09, -0.28, 0.46)]),
-    ("note", False, [(-0.16, -0.29, 0.44), (-0.09, -0.28, 0.46), (-0.14, -0.31, 0.53)]),
+    (1, True, [(-0.262, -0.2, 0.04), (-0.262, 0.2, 0.04), (-0.262, 0.2, 0.18), (-0.262, -0.2, 0.18)]),
+    # An arrow pointing at the latch.
+    (2, False, [(-0.55, -0.45, 0.78), (-0.4, -0.38, 0.66), (-0.24, -0.32, 0.55), (-0.09, -0.28, 0.46)]),
+    (2, False, [(-0.16, -0.29, 0.44), (-0.09, -0.28, 0.46), (-0.14, -0.31, 0.53)]),
 ]
 
 
@@ -839,7 +837,7 @@ def _orbit(stage: Stage, direction, distance: float, look_at=(0.0, 0.0, 0.28)) -
 @scenario(window=True)
 def hero(stage: Stage):
     """The whole window: a crate built over three turns, matcap shading, and
-    the next request sketched over it with a stroke of every kind."""
+    the next request sketched over it."""
     stage.crate()
     script = stage.script("hero", [
         {"steps": [say("Bevelling the edges, then a lid that overhangs a little."),
@@ -862,7 +860,7 @@ def hero(stage: Stage):
     space.shading.color_type = "MATERIAL"
     space.overlay.show_cursor = False
     space.overlay.show_outline_selected = False
-    obj = sketch.ensure_sketch_layers(stage.scene)
+    obj = sketch.ensure_sketch_layer(stage.scene)
     stage.run(sketch.start_session)
     yield Until(lambda: sketch.current_session() is not None, "sketch mode")
     space.show_region_asset_shelf = False
@@ -873,10 +871,8 @@ def hero(stage: Stage):
     _orbit(stage, (-2.4, -4.0, 2.4), 1.55)
     yield 0.3
     sketch.current_session().capture()
-    for stroke_type, cyclic, points in HERO_STROKES:
-        add_stroke(obj, stroke_type, points, radius=0.007, cyclic=cyclic, view=1 if stroke_type == "region" else 2)
-    sketch.ensure_region_fills(obj)
-    sketch.set_active_type(obj, "note")
+    for view, cyclic, points in HERO_STROKES:
+        add_stroke(obj, points, radius=0.007, cyclic=cyclic, view=view)
     stage.props.prompt = ("Add a brass latch here, carve a finger slot in the lid, sharpen its front edge "
                           "and paint the side panel.")
     yield 0.5

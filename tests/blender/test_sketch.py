@@ -7,10 +7,10 @@ import bpy
 from mathutils import Matrix, Vector
 
 from tests.blender.helpers import CRATE_BUNDLE
-from tests.blender.sketch_helpers import add_stroke, fake_viewport, look_at_view
+from tests.blender.sketch_helpers import add_stroke, fake_viewport, look_at_view, older_layer
 from tests.fixtures.crate.scene import build_scene
 from whittle import formats
-from whittle.addon import render, sketch, views
+from whittle.addon import sketch, views
 
 
 def remove_sketch():
@@ -27,23 +27,22 @@ class SketchTest(unittest.TestCase):
     def test_load_strokes_from_fixture(self):
         obj = sketch.load_strokes(bpy.context.scene, self.bundle.strokes)
         self.assertEqual(obj.name, sketch.SKETCH_NAME)
-        self.assertEqual(sorted(l.name for l in obj.data.layers), ["add", "carve"])
+        self.assertEqual([l.name for l in obj.data.layers], [sketch.LAYER_NAME])
         loaded = sketch.read_strokes(obj)
-        expected = [{"type": s.type, "view": s.view, "points": s.points} for s in self.bundle.strokes]
+        expected = [{"view": s.view, "points": s.points} for s in self.bundle.strokes]
         self.assertEqual(len(loaded), len(expected))
-        for got, want in zip(sorted(loaded, key=lambda s: (s["type"], s["view"])),
-                             sorted(expected, key=lambda s: (s["type"], s["view"]))):
-            self.assertEqual((got["type"], got["view"]), (want["type"], want["view"]))
+        for got, want in zip(loaded, expected):
+            self.assertEqual(got["view"], want["view"])
             for p, q in zip(got["points"], want["points"]):
                 for a, b in zip(p, q):
                     self.assertAlmostEqual(a, b, places=5)
 
     def test_layers_are_unlit_and_tinted(self):
         obj = sketch.load_strokes(bpy.context.scene, self.bundle.strokes)
-        layer = obj.data.layers["carve"]
+        layer = obj.data.layers[sketch.LAYER_NAME]
         self.assertFalse(layer.use_lights)
         self.assertEqual(layer.tint_factor, 1.0)
-        self.assertAlmostEqual(layer.tint_color[0], sketch.LAYER_COLOURS["carve"][0], places=5)
+        self.assertEqual(tuple(layer.tint_color), sketch.STROKE_COLOUR)
 
     def test_reloading_replaces_strokes(self):
         sketch.load_strokes(bpy.context.scene, self.bundle.strokes)
@@ -57,33 +56,28 @@ class LayersTest(unittest.TestCase):
         build_scene()
         self.scene = bpy.context.scene
 
-    def test_ensure_sketch_layers(self):
-        obj = sketch.ensure_sketch_layers(self.scene)
+    def test_ensure_sketch_layer(self):
+        obj = sketch.ensure_sketch_layer(self.scene)
         gp = obj.data
-        self.assertEqual([l.name for l in gp.layers], list(formats.STROKE_TYPES))
-        for layer in gp.layers:
-            self.assertEqual(tuple(round(c, 5) for c in layer.tint_color),
-                             tuple(round(c, 5) for c in sketch.LAYER_COLOURS[layer.name]))
-            self.assertEqual(layer.tint_factor, 1.0)
-            self.assertFalse(layer.use_lights)
-            self.assertEqual([f.frame_number for f in layer.frames], [sketch.SKETCH_FRAME])
-        self.assertEqual(gp.layers.active.name, "free")
-        again = sketch.ensure_sketch_layers(self.scene)
+        self.assertEqual([l.name for l in gp.layers], [sketch.LAYER_NAME])
+        self.assertEqual([f.frame_number for f in gp.layers[0].frames], [sketch.SKETCH_FRAME])
+        self.assertEqual(gp.layers.active.name, sketch.LAYER_NAME)
+        again = sketch.ensure_sketch_layer(self.scene)
         self.assertIs(again, obj)
-        self.assertEqual(len(gp.layers), 6)
+        self.assertEqual(len(gp.layers), 1)
         self.assertEqual(len(gp.materials), 1)
 
     def test_sketch_does_not_depend_on_the_playhead(self):
         remove_sketch()
         self.scene.frame_set(10)
         try:
-            obj = sketch.ensure_sketch_layers(self.scene)
-            add_stroke(obj, "free", [(0, 0, 0), (1, 0, 0)])
+            obj = sketch.ensure_sketch_layer(self.scene)
+            add_stroke(obj, [(0, 0, 0), (1, 0, 0)])
             for frame in (1, 10, 20):
                 self.scene.frame_set(frame)
-                sketch.ensure_sketch_layers(self.scene)
+                sketch.ensure_sketch_layer(self.scene)
                 self.assertEqual(len(list(sketch.iter_strokes(obj))), 1, f"at frame {frame}")
-                self.assertEqual(len(obj.data.layers["free"].frames), 1)
+                self.assertEqual(len(obj.data.layers[sketch.LAYER_NAME].frames), 1)
             self.scene.frame_set(1)
             self.assertEqual(sketch.stamp_strokes(obj, 4), 1)
             self.assertEqual(sketch.remove_turn_strokes(obj, 4), 1)
@@ -96,74 +90,101 @@ class LayersTest(unittest.TestCase):
         layer = obj.data.layers.new("add")
         layer.frames.new(7).drawing.add_strokes([2])
         layer.frames.new(9)
-        sketch.ensure_sketch_layers(self.scene)
+        sketch.ensure_sketch_layer(self.scene)
         self.assertEqual([f.frame_number for f in layer.frames], [sketch.SKETCH_FRAME])
         self.assertEqual(len(list(sketch.iter_strokes(obj))), 1)
 
-    def test_active_type(self):
-        obj = sketch.ensure_sketch_layers(self.scene)
-        sketch.set_active_type(obj, "carve")
-        self.assertEqual(obj.data.layers.active.name, "carve")
-        self.assertEqual(sketch.active_type(obj), "carve")
-        self.assertEqual(sketch.next_type(obj), "crease")
-        sketch.set_active_type(obj, "note")
-        self.assertEqual(sketch.next_type(obj), "free")
-        with self.assertRaises(ValueError):
-            sketch.set_active_type(obj, "sparkle")
+    def test_the_layer_is_active_whatever_the_file_left_active(self):
+        obj = sketch.ensure_sketch_layer(self.scene)
+        older_layer(obj, "carve")
+        obj.data.layers.active = obj.data.layers["carve"]
+        sketch.ensure_sketch_layer(self.scene)
+        self.assertEqual(obj.data.layers.active.name, sketch.LAYER_NAME)
 
-    def test_region_strokes_are_filled(self):
-        obj = sketch.ensure_sketch_layers(self.scene)
-        circle = [(0.3 * math.cos(a), 0.0, 0.3 * math.sin(a) + 0.3)
-                  for a in (2 * math.pi * i / 24 for i in range(24))]
-        add_stroke(obj, "region", circle, cyclic=True)
-        add_stroke(obj, "region", [(p[0] * 0.3 + 0.6, p[1], p[2]) for p in circle], cyclic=True)
-        self.assertEqual(sketch.ensure_region_fills(obj), 2)
-        drawing = obj.data.layers["region"].frames[0].drawing
-        self.assertEqual([s.fill_id for s in drawing.strokes], [1, 2])
-        self.assertEqual(sketch.ensure_region_fills(obj), 0)
 
-        view = look_at_view(1, (0, -2, 0.3), (0, 0, 0.3))
-        out = render.render(self.scene, view.camera, "overlay", 128,
-                            self._tmp() / "region.png", aspect=view.aspect, sketch=obj)
-        strokes = render.load_pixels(out["strokes_path"])
-        x, y = views.to_pixel(view, (0.0, 0.0, 0.3), out["width"], out["height"])
-        centre = strokes[out["height"] - 1 - int(y), int(x)]
-        self.assertAlmostEqual(centre[3], sketch.FILL_ALPHA, delta=0.05)
-        self.assertGreater(centre[2], centre[0], "the fill is region blue")
+class OlderFileTest(unittest.TestCase):
+    """A file sketched before stroke kinds went has a layer for each kind; its
+    strokes are still the sketch's."""
 
-    def _tmp(self):
-        import tempfile
-        from pathlib import Path
+    def setUp(self):
+        build_scene()
+        remove_sketch()
+        self.scene = bpy.context.scene
+        self.obj = sketch.ensure_sketch_object(self.scene)
+        add_stroke(self.obj, [(0, 0, 0), (1, 0, 0)], view=1, layer="free")
+        add_stroke(self.obj, [(0, 0, 0), (0, 1, 0), (0, 2, 0)], view=1, layer="carve")
 
-        path = Path(tempfile.mkdtemp(prefix="whittle-sketch-"))
-        self.addCleanup(__import__("shutil").rmtree, path, True)
-        return path
+    def test_every_layer_is_read(self):
+        self.assertEqual(sorted(len(s.points) for s in sketch.iter_strokes(self.obj)), [2, 3])
+        self.assertEqual(sketch.pending_count(self.obj), 2)
+        self.assertEqual(sketch.used_views(self.obj), {1})
+
+    def test_sketching_on_keeps_them_and_draws_on_the_new_layer(self):
+        sketch.ensure_sketch_layer(self.scene)
+        self.assertEqual(self.obj.data.layers.active.name, sketch.LAYER_NAME)
+        add_stroke(self.obj, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (3, 0, 1)], view=1)
+        self.assertEqual(sorted(len(s.points) for s in sketch.iter_strokes(self.obj)), [2, 3, 4])
+
+    def test_a_finished_turn_removes_them(self):
+        self.assertEqual(sketch.stamp_strokes(self.obj, 5), 2)
+        self.assertEqual(sketch.remove_turn_strokes(self.obj, 5), 2)
+        self.assertEqual(list(sketch.iter_strokes(self.obj, include_hidden=True)), [])
+
+    def test_loading_replaces_them_and_clearing_clears_them(self):
+        bundle = formats.read_bundle(CRATE_BUNDLE)
+        sketch.load_strokes(self.scene, bundle.strokes[:1])
+        self.assertEqual(len(sketch.read_strokes(self.obj)), 1)
+        self.assertEqual(sketch.load_strokes(self.scene, []), self.obj)
+        self.assertEqual(sketch.read_strokes(self.obj), [])
+        add_stroke(self.obj, [(0, 0, 0), (1, 0, 0)], view=1, layer="note")
+        sketch.clear_strokes(self.obj)
+        self.assertEqual(sketch.read_strokes(self.obj), [])
+
+    def key_every_layer_elsewhere(self):
+        add_stroke(self.obj, [(0, 0, 2), (1, 0, 2)], view=1)
+        for layer in self.obj.data.layers:
+            layer.frames.move(sketch.SKETCH_FRAME, 7)
+
+    def test_loading_replaces_them_on_layers_keyed_elsewhere(self):
+        self.key_every_layer_elsewhere()
+        bundle = formats.read_bundle(CRATE_BUNDLE)
+        sketch.load_strokes(self.scene, bundle.strokes[:1])
+        self.assertEqual(len(sketch.read_strokes(self.obj)), 1)
+        # A read skips a key elsewhere, and sketching on would bring it back.
+        sketch.ensure_sketch_layer(self.scene)
+        self.assertEqual(len(sketch.read_strokes(self.obj)), 1)
+
+    def test_loading_nothing_clears_layers_keyed_elsewhere(self):
+        self.key_every_layer_elsewhere()
+        sketch.load_strokes(self.scene, [])
+        sketch.ensure_sketch_layer(self.scene)
+        self.assertEqual(sketch.read_strokes(self.obj), [])
 
 
 class StrokeDataTest(unittest.TestCase):
     def setUp(self):
         build_scene()
         remove_sketch()
-        self.obj = sketch.ensure_sketch_layers(bpy.context.scene)
+        self.obj = sketch.ensure_sketch_layer(bpy.context.scene)
 
     def views_of(self):
-        return [(s.layer, s.view) for s in sketch.iter_strokes(self.obj, include_hidden=True)]
+        return [s.view for s in sketch.iter_strokes(self.obj, include_hidden=True)]
 
     def test_tagging(self):
-        add_stroke(self.obj, "free", [(0, 0, 0), (1, 0, 0)])
-        add_stroke(self.obj, "carve", [(0, 0, 0), (0, 1, 0)])
+        add_stroke(self.obj, [(0, 0, 0), (1, 0, 0)])
+        add_stroke(self.obj, [(0, 0, 0), (0, 1, 0)])
         self.assertEqual(len(sketch.untagged(self.obj)), 2)
         self.assertEqual(sketch.tag_strokes(self.obj, 3), 2)
-        add_stroke(self.obj, "free", [(0, 0, 1), (1, 0, 1)])
+        add_stroke(self.obj, [(0, 0, 1), (1, 0, 1)])
         self.assertEqual(sketch.tag_strokes(self.obj, 4), 1)
-        self.assertEqual(self.views_of(), [("free", 3), ("free", 4), ("carve", 3)])
+        self.assertEqual(self.views_of(), [3, 3, 4])
         self.assertEqual(sketch.used_views(self.obj), {3, 4})
 
     def test_tags_follow_reordered_strokes(self):
-        add_stroke(self.obj, "free", [(0, 0, 0), (1, 0, 0)], view=2)
-        add_stroke(self.obj, "free", [(0, 0, 1), (1, 0, 1), (2, 0, 1)])
+        add_stroke(self.obj, [(0, 0, 0), (1, 0, 0)], view=2)
+        add_stroke(self.obj, [(0, 0, 1), (1, 0, 1), (2, 0, 1)])
         # The draw tool can insert a stroke first (draw on back).
-        drawing = self.obj.data.layers["free"].frames[0].drawing
+        drawing = self.obj.data.layers[sketch.LAYER_NAME].frames[0].drawing
         drawing.reorder_strokes(new_indices=[1, 0])
         self.assertEqual(sketch.tag_strokes(self.obj, 5), 1)
         got = [(len(s.points), s.view) for s in sketch.iter_strokes(self.obj)]
@@ -171,10 +192,10 @@ class StrokeDataTest(unittest.TestCase):
 
     def test_stamp_and_remove(self):
         for i in range(3):
-            add_stroke(self.obj, "add", [(i, 0, 0), (i, 1, 0)], view=1)
+            add_stroke(self.obj, [(i, 0, 0), (i, 1, 0)], view=1)
         self.assertEqual(sketch.stamp_strokes(self.obj, 7), 3)
         pending = [(0.5, 0.5, 0.5), (0.6, 0.5, 0.5)]
-        add_stroke(self.obj, "add", pending, view=2)
+        add_stroke(self.obj, pending, view=2)
         self.assertEqual(sketch.remove_turn_strokes(self.obj, 7), 3)
         left = list(sketch.iter_strokes(self.obj))
         self.assertEqual(len(left), 1)
@@ -184,34 +205,36 @@ class StrokeDataTest(unittest.TestCase):
                 self.assertAlmostEqual(a, b, places=6)
 
     def stamps(self):
-        return [(s.layer, s.turn, s.amend) for s in sketch.iter_strokes(self.obj, include_hidden=True)]
+        return [(s.turn, s.amend) for s in sketch.iter_strokes(self.obj, include_hidden=True)]
 
     def test_amendment_stamps(self):
-        add_stroke(self.obj, "add", [(0, 0, 0), (0, 1, 0)], view=1)
+        add_stroke(self.obj, [(0, 0, 0), (0, 1, 0)], view=1)
         sketch.stamp_strokes(self.obj, 3)
-        add_stroke(self.obj, "free", [(1, 0, 0), (1, 1, 0)], view=1)
-        add_stroke(self.obj, "crease", [(2, 0, 0), (2, 1, 0)], view=1)
-        self.obj.data.layers["crease"].hide = True
+        add_stroke(self.obj, [(1, 0, 0), (1, 1, 0)], view=1)
+        add_stroke(self.obj, [(2, 0, 0), (2, 1, 0)], view=1, layer="older")
+        self.obj.data.layers["older"].hide = True
         self.assertEqual(sketch.stroke_counts(self.obj), {3: 1, 0: 1}, "hidden layers are not counted")
         self.assertEqual(sketch.pending_count(self.obj), 1)
         self.assertEqual(sketch.stamp_pending(self.obj, 3, 1), 1, "hidden strokes are not sent")
-        self.assertEqual(self.stamps(), [("free", 3, 1), ("add", 3, 0), ("crease", 0, 0)])
+        self.assertEqual(self.stamps(), [(3, 0), (3, 1), (0, 0)])
         self.assertEqual(sketch.unstamp_amend(self.obj, 3, 1), 1)
-        self.assertEqual(self.stamps(), [("free", 0, 0), ("add", 3, 0), ("crease", 0, 0)])
+        self.assertEqual(self.stamps(), [(3, 0), (0, 0), (0, 0)])
         sketch.stamp_pending(self.obj, 3, 2)
         # A failed turn's strokes are sent again as the next turn's own.
         sketch.stamp_strokes(self.obj, 4)
-        self.assertEqual(self.stamps(), [("free", 4, 0), ("add", 4, 0), ("crease", 0, 0)])
+        self.assertEqual(self.stamps(), [(4, 0), (4, 0), (0, 0)])
         self.assertEqual(sketch.remove_turn_strokes(self.obj, 4), 2)
 
     def test_isolate_hides_and_restores(self):
-        add_stroke(self.obj, "free", [(0, 0, 0), (0, 1, 0)], turn=1)
-        add_stroke(self.obj, "free", [(1, 0, 0), (1, 1, 0)])
-        add_stroke(self.obj, "region", [(0, 0, 0), (1, 0, 0), (1, 1, 0)], turn=1)
-        add_stroke(self.obj, "region", [(0, 0, 1), (1, 0, 1), (1, 1, 1)])
-        sketch.ensure_region_fills(self.obj)
-        free = self.obj.data.layers["free"].frames[0].drawing
+        add_stroke(self.obj, [(0, 0, 0), (0, 1, 0)], turn=1)
+        add_stroke(self.obj, [(1, 0, 0), (1, 1, 0)])
+        # A filled stroke, as an earlier version left them in a file.
+        add_stroke(self.obj, [(0, 0, 0), (1, 0, 0), (1, 1, 0)], turn=1, layer="region")
+        add_stroke(self.obj, [(0, 0, 1), (1, 0, 1), (1, 1, 1)], layer="region")
+        free = self.obj.data.layers[sketch.LAYER_NAME].frames[0].drawing
         region = self.obj.data.layers["region"].frames[0].drawing
+        for fill, value in zip(sketch.ensure_int_attribute(region, sketch.FILL_ATTRIBUTE).data, (1, 2)):
+            fill.value = value
         self.assertIsNone(free.attributes.get("hide_stroke"))
         fills = [d.value for d in region.attributes["fill_id"].data]
         with sketch.isolate_strokes(self.obj, lambda turn, amend: turn == 1):
@@ -226,9 +249,9 @@ class StrokeDataTest(unittest.TestCase):
 
     def test_world_transform_and_defaults(self):
         self.obj.location = (1.0, 0.0, 0.0)
-        self.obj.data.layers["free"].translation = (0.0, 0.0, 0.5)
+        self.obj.data.layers[sketch.LAYER_NAME].translation = (0.0, 0.0, 0.5)
         bpy.context.view_layer.update()
-        add_stroke(self.obj, "free", [(0, 0, 0), (0, 1, 0)])
+        add_stroke(self.obj, [(0, 0, 0), (0, 1, 0)])
         stroke = next(sketch.iter_strokes(self.obj))
         for a, b in zip(stroke.points[0], (1.0, 0.0, 0.5)):
             self.assertAlmostEqual(a, b, places=6)
@@ -236,26 +259,24 @@ class StrokeDataTest(unittest.TestCase):
         self.assertEqual(stroke.opacity, [1.0, 1.0])
         self.assertFalse(stroke.cyclic)
 
-        add_stroke(self.obj, "carve", [(0, 0, 0), (1, 0, 0), (2, 0, 0)],
-                   radius=[0.002, 0.004, 0.006], opacity=0.5, cyclic=True)
-        carve = [s for s in sketch.iter_strokes(self.obj) if s.layer == "carve"][0]
-        self.assertEqual([round(r, 5) for r in carve.radius], [0.002, 0.004, 0.006])
-        self.assertEqual([round(o, 5) for o in carve.opacity], [0.5] * 3)
-        self.assertTrue(carve.cyclic)
-        free = [s for s in sketch.iter_strokes(self.obj) if s.layer == "free"][0]
-        self.assertFalse(free.cyclic)
-        self.assertEqual([round(r, 6) for r in free.radius], [0.01, 0.01])
+        add_stroke(self.obj, [(0, 0, 0), (1, 0, 0), (2, 0, 0)],
+                   radius=[0.002, 0.004, 0.006], opacity=0.5, cyclic=True, layer="older")
+        plain, written = sketch.iter_strokes(self.obj)
+        self.assertEqual([round(r, 5) for r in written.radius], [0.002, 0.004, 0.006])
+        self.assertEqual([round(o, 5) for o in written.opacity], [0.5] * 3)
+        self.assertTrue(written.cyclic)
+        self.assertFalse(plain.cyclic)
+        self.assertEqual([round(r, 6) for r in plain.radius], [0.01, 0.01])
 
     def test_hidden_layers(self):
-        add_stroke(self.obj, "free", [(0, 0, 0), (1, 0, 0)])
-        add_stroke(self.obj, "crease", [(0, 0, 0), (0, 0, 1)])
-        self.obj.data.layers["crease"].hide = True
-        self.assertEqual([s.layer for s in sketch.iter_strokes(self.obj)], ["free"])
-        self.assertEqual([s.layer for s in sketch.iter_strokes(self.obj, include_hidden=True)],
-                         ["free", "crease"])
+        add_stroke(self.obj, [(0, 0, 0), (1, 0, 0)])
+        add_stroke(self.obj, [(0, 0, 0), (0, 0, 1), (0, 0, 2)], layer="older")
+        self.obj.data.layers["older"].hide = True
+        self.assertEqual([len(s.points) for s in sketch.iter_strokes(self.obj)], [2])
+        self.assertEqual([len(s.points) for s in sketch.iter_strokes(self.obj, include_hidden=True)], [2, 3])
 
     def test_clear(self):
-        add_stroke(self.obj, "free", [(0, 0, 0), (1, 0, 0)])
+        add_stroke(self.obj, [(0, 0, 0), (1, 0, 0)])
         views.add_view(self.obj.data, lambda i: look_at_view(i, (0, -2, 0), (0, 0, 0)))
         sketch.clear_strokes(self.obj)
         self.assertEqual(list(sketch.iter_strokes(self.obj, include_hidden=True)), [])
@@ -321,28 +342,28 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(self.session.poll(), sketch.POLL_INTERVAL)
         self.assertEqual(views.load_views(obj.data), [], "no strokes, no view")
 
-        add_stroke(obj, "free", [(0, -0.3, 0.3), (0.1, -0.3, 0.3)])
+        add_stroke(obj, [(0, -0.3, 0.3), (0.1, -0.3, 0.3)])
         self.session.poll()
         self.assertEqual([v.id for v in views.load_views(obj.data)], [1])
         self.assertEqual([s.view for s in sketch.iter_strokes(obj)], [1])
 
-        add_stroke(obj, "free", [(0, -0.3, 0.4), (0.1, -0.3, 0.4)])
+        add_stroke(obj, [(0, -0.3, 0.4), (0.1, -0.3, 0.4)])
         self.session.poll()
         self.assertEqual(len(views.load_views(obj.data)), 1, "same angle, same view")
 
         a = math.radians(30)
         self.viewport = fake_viewport(look_at_view(0, (2 * math.sin(a), -2 * math.cos(a), 0.3), (0, 0, 0.3)))
-        add_stroke(obj, "add", [(0, -0.3, 0.5), (0.1, -0.3, 0.5)])
+        add_stroke(obj, [(0, -0.3, 0.5), (0.1, -0.3, 0.5)])
         self.session.poll()
         self.assertEqual([s.view for s in sketch.iter_strokes(obj)], [1, 1, 2])
 
         self.assertEqual(self.session.capture().id, 3)
-        add_stroke(obj, "note", [(0, -0.3, 0.6), (0.1, -0.3, 0.6)])
+        add_stroke(obj, [(0, -0.3, 0.6), (0.1, -0.3, 0.6)])
         self.session.poll()
         self.assertEqual([s.view for s in sketch.iter_strokes(obj)], [1, 1, 2, 3])
 
         self.viewport = None
-        add_stroke(obj, "note", [(0, -0.3, 0.7), (0.1, -0.3, 0.7)])
+        add_stroke(obj, [(0, -0.3, 0.7), (0.1, -0.3, 0.7)])
         self.assertEqual(self.session.poll(), sketch.POLL_INTERVAL)
         self.assertEqual([s.view for s in sketch.iter_strokes(obj)][-1], 0)
         with self.assertRaises(RuntimeError):
@@ -357,7 +378,7 @@ class SessionTest(unittest.TestCase):
         self.session.enter(bpy.context)
         obj = sketch.find_sketch_object()
         self.viewport = fake_viewport(look_at_view(0, (0, -2, 0.3), (0, 0, 0.3)))
-        add_stroke(obj, "free", [(0, -0.3, 0.3), (0.1, -0.3, 0.3)])
+        add_stroke(obj, [(0, -0.3, 0.3), (0.1, -0.3, 0.3)])
         # The draw tool's stroke reaches the depsgraph at once.
         bpy.context.view_layer.update()
         a = math.radians(60)
@@ -377,10 +398,10 @@ class SessionTest(unittest.TestCase):
         self.assertNotIn(self.session._handler, bpy.app.handlers.depsgraph_update_post)
 
     def test_capture_tags_pending_strokes_with_the_previous_view(self):
-        obj = sketch.ensure_sketch_layers(self.scene)
+        obj = sketch.ensure_sketch_layer(self.scene)
         self.viewport = fake_viewport(look_at_view(0, (0, -2, 0.3), (0, 0, 0.3)))
         self.session.capture()
-        add_stroke(obj, "free", [(0, 0, 0), (1, 0, 0)])
+        add_stroke(obj, [(0, 0, 0), (1, 0, 0)])
         self.session.capture()
         self.assertEqual([s.view for s in sketch.iter_strokes(obj)], [1])
 

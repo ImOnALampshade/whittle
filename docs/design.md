@@ -5,7 +5,8 @@
 > `architecture.md` win, and `progress.md` says what is built. Superseded here: the target
 > lock (removed), the `<name>.whittle/` folder beside the `.blend` (chats now live inside
 > the `.blend` and a hidden cache), Blank's ground grid and scale reference (Blank adds
-> nothing), and Blender 4.2 (5.2 is required).
+> nothing), stroke types (removed: a stroke is just a stroke, and the prompt says what it
+> means), and Blender 4.2 (5.2 is required).
 
 A **Blender extension** for AI-assisted modeling. You orbit a model, **sketch over it with Grease Pencil**, optionally add a text prompt or reference images, and a Claude agent (Anthropic **Agent SDK**) makes the edit in your open Blender scene. You watch it happen, steer it mid-turn, and every completed turn becomes a node in a branching history.
 
@@ -20,8 +21,8 @@ First target: **game props** — hard-surface / low-poly objects (lanterns, crat
 |---|---|
 | Host | Blender extension (Blender 5.2+) |
 | Scope | Game props first: bmesh + modifiers, low-poly |
-| Sketching | Grease Pencil, Surface placement, one layer per stroke type |
-| Strokes | Free by default, **optional** stroke types |
+| Sketching | Grease Pencil, Surface placement, one layer per stroke type (superseded: one plain stroke) |
+| Strokes | Free by default, **optional** stroke types (superseded: one plain stroke) |
 | Agent reach | Mesh geometry, new objects, materials & UVs, geometry nodes |
 | Interaction | Watch and steer: live stream, interrupt / amend mid-turn |
 | History | Branching snapshot tree |
@@ -99,6 +100,9 @@ The agent edits the live scene while you can still orbit and sketch. Rules:
 - Tablet pressure, eraser end, and strength are Blender's own. Map tablet buttons to Whittle operators via normal keymaps (submit, next stroke type, capture view).
 
 ### Stroke types: free by default, typed for precision
+> Stroke types were built and then removed: a stroke is just a stroke, and the prompt says
+> what it means (`decisions.md`, Sketching). This section records the original plan.
+
 One **layer per type**, each with its own colour. Drawing on the default layer = free.
 
 | Layer | Meaning to the agent | Colour |

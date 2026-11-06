@@ -60,7 +60,7 @@ class ClearSentTest(RefsCase):
 
 class RefsTurnTest(RefsCase):
     def submit_with_refs(self, ctl, prompt="Use the references."):
-        add_stroke(self.obj, "free", STROKE, view=1, radius=0.01)
+        add_stroke(self.obj, STROKE, view=1, radius=0.01)
         sent = [Path(r.path) for r in self.props.refs]
         return ctl.run_sketch(prompt, targets=targets.resolve(self.scene), refs=sent, scene=self.scene)
 

@@ -96,7 +96,7 @@ StrokeFilter = Callable[[int, int], bool]
 def gather_strokes(scene, depsgraph, sketch_obj, views_by_id: dict[int, formats.View],
                    fallback_view: int | None, stroke_filter: StrokeFilter | None = None
                    ) -> list[formats.Stroke]:
-    """Every visible stroke in type order, then stroke order, or only those
+    """Every visible stroke in layer order, then stroke order, or only those
     whose (turn, amend) stamps pass stroke_filter. Untagged strokes, and any
     whose view is gone, get fallback_view."""
     strokes = []
@@ -108,7 +108,7 @@ def gather_strokes(scene, depsgraph, sketch_obj, views_by_id: dict[int, formats.
             raise BundleError("there is no sketch view yet: capture a view before submitting")
         on_surface, normals, hits = surface_info(scene, depsgraph, views_by_id[view_id], s.points)
         strokes.append(formats.Stroke(
-            index=len(strokes), type=s.layer, view=view_id, cyclic=s.cyclic,
+            index=len(strokes), view=view_id, cyclic=s.cyclic,
             points=[[_r(c, 5) for c in p] for p in s.points],
             radius=[_r(r, 5) for r in s.radius],
             opacity=[_r(o, 3) for o in s.opacity],
@@ -187,12 +187,10 @@ def write_bundle(dest, *, scene, sketch_obj, node: str, parent: str | None, prom
     if not strokes and current is not None:
         used = [current.id]
     bundle_views = [by_id[i] for i in used]
-    present = {s.type for s in strokes}
 
     request = formats.Request(
         node=node, parent=parent, prompt=prompt,
         target=target_entries(targets),
-        stroke_types=[t for t in formats.STROKE_TYPES if t in present],
         views=used,
         units={"system": scene.unit_settings.system,
                # The property is single precision; 0.01 should not read 0.0099999998.

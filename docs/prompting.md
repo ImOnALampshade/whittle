@@ -51,7 +51,7 @@ The prompt's own formatting leaks into replies. A prompt heavy with headings and
 
 ## Skills
 
-- **Description.** Third person, key use case first, and both what the skill does and when to use it, with the words the agent will actually see in a request (stroke types such as add, carve, crease and free; prop nouns; user phrasings). Give every skill a "Use when ..." clause. The description and `when_to_use` text are truncated at 1,536 characters in the listing.
+- **Description.** Third person, key use case first, and both what the skill does and when to use it, with the words the agent will actually see in a request (what a stroke marks, such as a hard edge or material to remove; prop nouns; user phrasings). Give every skill a "Use when ..." clause. The description and `when_to_use` text are truncated at 1,536 characters in the listing.
 - **Body.** Assume the model knows `bpy` and Blender. Keep Whittle-specific conventions, gotchas and working code. Move long reference material into a sibling file linked one level deep. Write standing instructions, because the skill file is not re-read on later turns.
 - **Degrees of freedom.** Exact code for fragile operations (bmesh spin, boolean solver settings, welding, Geometry Nodes wiring); heuristics for design choices (live or applied boolean). Give one default with an escape hatch rather than a menu.
 - **Helpers over pasted code.** For repeatable operations, a `whittle.*` helper beats code the agent retypes: it is deterministic and cheaper. Say plainly whether to call a helper or read code as reference.

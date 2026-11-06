@@ -1,8 +1,8 @@
 # Sketching
 
-Draw on your model to show Claude where a change goes and what kind of change it is.
-A stroke says *where* better than words can. You can send a sketch with a prompt, or on
-its own.
+Draw on your model to show Claude where a change goes, and write what you want in the
+prompt. A stroke says *where* better than words can, and your words say what it means. You
+can send a sketch with a prompt, or on its own.
 
 ## Draw a sketch
 
@@ -12,14 +12,12 @@ its own.
 3. Press **Sketch**, just above the prompt box, or press **Shift+Alt+D** over the
    viewport. Blender switches to Grease Pencil Draw Mode on an object called
    `Whittle Sketch`.
-4. Pick a stroke type from the row of icons. Hover over an icon to see its name and
-   meaning. The active type's name is shown beside the row.
-5. Draw over the model with the mouse or a pen.
-6. Orbit and draw from other angles if one angle doesn't show everything.
-7. Type a prompt and press **Send**, or press **Shift+Alt+Enter** over the viewport.
+4. Draw over the model with the mouse or a pen.
+5. Orbit and draw from other angles if one angle doesn't show everything.
+6. Type what you want and press **Send**, or press **Shift+Alt+Enter** over the viewport.
 
 ```{figure} ../images/guides-sketching/sketch-strip.png
-:alt: The sidebar in Sketch mode. Sketch is pressed with Capture View beside it. Below are six stroke type icons with Carve active, a row reading 3 strokes, 2 views, a list of the two views, and the Markers While Sketching checkbox.
+:alt: The sidebar in Sketch mode. Sketch is pressed with Capture View beside it. Below are a row reading 3 strokes, 2 views, a list of the two views, and the Markers While Sketching checkbox.
 
 Sketch mode. The stroke count is open, listing the views: the angles you drew from.
 ```
@@ -40,30 +38,15 @@ Mode, the object you had active is active again, and your Grease Pencil placemen
 auto-keying settings come back. If you started from Edit Mode, you end in Object Mode.
 Your strokes stay, and you can pick up where you left off.
 
-## Choose a stroke type
+## Say what the strokes mean
 
-Each type tells Claude what a stroke is for, and each has its own colour. The icons run
-left to right in the order of this table.
+Every stroke is the same plain white line, like a redline on a drawing. The prompt is what
+tells Claude what it means, so one kind of mark does every job: "cut a slot here", "build
+the lid out to this line", "sharpen this edge" or "paint this panel". When strokes mean
+different things, say which is which: "the loop is a slot, the line is an edge to sharpen".
 
-| Type | Colour | Use it for |
-|---|---|---|
-| **Free** | White | A general mark: an outline or a shape to follow. Claude reads it together with your prompt. |
-| **Add** | Green | Building material out to this line. Draw the outline or silhouette the new shape should reach. |
-| **Carve** | Red | Removing material here. |
-| **Crease** | Yellow | A sharp edge or a bevel along this line. |
-| **Region** | Blue | Marking the area your prompt is about. Draw around the area; it fills with translucent blue. |
-| **Note** | Grey | A note for Claude: an arrow, a circle, a label. Claude never turns a note into geometry. |
-
-```{figure} ../images/guides-sketching/stroke-types.png
-:alt: A wooden crate with one stroke of each type: a white squiggle on the front, a green arch over the top, a red box on the front, a yellow line along the top edge, a filled blue area on the side and a grey arrow pointing at the red box.
-
-One stroke of each type: Free (white), Add (green), Carve (red), Crease (yellow), Region
-(blue) and a Note arrow (grey).
-```
-
-The sketch has one Grease Pencil layer per type, so a stroke's colour and type always
-match. Leave the `Whittle Sketch` object in the scene: it holds your strokes, and Claude
-leaves it alone too.
+Leave the `Whittle Sketch` object in the scene: it holds your strokes, and Claude leaves it
+alone too.
 
 ## Work with views
 
@@ -97,7 +80,7 @@ the current view.
 
 ### See and manage your views
 
-The stroke count under the stroke types reads something like `3 strokes · 2 views`. Click
+The stroke count under the Sketch button reads something like `3 strokes · 2 views`. Click
 it to open the list of views.
 
 - **Go back to a view**: click its row. The viewport moves there, and the view becomes
@@ -117,7 +100,7 @@ While you sketch, a small camera marks each view in the viewport, pointing the w
 view looked.
 
 ```{figure} ../images/guides-sketching/view-markers.png
-:alt: The viewport pulled back from the crate. A green outline and a small red loop are drawn on the crate, and two small wireframe cameras float around it, one blue and one light grey, each pointing at it.
+:alt: The viewport pulled back from the crate. A white outline and a small white loop are drawn on the crate, and two small wireframe cameras float around it, one blue and one light grey, each pointing at it.
 
 Two view markers. The blue one is the current view.
 ```
@@ -136,12 +119,12 @@ The viewport's Gizmos overlay hides them too.
 Press **Send** in the sidebar, or press **Shift+Alt+Enter** over the viewport. You stay in
 Sketch mode, ready for the next request.
 
-Claude gets each stroke with its type and position, the camera of each view, and an
+Claude gets each stroke with its position, the camera of each view, and an
 image of your strokes over the model from each view. What leaves your machine is listed
 in [Privacy and safety](privacy.md).
 
-You can send a sketch with no prompt. The conversation then shows `(sketch only)`. Free
-and Region strokes lean on your words, so a sentence usually helps.
+You can send a sketch with no prompt. The conversation then shows `(sketch only)`.
+Claude then has only the marks to go on, so a sentence usually helps.
 
 ### Add strokes while Claude works
 
@@ -186,7 +169,6 @@ and send without reaching for the sidebar.
 | Key | Name in the Keymap | Does |
 |---|---|---|
 | **Shift+Alt+D** | Toggle Sketch Mode | Starts or stops Sketch mode. |
-| **Shift+Alt+N** | Next Stroke Type | Picks the next stroke type: Free, Add, Carve, Crease, Region, Note, then Free again. |
 | **Shift+Alt+V** | Capture View | Captures a view. |
 | **Shift+Alt+Enter** | Send or Amend (shown as Shift Alt Return) | Send between turns, Amend while Claude works, Answer while Claude asks. Unlike Enter in the prompt box, it also sends strokes or references with no text typed. It does nothing when there is nothing to send. |
 
@@ -201,7 +183,7 @@ To change a key inside Blender:
 4. Click the key on that row, then press the new one.
 
 ```{figure} ../images/guides-sketching/keymap.png
-:alt: Blender's Keymap preferences searched for Whittle. Under 3D View are Send or Amend, Capture View, Next Stroke Type and Toggle Sketch Mode, each with its key. Under Window are Ask Claude and two Send on Enter rows.
+:alt: Blender's Keymap preferences searched for Whittle. Under 3D View are Send or Amend, Capture View and Toggle Sketch Mode, each with its key. Under Window are Ask Claude and two Send on Enter rows.
 
 Whittle's keys in the Keymap preferences.
 ```

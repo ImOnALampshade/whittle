@@ -8,7 +8,7 @@ SCENARIOS = {
     "prompt_typed": "The crate selected (so targeted) and a prompt typed, nothing sent yet.",
     "shortcut_popup": "The Shift+Alt+C popup under the pointer, its prompt field editing a half-typed prompt.",
     "prompt_only_done": "One finished prompt-only turn (no sketch): text, tool calls and renders.",
-    "sketching": "Sketch mode on with add and carve strokes drawn from two views, prompt typed.",
+    "sketching": "Sketch mode on with strokes drawn from two views, prompt typed.",
     "view_markers": "The viewport while sketching: a marker where each of two views was captured, "
                     "the current one in the theme's active colour (a viewport shot, not the sidebar).",
     "streaming": "Mid-turn: assistant text and finished tool calls, two more calls in flight.",
@@ -46,7 +46,7 @@ SCENARIOS = {
     "model_menu": ("The model menu from the button beside Send: the newest of each family, Sonnet 5.5 checked, "
                    "and the Effort section with High checked."),
     "hero": ("The whole window: a crate built over three turns in matcap shading, the next request "
-             "sketched over it with a stroke of every kind, the sidebar in sketch mode."),
+             "sketched over it, the sidebar in sketch mode."),
     "model_menu_older": "The Older Models submenu, one column per family, with the chat on Opus 4.6.",
 }
 

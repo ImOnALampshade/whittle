@@ -20,7 +20,7 @@ def write_request(folder: Path, node: str, prompt: str, targets=()) -> None:
     request = formats.Request(node=node, parent=None, prompt=prompt,
                               target=[{"uid": f"u{i}", "name": name, "type": "MESH"}
                                       for i, name in enumerate(targets)],
-                              stroke_types=[], views=[], units={"system": "METRIC", "scale_length": 1.0},
+                              views=[], units={"system": "METRIC", "scale_length": 1.0},
                               settings={})
     formats.write_request(formats.SessionDir(folder).request_dir(node), request, [], [])
 

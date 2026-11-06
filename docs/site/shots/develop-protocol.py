@@ -19,7 +19,7 @@ TURNS = [
 
 
 def sketched_turn(stage):
-    """The crate with the fixture's add and carve strokes on two views, sent
+    """The crate with the fixture's strokes on two views, sent
     as a turn; a second turn, a branch from the first, and a save, so the
     cache holds a tree, a fork and a packed copy."""
     import bpy
@@ -30,12 +30,12 @@ def sketched_turn(stage):
     from whittle.addon import operators, sketch, views
 
     stage.crate()
-    obj = sketch.ensure_sketch_layers(stage.scene)
+    obj = sketch.ensure_sketch_layer(stage.scene)
     bundle = formats.read_bundle(CRATE_BUNDLE)
     for view_id in sorted(bundle.views):
         views.add_view(obj.data, lambda _i, view=bundle.views[view_id]: view)
     for stroke in bundle.strokes:
-        add_stroke(obj, stroke.type, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
+        add_stroke(obj, stroke.points, radius=stroke.radius, opacity=stroke.opacity,
                    cyclic=stroke.cyclic, view=stroke.view)
     script = stage.script("protocol", TURNS)
     first, second = yield from stage.turns([PROMPT, "Make the wood darker."], script)

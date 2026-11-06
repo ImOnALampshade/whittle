@@ -371,10 +371,10 @@ class BlankTurnTest(StartCase):
 
     def test_blank_start_then_a_turn(self):
         start.start_blank(bpy.context, self.ctl)
-        obj = sketch.ensure_sketch_layers(self.scene)
+        obj = sketch.ensure_sketch_layer(self.scene)
         views.add_view(obj.data, lambda i: look_at_view(i, (1.3, -1.5, 1.1), (0, 0, 0.3)))
         # Away from the crate, so the strokes are on no surface.
-        add_stroke(obj, "add", [(1.0, 1.0, 0.0), (1.2, 1.0, 0.0), (1.2, 1.2, 0.0)], view=1)
+        add_stroke(obj, [(1.0, 1.0, 0.0), (1.2, 1.0, 0.0), (1.2, 1.2, 0.0)], view=1)
         node = self.ctl.run_sketch("A crate.", targets=targets.resolve(self.scene), scene=self.scene)
         pump(self.ctl, lambda: self.ctl.last_finished is not None or self.ctl.errors, 30, "the turn")
         self.assertEqual(self.ctl.errors, [])

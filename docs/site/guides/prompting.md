@@ -31,7 +31,7 @@ prompt stays in the box.
 
 Say what you want changed, in the words you would use with a person. Claude reads the
 prompt together with the sketch and references, so a prompt can be short when the strokes
-say where: "carve this slot" over a red stroke needs nothing more.
+say where: "carve this slot" over a stroke needs nothing more.
 
 - **Give sizes when they matter.** Claude builds in real units (1 Blender unit is 1 metre)
   and picks sensible real-world sizes for the rest, such as about 0.5 m for a crate.

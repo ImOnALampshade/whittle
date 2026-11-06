@@ -11,9 +11,9 @@ open-source project, not made by, endorsed by or affiliated with Anthropic.
 
 I made this because Claude Design is going away, and I found it extremely useful for quick modeling tasks when using my Wacom tablet to draw redlines over a 3D object. This project is the evolution of that feature. Everything here has been vibe coded over the course of a few days, so don’t expect it to be perfect - but it does everything I need it to, so I’m happy with it.
 
-![Blender with a wooden crate in the 3D viewport, sketched over in coloured strokes: a green
-outline where a latch should go, a red slot to carve into the lid, a yellow line along the
-lid's edge, a blue region on the side and a grey arrow. Beside it the Whittle sidebar shows
+![Blender with a wooden crate in the 3D viewport, sketched over in white strokes: an
+outline where a latch should go, a slot to carve into the lid, a line along the lid's edge,
+a panel on the side and an arrow. Beside it the Whittle sidebar shows
 the earlier turns with their renders and the next prompt, ready to send](docs/images/hero.png)
 
 The documentation site's source is in [docs/site/](docs/site/index.md) (Documentation, below).
@@ -30,7 +30,7 @@ Windows or macOS yet: reports welcome (see [Platforms](#platforms)).
 
 | A conversation | Sketching |
 |---|---|
-| ![The sidebar after three finished turns: each prompt, Claude's replies, the tools it used and a render of the result](docs/images/conversation.png) | ![The sidebar in sketch mode: the stroke types, three strokes from two captured views and the prompt](docs/images/sketching.png) |
+| ![The sidebar after three finished turns: each prompt, Claude's replies, the tools it used and a render of the result](docs/images/conversation.png) | ![The sidebar in sketch mode: three strokes from two captured views and the prompt](docs/images/sketching.png) |
 
 | A reply in Markdown | The model menu |
 |---|---|
@@ -201,14 +201,13 @@ agent's state: click it for the model, the session folder and Start/Stop.
    - **Primitive**: a cube, cylinder, sphere, … standing at the 3D cursor.
    - **Asset Browser**: right-click an object or collection asset → **Start Whittle From Asset**.
    Typing a prompt and pressing Send works too: node 0 is the scene as it is.
-3. **Sketch**: press Sketch, pick a stroke type (free, add, carve, crease, region, note; the
-   tooltips say which is which) and draw; strokes stick to surfaces, and off a surface they
-   land on the view plane at the 3D cursor. Orbit and draw from more angles: each angle
+3. **Sketch**: press Sketch and draw over the model, as you would redline a drawing. Your
+   prompt says what the marks mean. Strokes stick to surfaces, and off a surface they land
+   on the view plane at the 3D cursor. Orbit and draw from more angles: each angle
    becomes a view, marked in the viewport by a small camera while you sketch. Click a
    marker (or the view's row under the stroke count) to go back to that view.
    Keys for a tablet's express keys, over the viewport in any mode: **Shift+Alt+D**
-   toggles Sketch mode, **Shift+Alt+N** picks the next stroke type, **Shift+Alt+V**
-   captures a view and **Shift+Alt+Enter** sends (and, while Claude works, amends the turn
+   toggles Sketch mode, **Shift+Alt+V** captures a view and **Shift+Alt+Enter** sends (and, while Claude works, amends the turn
    with what you typed or drew since). Rebind them in Preferences → Keymap
    (3D View → 3D View (Global)).
 4. **Describe**: type a prompt (Shift+Enter adds a line); 📎 adds reference images. Pin a reference to send it with

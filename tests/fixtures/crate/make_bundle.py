@@ -52,10 +52,10 @@ def make_view(view_id: int, location, look_at) -> formats.View:
     )
 
 
-def stroke(index, kind, view, points, cyclic, on_surface=False, normal=None, hit=None):
+def stroke(index, view, points, cyclic, on_surface=False, normal=None, hit=None):
     n = len(points)
     return formats.Stroke(
-        index=index, type=kind, view=view, cyclic=cyclic,
+        index=index, view=view, cyclic=cyclic,
         points=[[round(c, 5) for c in p] for p in points],
         radius=[RADIUS] * n, opacity=[1.0] * n,
         on_surface=[on_surface] * n, normal=[normal] * n, hit_object=[hit] * n,
@@ -83,10 +83,10 @@ def handle_slot(center=(0.0, -0.2501, 0.38), rx=0.09, rz=0.028, count=14):
 def main():
     build_scene()
     strokes = [
-        stroke(0, "add", 1, lid_outline(), cyclic=True),
-        stroke(1, "add", 2, [(-0.27 + 0.054 * i, -0.27, 0.56 + 0.003 * math.sin(i)) for i in range(11)],
+        stroke(0, 1, lid_outline(), cyclic=True),
+        stroke(1, 2, [(-0.27 + 0.054 * i, -0.27, 0.56 + 0.003 * math.sin(i)) for i in range(11)],
                cyclic=False),
-        stroke(2, "carve", 2, handle_slot(), cyclic=True, on_surface=True,
+        stroke(2, 2, handle_slot(), cyclic=True, on_surface=True,
                normal=[0.0, -1.0, 0.0], hit="Crate"),
     ]
     views = [make_view(i, **v) for i, v in VIEWS.items()]
@@ -94,7 +94,7 @@ def main():
         node="n0001", parent="n0000",
         prompt="Add a lid that overhangs the crate slightly, and carve a handle slot in the front.",
         target=[{"uid": "fixture-crate", "name": "Crate", "type": "MESH"}],
-        stroke_types=["add", "carve"], views=[v.id for v in views], refs=[],
+        views=[v.id for v in views], refs=[],
         units={"system": "METRIC", "scale_length": 1.0},
         settings={"self_check_rounds": 2, "poly_budget": 500, "style_notes": ""},
     )

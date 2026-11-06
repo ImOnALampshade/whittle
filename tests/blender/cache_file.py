@@ -37,10 +37,10 @@ errors = []
 
 def send(prompt: str, fake: str) -> str:
     scene = bpy.context.scene
-    obj = sketch.ensure_sketch_layers(scene)
+    obj = sketch.ensure_sketch_layer(scene)
     if not views.load_views(obj.data):
         views.add_view(obj.data, lambda i: look_at_view(i, (1.3, -1.5, 1.1), (0, 0, 0.3)))
-    add_stroke(obj, "free", STROKE, view=1, radius=0.01)
+    add_stroke(obj, STROKE, view=1, radius=0.01)
     scene.whittle.prompt = prompt
     ctl, node = operators.submit_sketch(bpy.context, fake)
     pump(ctl, lambda: (ctl.last_finished or {}).get("turn_id") == node or ctl.errors, 30, f"turn {node}")

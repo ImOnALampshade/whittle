@@ -21,7 +21,7 @@ EXEC_DATA = {"stdout": "4\n", "error": None,
 
 
 def make_stroke(index, n):
-    return {"index": index, "type": "free", "view": 1, "cyclic": False,
+    return {"index": index, "view": 1, "cyclic": False,
             "points": [[i * 0.001, 0.5, 0.25] for i in range(n)],
             "radius": [i * 1e-6 for i in range(n)], "opacity": [1.0] * n,
             "on_surface": [False] * n, "normal": [None] * n, "hit_object": [None] * n}
@@ -114,10 +114,9 @@ class ToolHandlerTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sum(b["type"] == "image" for b in result["content"]), 2)
         self.assertEqual(ctx.connection.calls, [], "the bundle is read without the bridge")
 
-    async def test_request_summarises_each_stroke_type(self):
+    async def test_request_summarises_the_strokes(self):
         text = texts(await tools.request_tool(self.ctx(), {}))
-        self.assertIn("  add: 2 strokes, views 1, 2, 0 of 31 points on a surface", text)
-        self.assertIn("  carve: 1 stroke, views 2, 14 of 14 points on a surface", text)
+        self.assertIn("Sketched strokes: 3, views 1, 2, 14 of 45 points on a surface", text)
         self.assertIn(f"strokes only (not attached): {BUNDLE / 'views' / '1' / 'strokes.png'}", text)
         self.assertFalse(any(p.endswith("strokes.png") for p in tools.image_paths(text)),
                          "strokes.png is named, not attached")

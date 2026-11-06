@@ -79,13 +79,12 @@ class DrawTest(AddonTestCase):
     def test_empty_panel(self):
         """Nothing picked, no agent, no history: the start row, the Sketch
         button, an empty prompt and a disabled Send; no placeholders, no
-        stroke row, no stroke types and nothing red."""
+        stroke row and nothing red."""
         layout = self.draw()
         labels = layout.labels()
         self.assertIn("No targets: Claude adds new objects", layout.text(), "Auto is off in these tests")
         self.assertIn("Start from", labels, "the start row says what it is for")
         self.assertFalse([t for t in labels if "stroke" in t.lower()], "no stroke row before a stroke")
-        self.assertEqual(layout.operators("whittle.stroke_type"), [], "stroke types only while sketching")
         self.assertEqual(layout.operators("whittle.capture_view"), [])
         self.assertEqual([c["text"] for c in layout.operators("whittle.sketch")], ["Sketch"])
         self.assertFalse([t for t in labels if "No activity" in t or "No history" in t])
@@ -333,10 +332,10 @@ class DrawTest(AddonTestCase):
         self.assertTrue([c for c in layout.of("label") if c["icon"] == "LOCKED"])
 
     def test_sketch_strip(self):
-        obj = sketch.ensure_sketch_layers(self.scene)
+        obj = sketch.ensure_sketch_layer(self.scene)
         views.add_view(obj.data, lambda i: look_at_view(i, (0, -2, 0.3), (0, 0, 0.3)))
-        add_stroke(obj, "free", [(0, 0, 0), (0.1, 0, 0)], view=1)
-        add_stroke(obj, "add", [(0, 0, 0), (0.1, 0, 0)], view=1)
+        add_stroke(obj, [(0, 0, 0), (0.1, 0, 0)], view=1)
+        add_stroke(obj, [(0, 0, 0), (0.1, 0, 0)], view=1)
         layout = self.draw()
         self.assertIn("2 strokes · 1 view", layout.labels())
         (current,) = layout.operators("whittle.view_snap")
@@ -352,27 +351,21 @@ class DrawTest(AddonTestCase):
         rows = {c["props"].id: c["icon"] for c in self.draw().operators("whittle.view_snap")}
         self.assertEqual(rows, {1: "VIEW_CAMERA", 2: "CAMERA_DATA"}, "a view snapped back to is current")
         operators.remove_view(obj, 2)
-        self.assertEqual(layout.operators("whittle.stroke_type"), [], "stroke types only while sketching")
         from unittest import mock
 
         with mock.patch.object(sketch, "current_session", return_value=object()):
             layout = self.draw()
-        self.assertIn("Free", layout.labels(), "the active type is named")
         (stop,) = layout.operators("whittle.sketch_stop")
         self.assertEqual((stop["text"], stop["depress"]), ("Sketch", True), "Sketch stays pressed")
         (capture,) = layout.operators("whittle.capture_view")
-        self.assertEqual(capture["text"], "Capture View", "set apart from the stroke types, and named")
-        types = layout.operators("whittle.stroke_type")
-        self.assertEqual([c["props"].type for c in types], list(formats.STROKE_TYPES))
-        self.assertTrue(all(c["text"] == "" for c in types), "the type buttons are icons")
-        self.assertEqual([c["props"].type for c in types if c.get("depress")], ["free"])
+        self.assertEqual(capture["text"], "Capture View", "named beside Sketch")
         self.assertEqual(len(layout.operators("whittle.capture_view")), 1)
         self.assertTrue(layout.is_enabled(layout.operators("whittle.clear_sketch")[0]))
         (views_panel,) = [c for c in layout.of("panel") if c["idname"] == "whittle_show_views"]
         self.assertTrue(views_panel["default_closed"], "the view list starts closed")
         self.assertTrue(layout.is_enabled(layout.operators("whittle.submit")[0]), "strokes alone can be sent")
         sketch.stamp_strokes(obj, 1)
-        add_stroke(obj, "free", [(0, 0, 0), (0.1, 0, 0)], view=1)
+        add_stroke(obj, [(0, 0, 0), (0.1, 0, 0)], view=1)
         layout = self.draw(fake_controller(AgentState.BUSY, running=True, turn_number=1))
         self.assertIn("2 sent · 1 new", layout.labels())
         layout = self.draw(fake_controller(AgentState.BUSY, running=True, turn_number=7))
@@ -385,27 +378,20 @@ class DrawTest(AddonTestCase):
         """A stopped or failed sketch turn leaves its sent strokes shown, and
         a view can be captured before any stroke: Clear and the view list
         stay in reach either way."""
-        obj = sketch.ensure_sketch_layers(self.scene)
+        obj = sketch.ensure_sketch_layer(self.scene)
         views.add_view(obj.data, lambda i: look_at_view(i, (0, -2, 0.3), (0, 0, 0.3)))
         layout = self.draw()
         self.assertIn("1 view", layout.labels())
         self.assertEqual(len(layout.operators("whittle.clear_sketch")), 1)
         self.assertEqual([c["props"].id for c in layout.operators("whittle.view_remove")], [1])
-        add_stroke(obj, "free", [(0, 0, 0), (0.1, 0, 0)], view=1)
+        add_stroke(obj, [(0, 0, 0), (0.1, 0, 0)], view=1)
         sketch.stamp_strokes(obj, 1)
         layout = self.draw()
         self.assertIn("1 stroke sent · 1 view", layout.labels())
         self.assertEqual(len(layout.operators("whittle.clear_sketch")), 1)
         self.assertEqual(len(layout.operators("whittle.view_remove")), 1)
-        add_stroke(obj, "add", [(0, 0, 0), (0.1, 0, 0)], view=1)
+        add_stroke(obj, [(0, 0, 0), (0.1, 0, 0)], view=1)
         self.assertIn("1 stroke · 1 sent · 1 view", self.draw().labels())
-
-    def test_stroke_type_tooltips_name_the_type(self):
-        describe = operators.WHITTLE_OT_stroke_type.description
-        self.assertEqual(describe(bpy.context, SimpleNamespace(type="carve")), "Carve: remove material here")
-        for stroke_type in formats.STROKE_TYPES:
-            self.assertTrue(describe(bpy.context, SimpleNamespace(type=stroke_type))
-                            .startswith(stroke_type.capitalize() + ": "))
 
     def test_development_panel_needs_developer_extras(self):
         view = bpy.context.preferences.view
@@ -782,7 +768,7 @@ class TargetsTest(AddonTestCase):
         props_coll.objects.link(cam)
         gone = bpy.data.objects.new("Gone", bpy.data.meshes.new("Gone"))
         self.scene.collection.objects.link(gone)
-        sketch_obj = sketch.ensure_sketch_layers(self.scene)
+        sketch_obj = sketch.ensure_sketch_layer(self.scene)
         self.props.targets.add().object = self.crate
         self.props.targets.add().object = gone
         self.props.target_collection = props_coll
@@ -794,7 +780,7 @@ class TargetsTest(AddonTestCase):
         self.assertEqual(targets.add(self.scene, [self.crate, lid, cam, sketch_obj]), 1)
 
     def test_set_from_selection(self):
-        sketch_obj = sketch.ensure_sketch_layers(self.scene)
+        sketch_obj = sketch.ensure_sketch_layer(self.scene)
         other = bpy.data.objects.new("Other", bpy.data.meshes.new("Other"))
         self.scene.collection.objects.link(other)
         bpy.ops.object.select_all(action="DESELECT")
@@ -836,10 +822,10 @@ class TargetsTest(AddonTestCase):
     def test_view_remove_is_refused_while_strokes_use_it(self):
         from whittle.addon import operators
 
-        obj = sketch.ensure_sketch_layers(self.scene)
+        obj = sketch.ensure_sketch_layer(self.scene)
         views.add_view(obj.data, lambda i: look_at_view(i, (0, -2, 0.3), (0, 0, 0.3)))
         views.add_view(obj.data, lambda i: look_at_view(i, (2, 0, 0.3), (0, 0, 0.3)))
-        add_stroke(obj, "free", [(0, 0, 0), (0.1, 0, 0)], view=1)
+        add_stroke(obj, [(0, 0, 0), (0.1, 0, 0)], view=1)
         with self.assertRaises(RuntimeError):
             operators.remove_view(obj, 1)
         operators.remove_view(obj, 2)

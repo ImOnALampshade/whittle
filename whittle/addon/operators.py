@@ -622,53 +622,6 @@ class WHITTLE_OT_sketch_stop(bpy.types.Operator):
         return {"FINISHED"}
 
 
-STROKE_MEANINGS = {
-    "free": "a general mark: an outline or a shape to follow",
-    "add": "build material here",
-    "carve": "remove material here",
-    "crease": "a sharp edge or a bevel along this line",
-    "region": "the area this request is about",
-    "note": "a written note for Claude",
-}
-
-
-class WHITTLE_OT_stroke_type(bpy.types.Operator):
-    """A button of the sketch strip: sets the active stroke type."""
-    bl_idname = "whittle.stroke_type"
-    bl_label = "Stroke Type"
-    bl_description = "Draw the next strokes as this type"
-    bl_options = {"REGISTER", "UNDO"}
-
-    type: EnumProperty(
-        name="Type",
-        items=[(t, t.capitalize(), f"{t.capitalize()}: {STROKE_MEANINGS[t]}") for t in formats.STROKE_TYPES])
-
-    @classmethod
-    def description(cls, context, properties):
-        # The sketch strip's buttons are icons only, so the tooltip names them.
-        return f"{properties.type.capitalize()}: {STROKE_MEANINGS[properties.type]}"
-
-    def execute(self, context):
-        obj = sketch.ensure_sketch_layers(context.scene)
-        sketch.set_active_type(obj, self.type)
-        return {"FINISHED"}
-
-
-class WHITTLE_OT_next_stroke_type(bpy.types.Operator):
-    """The Shift+Alt+N key: moves to the next stroke type and reports it."""
-    bl_idname = "whittle.next_stroke_type"
-    bl_label = "Next Stroke Type"
-    bl_description = "Cycle the stroke type new strokes are drawn as"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        obj = sketch.ensure_sketch_layers(context.scene)
-        stroke_type = sketch.next_type(obj)
-        sketch.set_active_type(obj, stroke_type)
-        self.report({"INFO"}, f"Stroke type: {stroke_type}")
-        return {"FINISHED"}
-
-
 class WHITTLE_OT_capture_view(bpy.types.Operator):
     """Capture View, from its button or Shift+Alt+V; it needs no sketch session."""
     bl_idname = "whittle.capture_view"
@@ -1425,8 +1378,8 @@ class WHITTLE_OT_chat_delete_many(bpy.types.Operator):
         return {"FINISHED"}
 
 
-CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_toggle, WHITTLE_OT_sketch_stop, WHITTLE_OT_stroke_type,
-           WHITTLE_OT_next_stroke_type, WHITTLE_OT_capture_view, WHITTLE_OT_submit, WHITTLE_OT_send_key,
+CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_toggle, WHITTLE_OT_sketch_stop,
+           WHITTLE_OT_capture_view, WHITTLE_OT_submit, WHITTLE_OT_send_key,
            WHITTLE_OT_clear_sketch, WHITTLE_OT_ref_add, WHITTLE_OT_ref_remove,
            WHITTLE_OT_run_bundle, WHITTLE_OT_agent_start, WHITTLE_OT_agent_stop,
            WHITTLE_OT_interrupt, WHITTLE_OT_amend, WHITTLE_OT_answer, WHITTLE_OT_open_image,

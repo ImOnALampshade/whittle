@@ -314,7 +314,7 @@ which no one has used for real yet, the group is a Job Object and a terminate is
 - [Design notes](design-notes.md): why it is built this way.
 - [Protocol and file formats](protocol.md): the wire format, the bundle and the session folder.
 - [Agent tools and skills](agent-tools.md): what the agent can call.
-- [Extending Whittle](extending.md): where a new tool, skill, preference or stroke type goes.
+- [Extending Whittle](extending.md): where a new tool, skill or preference goes.
 - [Privacy and safety](../guides/privacy.md): what leaves the machine, and what the agent can
   do.
 - [docs/architecture.md](https://github.com/ImOnALampshade/whittle/blob/main/docs/architecture.md):

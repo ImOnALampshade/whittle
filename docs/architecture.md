@@ -42,7 +42,7 @@ whittle/                          repo root
 │   │   ├── execution.py          exec namespace, stdout capture, scene diff
 │   │   ├── meshcheck.py          whittle.mesh_report / whittle.weld for agent code
 │   │   ├── render.py             Workbench renders, view cameras, overlay compositing
-│   │   ├── sketch.py             Whittle Sketch GP object, type layers, stroke tagging
+│   │   ├── sketch.py             Whittle Sketch GP object, stroke tagging
 │   │   ├── views.py              view capture from RegionView3D, camera.json, snapping back to a view
 │   │   ├── viewmarks.py          view markers: a gizmo per sketch view, clicked to snap back
 │   │   ├── bundle.py             gathers strokes/views/refs from bpy → formats.write_request
@@ -139,7 +139,7 @@ This is what lets the agent process run `python -m whittle.agent` without bpy.
 
 `agent/system_prompt.md` is read every turn, so it stays short: which tool to reach for,
 scope, turn shape, writing to the user, steering and context, modeling practice, conventions
-and stroke types. It is written to [prompting.md](prompting.md): practices with reasons,
+and reading the sketch. It is written to [prompting.md](prompting.md): practices with reasons,
 one home per fact (what `exec` pre-imports, the `whittle` helpers and the bpy gotchas live
 in the tool descriptions, not here), and `<whittle_context>` / `<user_amendment>` tags
 for text Whittle adds to a turn. The modeling practice
@@ -1067,21 +1067,19 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
 - **Sketch object**: one GP object `"Whittle Sketch"` (`bpy.data.grease_pencils.new`,
   object type `GREASEPENCIL`). Strokes are read through `object.matrix_world @
   layer.matrix_local`, so a moved object or layer still gives world coordinates.
-- **Layers**: `free`, `add`, `carve`, `crease`, `region`, `note`, created in that order
-  with `layers.new(name, set_active=False)` and a frame at the scene's current frame
-  (`ensure_sketch_layers`; `free` becomes active when no type layer is). Colour comes
-  from `layer.tint_color` with `tint_factor = 1.0` over one shared white stroke material
-  `"Whittle Stroke"` (`bpy.data.materials.create_gpencil_data`). Layers set
-  `use_lights = False`: lit strokes render at about a quarter of their tint in Workbench
-  (pure green read back as 0.25). The type buttons (`whittle.stroke_type`,
-  `whittle.next_stroke_type`) set `grease_pencil.layers.active`. Hidden layers are left
-  out of the bundle (and out of the renders, which honour `layer.hide`).
-- **Region fill**: in Blender 5.2 a stroke is filled when its curve attribute `fill_id`
-  is non-zero; strokes sharing an id are filled together. The material's `show_fill`
-  is ignored by the renderer (and deprecated). Each region stroke gets its own id
-  (`ensure_region_fills`, run by the watcher, `load_strokes` and before a bundle is
-  written), and the shared material's `fill_color` alpha is 0.35, so regions render as
-  translucent tinted areas. Other layers keep `fill_id = 0`, so they stay outlines.
+- **Layer**: a stroke is just a stroke, and the prompt says what it means. New strokes go
+  on one layer, `sketch.LAYER_NAME` (`"Strokes"`), made with
+  `layers.new(name, set_active=False)`; `ensure_sketch_layer` always makes it active, so
+  the draw tool lands there. Its one drawing is keyed at `SKETCH_FRAME`, Blender's lowest
+  frame, so the sketch is the same wherever the playhead is. Strokes are white:
+  `layer.tint_color` with `tint_factor = 1.0` over one shared white stroke material
+  `"Whittle Stroke"` (`bpy.data.materials.create_gpencil_data`), so a brush's own colour
+  never shows. The layer sets `use_lights = False`: lit strokes render at about a quarter
+  of their tint in Workbench (a pure green tint read back as 0.25). Every layer of the
+  object is read (`_sketch_layers`), not only this one, and `ensure_sketch_layer` gives
+  each its key at `SKETCH_FRAME`, so strokes on any other layer a file holds still count.
+  Hidden layers are left out of the bundle (and out of the renders, which honour
+  `layer.hide`).
 - **Placement**: `whittle.sketch` (`SketchSession.enter`) makes the sketch active and
   selected, enters `PAINT_GREASE_PENCIL`, and sets
   `tool_settings.gpencil_stroke_placement_view3d = "SURFACE"` and
@@ -1318,7 +1316,7 @@ Written by `bundle.write_bundle` into a hidden sibling folder, validated with
 absent. The writer only reads the sketch (it never tags strokes); the one change it
 makes is giving target objects a `whittle_uid`. `views` holds the views the strokes use,
 or just the latest view when there are no strokes (a prompt-only request), or none at
-all with no views (no `views/` folder then). Strokes come in type order, then stroke
+all with no views (no `views/` folder then). Strokes come in layer order, then stroke
 order, with untagged strokes on the latest view. Positions are rounded to 5 dp, radius to
 5 and opacity to 3; `scale_length` to 7 significant digits. Reference images are copied
 under unique sanitised names. Three views and 2 000 points at 512 px take about 0.3 s
@@ -1333,7 +1331,6 @@ after the first render's shader compile.
 | `prompt` | str |
 | `amend` | int \| null (amend bundles only) |
 | `target` | `[{"uid", "name", "type"}]` |
-| `stroke_types` | [str] — layer types present |
 | `views` | [int] — view ids with a folder under `views/` |
 | `refs` | [str] — relative paths inside the bundle (absolute paths and `..` are refused) |
 | `units` | `{"system": str, "scale_length": float}` from `scene.unit_settings` |
@@ -1345,7 +1342,6 @@ after the first render's shader compile.
 | Stroke field | type |
 |---|---|
 | `index` | int, order within the bundle |
-| `type` | layer name |
 | `view` | int |
 | `cyclic` | bool |
 | `points` | [[x, y, z]] world space, metres × scene scale |
@@ -1659,9 +1655,8 @@ never writes Blender data.
   - The running turn ends with its phase ("Starting Claude…", "Working…" only while no
     call is in flight, "Stopping…") or Claude's question (a box with a button per
     choice).
-- **Sketch strip**: the Sketch toggle, with Capture View beside it while sketching and
-  the six stroke-type icon buttons on a row of their own (tooltips from
-  `WHITTLE_OT_stroke_type.description`), then a panel headed by the stroke summary
+- **Sketch strip**: the Sketch toggle, with Capture View beside it while sketching,
+  then a panel headed by the stroke summary
   (`ui.stroke_summary`: "3 strokes · 2 views", "1 stroke sent · 1 view" for strokes a
   stopped or failed turn left, "1 view"; during a turn "3 sent · 1 new") with Clear;
   opened, the view list, whose rows snap to their view (`whittle.view_snap`), then the
@@ -1669,7 +1664,7 @@ never writes Blender data.
   (`layout.panel_prop`), so it can be set from Python.
 - **Sketch keys** (`addon/keys.py`): add-on items in the 3D View keymap (the viewport's
   keymap in every mode, Draw Mode included): Shift+Alt+D `whittle.sketch_toggle`,
-  Shift+Alt+N `whittle.next_stroke_type`, Shift+Alt+V `whittle.capture_view`,
+  Shift+Alt+V `whittle.capture_view`,
   Shift+Alt+Enter `whittle.send_key`, which runs what Enter in the prompt box would
   (`operators.send_key_action`: Send between turns, Amend during one, Answer while Claude
   asks, nothing when there is nothing to send). The key and Enter run the body on their own

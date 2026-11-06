@@ -48,7 +48,7 @@ SHOTS = [
     Shot("development-panel", "Developer Extras on: the Development panel's Fake Script field.", sidebar(),
          setup=development_panel, open_panels=True),
     Shot("asking", "A sidebar state: a turn paused on a question.", scenario="asking"),
-    Shot("sketching", "Sketch mode: the row of stroke type buttons, the active type named beside it.",
+    Shot("sketching", "A sidebar state: Sketch pressed, Capture View beside it.",
          scenario="sketching"),
     Shot("preferences-defaults", "The Defaults box of Whittle's preferences.",
          preferences(scroll=6, crop=(176, 364, 652, 152))),

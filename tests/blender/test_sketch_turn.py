@@ -27,16 +27,16 @@ class SketchTurnTest(AgentTestCase):
         if old is not None:
             bpy.data.objects.remove(old)
         self.scene = bpy.context.scene
-        self.obj = sketch.ensure_sketch_layers(self.scene)
+        self.obj = sketch.ensure_sketch_layer(self.scene)
         gp = self.obj.data
         views.add_view(gp, lambda i: look_at_view(i, (1.3, -1.5, 1.1), (0, 0, 0.3)))
         views.add_view(gp, lambda i: look_at_view(i, (0, -2, 0.3), (0, 0, 0.3)))
         views.add_view(gp, lambda i: look_at_view(i, (-1.5, -1.5, 0.8), (0, 0, 0.3)))
-        add_stroke(self.obj, "carve", A_POINTS, view=2, radius=0.01)
-        add_stroke(self.obj, "add", B_POINTS, view=1, cyclic=True)
+        add_stroke(self.obj, A_POINTS, view=2, radius=0.01)
+        add_stroke(self.obj, B_POINTS, view=1, cyclic=True)
 
     def strokes(self):
-        return [(s.layer, s.view, s.turn, len(s.points)) for s in sketch.iter_strokes(self.obj)]
+        return [(s.view, s.turn, len(s.points)) for s in sketch.iter_strokes(self.obj)]
 
     def run_and_finish(self, ctl, prompt="Carve a slot."):
         node = ctl.run_sketch(prompt, targets=[self.crate])
@@ -47,9 +47,9 @@ class SketchTurnTest(AgentTestCase):
         ctl = self.make_controller("sketch_turn.json")
         node = ctl.run_sketch("Carve a slot.", targets=[self.crate])
         self.assertEqual(node, "n0001")
-        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [1, 1], "the sent strokes are stamped")
+        self.assertEqual([t for _v, t, _n in self.strokes()], [1, 1], "the sent strokes are stamped")
         pump(ctl, lambda: ctl.running, 15, "the turn to start")
-        add_stroke(self.obj, "free", F_POINTS, view=1)
+        add_stroke(self.obj, F_POINTS, view=1)
         pump(ctl, lambda: ctl.last_finished is not None or ctl.errors, 30, "the turn to finish")
         self.assertEqual(ctl.errors, [])
         self.assertFalse(ctl.last_finished["is_error"], ctl.last_finished)
@@ -57,12 +57,12 @@ class SketchTurnTest(AgentTestCase):
         written = formats.read_bundle(ctl.session.request_dir("n0001"))
         self.assertEqual((written.request.node, written.request.parent), ("n0001", "n0000"))
         self.assertEqual(written.request.prompt, "Carve a slot.")
-        self.assertEqual([(s.type, s.view) for s in written.strokes], [("add", 1), ("carve", 2)])
-        self.assertTrue(all(written.strokes[1].on_surface))
+        self.assertEqual([s.view for s in written.strokes], [2, 1])
+        self.assertTrue(all(written.strokes[0].on_surface))
         renders = sorted(p.name for p in ctl.session.renders_dir("n0001").iterdir())
         self.assertIn("001-v1-overlay.png", renders)
 
-        self.assertEqual(self.strokes(), [("free", 1, 0, 2)], "sent strokes go, pending ones stay")
+        self.assertEqual(self.strokes(), [(1, 0, 2)], "sent strokes go, pending ones stay")
         self.assertEqual([v.id for v in views.load_views(self.obj.data)], [1, 3])
 
     def test_crashed_turn_keeps_its_strokes_for_the_next_run(self):
@@ -70,13 +70,13 @@ class SketchTurnTest(AgentTestCase):
         ctl.run_sketch("Carve a slot.", targets=[self.crate])
         pump(ctl, lambda: ctl.process.state == AgentState.CRASHED, 15, "the crash")
         self.assertTrue(ctl.last_finished["is_error"])
-        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [0, 0], "folded, so pending again")
+        self.assertEqual([t for _v, t, _n in self.strokes()], [0, 0], "folded, so pending again")
         self.assertEqual(len(views.load_views(self.obj.data)), 3)
 
         second = self.make_controller("sketch_turn.json")
         node = second.run_sketch("Again.", targets=[self.crate])
         self.assertEqual(node, "n0002")
-        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [2, 2])
+        self.assertEqual([t for _v, t, _n in self.strokes()], [2, 2])
         pump(second, lambda: second.last_finished is not None or second.errors, 30, "the second turn")
         self.assertEqual(second.errors, [])
         self.assertEqual(self.strokes(), [])
@@ -92,7 +92,7 @@ class SketchTurnTest(AgentTestCase):
             with self.assertRaisesRegex(RuntimeError, "agent environment is not set up"):
                 ctl.run_sketch("Carve.", targets=[self.crate])
         self.assertFalse(ctl.session.node_dir("n0001").exists())
-        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [0, 0])
+        self.assertEqual([t for _v, t, _n in self.strokes()], [0, 0])
 
         good = self.make_controller("sketch_turn.json")
         self.assertEqual(self.run_and_finish(good), "n0001")
@@ -111,18 +111,19 @@ class SketchTurnTest(AgentTestCase):
         self.assertEqual(written.request.parent, "n0000")
 
     def test_hidden_strokes_of_a_dropped_run_survive_the_next_run(self):
+        add_stroke(self.obj, F_POINTS, view=2, layer="older")
         ctl = self.make_controller("sketch_turn.json")
         node = ctl.run_sketch("Carve.", targets=[self.crate])
         ctl.stop()
-        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [0, 0], "a dropped run unstamps")
+        self.assertEqual([t for _v, t, _n in self.strokes()], [0, 0, 0], "a dropped run unstamps")
         pump(ctl, lambda: ctl.process.state == AgentState.STOPPED, 10, "the agent to stop")
-        self.obj.data.layers["carve"].hide = True
+        self.obj.data.layers["older"].hide = True
         self.assertEqual(self.run_and_finish(ctl), node)
         self.assertEqual(ctl.errors, [])
         written = formats.read_bundle(ctl.session.request_dir(node))
-        self.assertEqual([s.type for s in written.strokes], ["add"])
-        kept = [(s.layer, s.view, s.turn) for s in sketch.iter_strokes(self.obj, include_hidden=True)]
-        self.assertEqual(kept, [("carve", 2, 0)], "unsent strokes stay")
+        self.assertEqual([s.view for s in written.strokes], [2, 1])
+        kept = [(s.view, s.turn, len(s.points)) for s in sketch.iter_strokes(self.obj, include_hidden=True)]
+        self.assertEqual(kept, [(2, 0, len(F_POINTS))], "unsent strokes stay")
 
     def test_failed_write_keeps_the_node_number(self):
         ctl = self.make_controller("sketch_turn.json")
@@ -137,7 +138,7 @@ class SketchTurnTest(AgentTestCase):
             with self.assertRaisesRegex(Exception, "fewer or smaller"):
                 ctl.run_sketch("Carve.", targets=[self.crate], refs=[big])
         self.assertFalse((ctl.session.root / "nodes").exists() and any((ctl.session.root / "nodes").iterdir()))
-        self.assertEqual([t for _l, _v, t, _n in self.strokes()], [0, 0])
+        self.assertEqual([t for _v, t, _n in self.strokes()], [0, 0])
 
         views.add_view(self.obj.data, lambda i: look_at_view(i, (0, -2, 0.3), (0, 0, 0.3)))
         self.assertEqual(self.run_and_finish(ctl), "n0001")
@@ -157,7 +158,7 @@ class SketchTurnTest(AgentTestCase):
         self.run_and_finish(ctl)
         self.assertFalse(ctl.session_ready)
         ctl.last_finished = None
-        add_stroke(self.obj, "free", F_POINTS, view=3)
+        add_stroke(self.obj, F_POINTS, view=3)
         # As if the session_ended status had not arrived before the next run.
         ctl.session_ready = True
         ctl.live_node = "n0001"
@@ -196,13 +197,6 @@ class SketchOperatorTest(AgentTestCase):
         addon.register()
         self.addCleanup(addon.unregister)
 
-    def test_stroke_type_operators(self):
-        self.assertEqual(bpy.ops.whittle.stroke_type(type="carve"), {"FINISHED"})
-        obj = sketch.find_sketch_object()
-        self.assertEqual(sketch.active_type(obj), "carve")
-        self.assertEqual(bpy.ops.whittle.next_stroke_type(), {"FINISHED"})
-        self.assertEqual(sketch.active_type(obj), "crease")
-
     def test_capture_view_body(self):
         from whittle.addon import operators
 
@@ -218,9 +212,9 @@ class SketchOperatorTest(AgentTestCase):
     def test_submit_sketch_body(self):
         from whittle.addon import operators, turn
 
-        obj = sketch.ensure_sketch_layers(bpy.context.scene)
+        obj = sketch.ensure_sketch_layer(bpy.context.scene)
         views.add_view(obj.data, lambda i: look_at_view(i, (0, -2, 0.3), (0, 0, 0.3)))
-        add_stroke(obj, "carve", A_POINTS)
+        add_stroke(obj, A_POINTS)
         ref = self.user_dir / "ref.png"
         ref.write_bytes((FAKE_SCRIPTS.parent / "crate" / "request" / "views" / "1" / "overlay.png").read_bytes())
         props = bpy.context.scene.whittle

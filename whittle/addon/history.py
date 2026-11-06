@@ -395,7 +395,7 @@ class History:
             # with its number: the request's copies replace them.
             sketch.remove_turn_strokes(obj, formats.node_number(node))
         if sent.strokes:
-            obj = sketch.ensure_sketch_layers(scene)
+            obj = sketch.ensure_sketch_layer(scene)
             ids = views.merge_views(obj.data, [sent.views[i] for i in sorted(sent.views)])
             for stroke in sent.strokes:
                 stroke.view = ids.get(stroke.view, stroke.view)

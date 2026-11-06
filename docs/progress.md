@@ -57,11 +57,9 @@ work, and streams everything back to Blender.
 **Sketch capture** (design §3, §9 item 2). The user sketches over the model and submits;
 Whittle writes a request bundle from the live sketch and runs it.
 
-- `addon/sketch.py`: the "Whittle Sketch" GP object with one tinted, unlit layer per
-  stroke type (free, add, carve, crease, region, note), the active-type switch, and
-  per-stroke tags `whittle_view` and `whittle_turn` (curve attributes). Region strokes
-  get a `fill_id`, so they render as translucent blue areas. Each type layer keeps a
-  single drawing keyed at Blender's lowest frame (`SKETCH_FRAME`), so the sketch is the
+- `addon/sketch.py`: the "Whittle Sketch" GP object with a white, unlit layer for
+  new strokes (`Strokes`) and per-stroke tags `whittle_view` and `whittle_turn` (curve
+  attributes). Every layer of the object is read, and each keeps a single drawing keyed at Blender's lowest frame (`SKETCH_FRAME`), so the sketch is the
   same wherever the playhead is; a layer keyed elsewhere is moved onto that key.
   `SketchSession` enters Grease Pencil draw mode with Surface placement and auto-keying
   off, restoring the user's settings on exit, including when the sketch object is
@@ -86,13 +84,13 @@ Whittle writes a request bundle from the live sketch and runs it.
   prunes unused views; strokes drawn during the turn stay pending. A failed or
   interrupted turn keeps its strokes for the next run.
 - Operators: `whittle.sketch`, `whittle.sketch_stop`, `whittle.sketch_toggle`,
-  `whittle.stroke_type`, `whittle.next_stroke_type`, `whittle.capture_view`,
+  `whittle.capture_view`,
   `whittle.view_snap`, `whittle.submit` (Send), `whittle.send_key` (Shift+Alt+Enter),
   `whittle.clear_sketch`,
   `whittle.ref_add`, `whittle.ref_remove`; the sidebar's sketch strip and composer hold
   them.
 - Default keys (`addon/keys.py`), in the 3D View keymap so they work in Draw Mode:
-  Shift+Alt+D toggles Sketch mode, Shift+Alt+N the next stroke type, Shift+Alt+V
+  Shift+Alt+D toggles Sketch mode, Shift+Alt+V
   captures a view, Shift+Alt+Enter sends between turns and amends during one, as Enter in
   the prompt box does (nothing when there is nothing to send). Free in Blender 5.2's
   default keymap (a test checks), rebindable in Preferences → Keymap, meant for a tablet's express keys.
@@ -102,11 +100,11 @@ Whittle writes a request bundle from the live sketch and runs it.
   viewport back at that view's eye, direction and field of view, with the pivot at the
   view's strokes, and makes it the view new strokes go to. The view list's **Markers
   While Sketching** turns them off.
-- Agent side: `mcp__whittle__request` prints a summary line per stroke type, names each
+- Agent side: `mcp__whittle__request` prints a summary line of the strokes, names each
   view's `strokes.png`, and decimates a dense stroke list (keeping endpoints, never
   cutting the JSON) while pointing at the full `strokes.json`.
 - `tests/fixtures/crate/`: a hand-made bundle with a 0.5 m crate, two views, an
-  outline of a lid (add) and a handle slot (carve).
+  outline of a lid and a handle slot.
   - `scene.py` builds the matching scene.
   - `make_bundle.py` regenerates the bundle's cameras and images.
 - `tests/fixtures/fake/`: fake agent scripts used by the bridge tests.
@@ -395,7 +393,7 @@ shot in a GUI Blender without a person at the keyboard.
   `docs/images/`, which is committed, so the README's pictures show on the forge.
 - A scenario can run in a window of its own size and sidebar width (`catalog.WINDOWS`) and
   be shot whole (`@scenario(window=True)`): `hero`, the README's first image, is the
-  1600×1000 window with a built crate, a stroke of every kind and the sidebar in sketch mode.
+  1600×1000 window with a built crate, strokes over it and the sidebar in sketch mode.
 - The harness writes its PNGs itself (numpy and zlib): 8-bit, no alpha, indexed when a shot
   has 256 colours or fewer, each row with the filter that suits it. Lossless, and smaller
   than Blender's RGBA writer (the hero is under 300 KB); Blender's render save would have
@@ -543,8 +541,7 @@ it serves, and red is kept for real failures.
   line. "N later turns" with **Return to Latest** appears off the end of a branch, and
   Send reads **Send as Branch** (**Branch** when the sidebar is too narrow for it).
 - **Sketch**: a Sketch button; while sketching it stays pressed with **Capture View**
-  beside it, and the six stroke types (Region and Note have clearer icons; tooltips name
-  each, and the active one is named beside them) get a row of their own. The stroke
+  beside it. The stroke
   count (with 🗑 and the view list; the current view has its own icon and a "current"
   tag, and none is dimmed) shows whenever the viewport shows something: pending
   strokes, strokes a stopped or failed turn was sent with, or views alone. Before, Clear
@@ -707,9 +704,10 @@ To sketch and steer by hand in Blender (steps 1–3 as above):
 1. Open a scene with something to sketch on. In the sidebar's Whittle tab, select what
    Claude should work on (Auto follows the selection), or turn Auto off and pick targets
    or a collection. With nothing selected the agent makes new objects.
-2. Press **Sketch**. Pick a stroke type, draw (strokes stick to surfaces), orbit to
+2. Press **Sketch**, draw (strokes stick to surfaces), orbit to
    another angle and draw more. The camera button records a view explicitly.
-3. Type a prompt, optionally add reference images with 📎, and press **Send**.
+3. Type a prompt that says what the strokes mean, optionally add reference images with
+   📎, and press **Send**.
 4. Watch the turn in the conversation. Open "Used N tools" to see each call's code and
    result, and press the image button beside a render to open it. While the turn runs
    you can draw more strokes, type into the field and press **Amend**, answer a
@@ -797,7 +795,7 @@ them at each save. Nothing is written beside the `.blend`.
 - **View markers and sketch keys** were checked in a hidden GUI Blender with simulated
   events: a marker highlights under the pointer, a click on it in Draw Mode snaps the
   viewport (view and projection matrices equal to the stored view's) without drawing a
-  stroke, an orthographic snap matches too, and Shift+Alt+N, V and D work over the
+  stroke, an orthographic snap matches too, and Shift+Alt+V and D work over the
   viewport in Draw Mode. Not yet tried with a real pen and express keys (checklist).
   Snapping does not bring back lens shift (not stored), and a view captured in a
   portrait viewport snapped into a landscape one keeps its field of view across the
@@ -1006,8 +1004,8 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
    `preferences_key`): paste your key into the field in the preferences and Send: the
    turn runs. With a wrong key, Send: the turn fails and the box says the API key was
    refused. Get a Key opens the Console's keys page in your browser.
-6. **A real turn on a sketch** (the real agent): draw add and carve strokes on the crate
-   from two views, send: Claude's edit follows the strokes, and its renders show them.
+6. **A real turn on a sketch** (the real agent): draw strokes on the crate from two views
+   and say in the prompt what they mean, send: Claude's edit follows the strokes, and its renders show them.
 7. **Several viewports**: with two 3D viewports, orbit one and draw in the other: the
    stroke takes the view it was drawn in (the watcher picks the viewport whose view
    changed last; Capture View is exact).
@@ -1023,9 +1021,8 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     the second and the first's line goes.
 11. **Shift+Alt+C**: the popup shows the dim hint under its field, whole, at your UI
     scale; while Claude asks, the field's placeholder is `Ask Claude…` like the sidebar's.
-12. **Tablet keys and markers**: map the tablet's express keys to Shift+Alt+D, N, V and
-    Enter. With the pen over the viewport: D starts sketching, N cycles the type (the
-    sidebar names it), V captures a view, D stops and starts again, Enter sends. Draw
+12. **Tablet keys and markers**: map the tablet's express keys to Shift+Alt+D, V and
+    Enter. With the pen over the viewport: D starts sketching, V captures a view, D stops and starts again, Enter sends. Draw
     from two angles, orbit away: a camera marks each view; tap one with the pen: the
     viewport goes back there, and a stroke drawn now joins that view (its row's count
     goes up, no new view). Untick Markers While Sketching: they go.

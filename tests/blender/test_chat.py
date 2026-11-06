@@ -148,7 +148,7 @@ class ChatTurnCase(HistoryTurnCase):
 
     def send(self, prompt):
         """Types the prompt, draws a stroke and presses Send."""
-        add_stroke(self.obj, "free", [(-0.15 + 0.05 * i, -0.25, 0.3) for i in range(7)], view=1, radius=0.01)
+        add_stroke(self.obj, [(-0.15 + 0.05 * i, -0.25, 0.3) for i in range(7)], view=1, radius=0.01)
         self.props.prompt = prompt
         ctl, node = operators.submit_sketch(bpy.context, self.fake)
         self.assertIs(ctl, self.ctl)
@@ -327,7 +327,7 @@ class RetryTest(ChatTurnCase):
         # The turn-start undo step holds the strokes as the turn stamped them,
         # an amendment's among them, and background Blender cannot undo.
         sketch.stamp_strokes(self.obj, number)
-        add_stroke(self.obj, "free", [(0.1 * i, 0.2, 0.3) for i in range(4)], view=1, radius=0.01)
+        add_stroke(self.obj, [(0.1 * i, 0.2, 0.3) for i in range(4)], view=1, radius=0.01)
         sketch.stamp_pending(self.obj, number, 1)
         addon._after_undo()
         self.assertEqual(sketch.stroke_counts(self.obj), {0: 2})

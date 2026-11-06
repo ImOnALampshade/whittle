@@ -159,13 +159,12 @@ pitfalls. The agent has no Read tool, so a skill has to be self-contained.
 
 1. **Write `whittle/agent/plugin/skills/<name>/SKILL.md`.** The frontmatter is simple
    `key: value` lines, each on one line. `name` matches the folder. `description` says what
-   the skill does and when to use it, in the words a request would use, such as the stroke
-   types:
+   the skill does and when to use it, in the words a request would use:
 
    ```text
    ---
    name: bevel-crease
-   description: Bevels hard-surface edges and turns crease strokes into bevelled or sharp edges ... Use for crease (yellow) strokes, for prompts about bevels, chamfers ...
+   description: Bevels hard-surface edges and turns strokes along an edge into bevelled or sharp edges ... Use when a stroke marks a hard edge, for prompts about bevels, chamfers ...
    ---
    ```
 
@@ -249,6 +248,12 @@ on screenshots as well as tests.
 What the `asking` scenario above produces.
 ```
 
+```{figure} ../images/develop-extending/sketching.png
+:alt: The sidebar in sketch mode: Sketch pressed with Capture View beside it, the stroke count and the list of two views
+
+The `sketching` scenario, another sidebar state: Capture View shows only while sketching.
+```
+
 ## A GUI check
 
 Background tests cannot reach some things: a real Ctrl+Z, the draw tool, a modal transform, a
@@ -305,41 +310,6 @@ hidden Blender with simulated input. Use one only when a `blender -b` test canno
    to agree, and `test_the_first_phase_opens_the_startup_file` guards the first phase. Add the
    check to the list and the count in `docs/progress.md`, and to the README's GUI checks if it
    covers something new.
-
-## A stroke type
-
-A stroke type is a Grease Pencil layer, named after the type, on the Whittle Sketch object.
-Most of the code loops over `formats.STROKE_TYPES`, but four tables are indexed by type and
-each needs a row. The [Sketching](../guides/sketching.md) guide describes the current types.
-
-1. **`STROKE_TYPES` in `whittle/formats.py`.** Its order is the order of the buttons and of
-   the Shift+Alt+N cycle. `formats` rejects a type it does not know, so a Whittle without
-   yours refuses a bundle that uses it.
-2. **`LAYER_COLOURS` in `addon/sketch.py`.** `ensure_layer` tints the layer from it, and
-   `ensure_sketch_layers` adds a missing layer to an existing sketch.
-3. **`STROKE_MEANINGS` in `addon/operators.py`.** The button's tooltip reads
-   `<Type>: <meaning>`, so write it for the user.
-4. **`STROKE_ICONS` in `addon/ui.py`.** The buttons are icons only.
-5. **The table in `agent/system_prompt.md`.** This is what the type means to the agent, with
-   the colour it sees in overlays. It need not match the tooltip, because the two have
-   different readers. A skill that handles the type should say so in its
-   description.
-6. **Behaviour of its own**, if the type has any. Region strokes are the example:
-   `sketch.ensure_region_fills` gives them a fill.
-7. **The docs.** `docs/architecture.md` §7 and, in `docs/ui.md`, the table of types and the
-   cycle in the keys table in §3.8. The `hero` scenario's check names one stroke of each
-   kind, so give it one.
-
-The tests that walk the types read `STROKE_TYPES`, so they cover the new one by themselves,
-with one exception: `test_ensure_sketch_layers` in `tests/blender/test_sketch.py` counts the
-layers by hand, so raise its number. What the tests cannot see is whether the row still fits.
-Run `./screens.sh sketching` and look at it at the default width.
-
-```{figure} ../images/develop-extending/sketching.png
-:alt: The sidebar in sketch mode: Sketch and Capture View, a row of six stroke type icons with Carve pressed and named beside it, the stroke count and the list of two views
-
-The type buttons, six in one row, with the active type's name beside them.
-```
 
 ## A preference
 

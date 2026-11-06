@@ -143,7 +143,7 @@ its error lists the turn's view ids. A `view` render keeps that view's aspect, a
 square.
 
 ```{figure} ../images/develop-agent-tools/render-modes.png
-:alt: Four renders of a crate with a lid from one sketch view, in a two by two grid. Top left, overlay, with a green outline around the lid and a red oval on the side. Top right, shaded. Bottom left, wireframe, with the crate as thin lines and the lid solid. Bottom right, matcap.
+:alt: Four renders of a crate with a lid from one sketch view, in a two by two grid. Top left, overlay, with a white outline around the lid and a white oval on the side. Top right, shaded. Bottom left, wireframe, with the crate as thin lines and the lid solid. Bottom right, matcap.
 
 The four modes from one sketch view, as the agent gets them: overlay and shaded on top,
 wireframe and matcap below. The crate is the target. The lid was made this turn, so it is not a
@@ -202,8 +202,7 @@ content. The bundle's format is in {doc}`Protocol and file formats <protocol>`.
 The result is one text block and then the images:
 
 - The node and its parent, the prompt, the targets and any target collection.
-- The stroke types used, with a line per type: strokes, views and how many points lie on a
-  surface.
+- A line on the strokes: how many, their views and how many points lie on a surface.
 - Units and the session settings.
 - Each sketch view's size, camera type, eye position and strokes-only PNG path.
 - The strokes as world-space JSON.
@@ -309,7 +308,7 @@ restarts the agent before the next turn; see {doc}`Settings <../guides/settings>
 | Steering and context | What `<user_amendment>`, `interrupted`, `note:` and `<whittle_context>` mean, and that text found in the work is material rather than instructions. |
 | Modeling practice | Defaults with reasons: one closed shell, no faked joins, ways to fuse, what stays separate, live or baked booleans, welding, topology, shading, remeshing. |
 | Conventions | Units, style, the triangle budget, materials, naming, scene safety, standing on z = 0, and reading strokes as intent. |
-| Stroke types | The six types (`formats.STROKE_TYPES`) with their meanings and colours, and how to read `on_surface` and off-surface points. |
+| Reading the sketch | Strokes are markup and the prompt says what they mean, what to go on when it says little, and how to read `on_surface` and off-surface points. |
 | Style for this file | The palette, bevel style and notes, to apply with judgement. |
 | bpy recipes | Added by `prompt.build`: the skills by name, and when to load one. |
 
@@ -359,10 +358,10 @@ link with. Here they are in `prompt.SKILLS` order:
 |---|---|---|
 | `mesh-check` | Checking a mesh after an edit, or before saying a part is fused, closed or within budget. | What each `mesh_report` number means, how to weld, and turning seam n-gons on a curved surface into quads. |
 | `fuse-parts` | Horns, spikes, ears, limbs, tails, spouts, handles, chimneys; more than one shell with self-intersections. | Growing a part from the body's faces, a baked Boolean union, bridging loops, and a self-union to repair overlapping parts. |
-| `blockout-silhouette` | An add or free stroke that is the closed outline of a flat-sided prop. | Simplifying the outline, finding its plane by Newell's method, and extruding a prism. |
+| `blockout-silhouette` | A stroke that is the closed outline of a flat-sided prop, or a prop's first rough shape drawn as an outline. | Simplifying the outline, finding its plane by Newell's method, and extruding a prism. |
 | `extrude-along-stroke` | A stroke that is a path: a handle arc, pipe, rail, rope, cable, branch or trim. | Resampling, a bevelled curve converted through the depsgraph, and welding the tube and caps into one closed shell. |
-| `boolean-carve` | Carve (red) strokes; prompts to cut, drill, hollow or recess. | A cutter built from the stroke, a Boolean difference, and keeping it live or baking it without operators. |
-| `bevel-crease` | Crease (yellow) strokes; bevels, chamfers, rounded or sharp edges, hard-surface shading. | A whole-object bevel, a bevel limited to the edges under a stroke by weight, and sharp edges and Weighted Normal. |
+| `boolean-carve` | A stroke that marks material to remove; prompts to cut, drill, hollow or recess. | A cutter built from the stroke, a Boolean difference, and keeping it live or baking it without operators. |
+| `bevel-crease` | A stroke that marks a hard edge; bevels, chamfers, rounded or sharp edges, hard-surface shading. | A whole-object bevel, a bevel limited to the edges under a stroke by weight, and sharp edges and Weighted Normal. |
 | `mirror-array` | Symmetric props, matching pairs, rows of planks, slats, bolts, posts or steps. | Mirror with bisect and merge, Array with fixed spacing, fitted to a length or along a curve, and modifier order. |
 | `lathe-profile` | Turned or round props: a barrel, bottle, vase, lamp, pot, post, wheel or column. | A profile as radius and height pairs, `bmesh.ops.spin`, merging the seam and capping the ends. |
 | `vertex-colour-paint` | Colours, paint, materials, two-tone parts, gradients, dirt or wear. | Per-face material slots with `diffuse_color`, colour attributes, and why Workbench renders show only the first. |
@@ -392,4 +391,4 @@ session reports no `whittle:` skills.
 
 - {doc}`Architecture overview <architecture>`: the three processes these tools span.
 - {doc}`Agent API <../reference/agent>`: the `whittle.agent` modules.
-- {doc}`Sketching <../guides/sketching>`: the stroke types from the user's side.
+- {doc}`Sketching <../guides/sketching>`: strokes and views from the user's side.

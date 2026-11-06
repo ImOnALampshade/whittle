@@ -16,7 +16,7 @@ sends:
 
 - your prompts, amendments and answers to Claude's questions, and the reference images
   you attach or pin;
-- the sketch: the strokes with their types and positions, the camera of each view, and
+- the sketch: the strokes with their positions, the camera of each view, and
   images of your strokes over the model;
 - what Claude looks at while it works: scene information it asks for (object names,
   transforms, mesh statistics, materials, modifiers, node groups), the output and errors

@@ -42,12 +42,12 @@ class SteeringTestCase(AgentTestCase):
         self.props.target_collection = None
         self.props.prompt = ""
         self.props.amend_text = ""
-        self.obj = sketch.ensure_sketch_layers(self.scene)
+        self.obj = sketch.ensure_sketch_layer(self.scene)
         gp = self.obj.data
         views.add_view(gp, lambda i: look_at_view(i, (1.3, -1.5, 1.1), (0, 0, 0.3)))
         views.add_view(gp, lambda i: look_at_view(i, (0, -2, 0.3), (0, 0, 0.3)))
-        add_stroke(self.obj, "carve", A_POINTS, view=2, radius=0.01)
-        add_stroke(self.obj, "add", B_POINTS, view=1, cyclic=True, radius=0.01)
+        add_stroke(self.obj, A_POINTS, view=2, radius=0.01)
+        add_stroke(self.obj, B_POINTS, view=1, cyclic=True, radius=0.01)
 
     def start(self, script, prompt="Add a lid.", *, attended=False):
         ctl = self.make_controller(script)
@@ -75,7 +75,7 @@ class SteeringTestCase(AgentTestCase):
         return [e["data"] for e in ctl.events if e["name"] == name]
 
     def stamps(self):
-        return [(s.layer, s.turn, s.amend) for s in sketch.iter_strokes(self.obj, include_hidden=True)]
+        return [(s.turn, s.amend) for s in sketch.iter_strokes(self.obj, include_hidden=True)]
 
     def local_records(self, ctl, node="n0001"):
         lines = ctl.session.transcript_path(node).read_text().splitlines()
@@ -157,7 +157,7 @@ class InterruptTest(SteeringTestCase):
         ctl, finished = self.run_until_first_result(restore=False)
         self.assertIn("Crate_Lid", bpy.data.objects)
         self.assertEqual(tuple(self.crate.scale), (1.5, 1.5, 1.5))
-        self.assertEqual([t for _l, t, _a in self.stamps()], [1, 1], "an interrupted turn keeps its strokes")
+        self.assertEqual([t for t, _a in self.stamps()], [1, 1], "an interrupted turn keeps its strokes")
         self.assertIn({"mode": "keep"}, [r["data"] for r in self.local_records(ctl)])
         self.assertIn("Crate_Lid", [t.object.name for t in self.props.targets])
         self.assertNotIn("restored", finished)
@@ -188,7 +188,7 @@ class InterruptTest(SteeringTestCase):
         records = self.local_records(ctl)
         self.assertIn(("interrupt", {"mode": "restore"}), [(r["name"], r["data"]) for r in records])
         self.assertIn(("restored", {"objects": ["Crate"]}), [(r["name"], r["data"]) for r in records])
-        self.assertEqual([t for _l, t, _a in self.stamps()], [1, 1])
+        self.assertEqual([t for t, _a in self.stamps()], [1, 1])
         self.assertNotIn("Crate_Lid", [t.object.name for t in self.props.targets if t.object])
 
     def start_with_user_lamp(self):
@@ -219,16 +219,16 @@ class InterruptTest(SteeringTestCase):
 class AmendTest(SteeringTestCase):
     def test_amend_with_new_strokes(self):
         ctl = self.start("amend.json")
-        add_stroke(self.obj, "free", NEW_POINTS, view=1, radius=0.01)
+        add_stroke(self.obj, NEW_POINTS, view=1, radius=0.01)
         number = ctl.amend("Make it taller", scene=self.scene)
         self.assertEqual(number, 1)
         written = formats.read_bundle(ctl.session.amend_dir("n0001", 1))
         self.assertEqual(written.request.amend, 1)
         self.assertEqual(written.request.prompt, "Make it taller")
-        self.assertEqual([s.type for s in written.strokes], ["free"])
+        self.assertEqual(len(written.strokes), 1)
         self.assertEqual(written.request.views, [1])
-        self.assertIn(("free", 1, 1), self.stamps())
-        add_stroke(self.obj, "free", LATER_POINTS, view=1)
+        self.assertIn((1, 1), self.stamps())
+        add_stroke(self.obj, LATER_POINTS, view=1)
         finished = self.finish(ctl)
         self.assertFalse(finished["is_error"], finished)
         self.assertEqual(finished["amends_undelivered"], [])
@@ -236,7 +236,7 @@ class AmendTest(SteeringTestCase):
         self.assertIn("User amendment 1: Make it taller", result["summary"])
         self.assertIn("amend 1: 1 strokes, views [1]", [d["text"] for d in self.events(ctl, "text")])
         self.assertTrue(ctl.amends[1]["delivered"])
-        self.assertEqual(self.stamps(), [("free", 0, 0)], "the turn's strokes go, later ones stay")
+        self.assertEqual(self.stamps(), [(0, 0)], "the turn's strokes go, later ones stay")
         self.assertIn("amend", [r["name"] for r in self.local_records(ctl)])
 
     def test_amend_after_the_last_step_is_a_follow_up(self):
@@ -251,15 +251,15 @@ class AmendTest(SteeringTestCase):
 
     def test_undelivered_amend_is_handed_back(self):
         ctl = self.start("amend_interrupt.json")
-        add_stroke(self.obj, "free", NEW_POINTS, view=1)
+        add_stroke(self.obj, NEW_POINTS, view=1)
         ctl.amend("Make it taller", scene=self.scene)
         self.assertTrue(ctl.session.amend_dir("n0001", 1).is_dir())
         pump(ctl, lambda: not ctl.bridge.pending, 10, "the amend to be queued")
         ctl.interrupt()
         finished = self.finish(ctl)
         self.assertEqual(finished["amends_undelivered"], [1])
-        self.assertIn(("free", 0, 0), self.stamps())
-        self.assertEqual(sorted(t for _l, t, _a in self.stamps()), [0, 1, 1])
+        self.assertIn((0, 0), self.stamps())
+        self.assertEqual(sorted(t for t, _a in self.stamps()), [0, 1, 1])
         self.assertFalse(ctl.session.amend_dir("n0001", 1).exists())
         self.assertEqual(self.props.prompt, "Make it taller")
         notes = [e.text for e in ctl.stream.entries() if e.kind == "warning"]
@@ -288,7 +288,7 @@ class AmendWhileStartingTest(SteeringTestCase):
     def test_amend_right_after_submit_is_delivered(self):
         ctl = self.begin("amend.json")
         self.assertTrue(bpy.ops.whittle.amend.poll(), "Amend works from Submit on")
-        add_stroke(self.obj, "free", NEW_POINTS, view=1, radius=0.01)
+        add_stroke(self.obj, NEW_POINTS, view=1, radius=0.01)
         self.props.amend_text = "Make it taller"
         self.assertEqual(operators.amend(bpy.context), 1)
         self.assertEqual(self.props.amend_text, "")
@@ -526,7 +526,7 @@ class PendingStrokesTest(SteeringTestCase):
         ctl = self.start("pending_render.json", attended=True)
         pump(ctl, lambda: ctl.question is not None, 15, "the question")
         pending = [(-0.24, -0.25, 0.05), (-0.2, -0.25, 0.05), (-0.16, -0.25, 0.05)]
-        add_stroke(self.obj, "free", pending, view=1, radius=0.02)
+        add_stroke(self.obj, pending, view=1, radius=0.02)
         ctl.answer("yes")
         self.finish(ctl)
         rendered = self.events(ctl, "tool_result")[-1]["images"]
@@ -541,6 +541,6 @@ class PendingStrokesTest(SteeringTestCase):
 
         self.assertTrue(all(alpha_near(p) == 0.0 for p in pending), "pending strokes are hidden")
         self.assertGreater(max(alpha_near(p) for p in B_POINTS), 0.5, "the turn's strokes are drawn")
-        self.assertIn(("free", 0, 0), self.stamps(), "the pending stroke is untouched")
-        attrs = self.obj.data.layers["free"].frames[0].drawing.attributes
+        self.assertIn((0, 0), self.stamps(), "the pending stroke is untouched")
+        attrs = self.obj.data.layers[sketch.LAYER_NAME].frames[0].drawing.attributes
         self.assertIsNone(attrs.get("hide_stroke"), "the hide attribute is removed again")

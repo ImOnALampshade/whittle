@@ -40,7 +40,7 @@ class HistoryTurnCase(AgentTestCase):
         self.props.amend_text = ""
         self.props.history_node = ""
         self.props.targets.add().object = self.crate
-        self.obj = sketch.ensure_sketch_layers(self.scene)
+        self.obj = sketch.ensure_sketch_layer(self.scene)
         views.add_view(self.obj.data, lambda i: look_at_view(i, (1.3, -1.5, 1.1), (0, 0, 0.3)))
         patcher = mock.patch.object(history, "undo_push")
         self.undo = patcher.start()
@@ -56,7 +56,7 @@ class HistoryTurnCase(AgentTestCase):
 
     def submit(self, ctl, prompt):
         """Starts a sketch run from the current targets; returns its node."""
-        add_stroke(self.obj, "free", STROKE, view=1, radius=0.01)
+        add_stroke(self.obj, STROKE, view=1, radius=0.01)
         return ctl.run_sketch(prompt, targets=targets.resolve(self.scene), scene=self.scene)
 
     def turn(self, ctl, prompt="Make it so.", timeout=30):

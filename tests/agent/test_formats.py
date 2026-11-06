@@ -33,13 +33,26 @@ class BundleTest(unittest.TestCase):
         self.assertEqual(bundle.request.node, "n0001")
         self.assertEqual(bundle.request.target[0]["name"], "Crate")
         self.assertEqual(sorted(bundle.views), [1, 2])
-        self.assertEqual([s.type for s in bundle.strokes], ["add", "add", "carve"])
+        self.assertEqual([s.view for s in bundle.strokes], [1, 2, 2])
         self.assertTrue(bundle.overlay_path(1).is_file())
         self.assertTrue(bundle.strokes_png_path(2).is_file())
         self.assertAlmostEqual(bundle.views[1].aspect, 800 / 600)
 
+    def test_a_bundle_from_when_strokes_had_types_still_reads(self):
+        self.edit("request.json", lambda o: o.update(stroke_types=["add", "scribble"]))
+
+        def add_types(obj):
+            for s in obj["strokes"]:
+                s["type"] = "carve"
+
+        self.edit("strokes.json", add_types)
+        bundle = formats.read_bundle(self.copy)
+        self.assertEqual(len(bundle.strokes), 3)
+        self.assertNotIn("type", bundle.strokes[0].to_json())
+        self.assertNotIn("stroke_types", bundle.request.to_json())
+
     def test_each_required_request_key(self):
-        for key in ["node", "parent", "prompt", "amend", "target", "stroke_types", "views",
+        for key in ["node", "parent", "prompt", "amend", "target", "views",
                     "refs", "units", "settings", "format", "version"]:
             with self.subTest(key=key):
                 original = (self.copy / "request.json").read_text()
@@ -51,7 +64,7 @@ class BundleTest(unittest.TestCase):
                 (self.copy / "request.json").write_text(original)
 
     def test_each_required_stroke_key(self):
-        for key in ["index", "type", "view", "cyclic", "points", "radius", "opacity",
+        for key in ["index", "view", "cyclic", "points", "radius", "opacity",
                     "on_surface", "normal", "hit_object"]:
             with self.subTest(key=key):
                 original = (self.copy / "strokes.json").read_text()
@@ -79,7 +92,6 @@ class BundleTest(unittest.TestCase):
         cases = [
             ("request.json", lambda o: o.update(format="whittle.other")),
             ("request.json", lambda o: o.update(version=2)),
-            ("request.json", lambda o: o.update(stroke_types=["scribble"])),
             ("request.json", lambda o: o.update(views=[1, 2, 3])),
             ("request.json", lambda o: o.update(refs=["refs/missing.png"])),
             ("request.json", lambda o: o.update(refs=["/etc/hostname"])),

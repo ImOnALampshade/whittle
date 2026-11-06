@@ -1,13 +1,13 @@
 ---
 name: boolean-carve
-description: Carves a hole, slot, notch, groove or recess with a Boolean difference, using a cutter built from the stroke, and keeps the boolean live or bakes it without operators. Use for carve (red) strokes and for prompts that ask to cut, drill, hollow or recess.
+description: Carves a hole, slot, notch, groove or recess with a Boolean difference, using a cutter built from the stroke, and keeps the boolean live or bakes it without operators. Use when a stroke marks material to remove and for prompts that ask to cut, drill, hollow or recess.
 ---
 
 # Boolean carve
 
-Use for carve (red) strokes: handle slots, windows, notches, grooves, recesses.
+Use when the user wants material taken away: handle slots, windows, notches, grooves, recesses.
 
-1. Build a cutter: extrude the carve outline through the surface along the surface normal (the bundle gives `normal` for on-surface points). Make the cutter deeper than the wall it cuts, and a little proud of the surface on the outside so coplanar faces never happen.
+1. Build a cutter: extrude the stroke's outline through the surface along the surface normal (the bundle gives `normal` for on-surface points). Make the cutter deeper than the wall it cuts, and a little proud of the surface on the outside so coplanar faces never happen.
 2. Add a Boolean modifier (DIFFERENCE, EXACT solver) to the target. Hide the cutter in renders and show it as wire.
 3. Keep it live or apply it. Live, the cut stays editable (move or resize the cutter), but a helper object stays in the scene and the base mesh is not the final shape. Applied, the mesh is the real result with no helpers. Keep it live while the user is likely to adjust it; apply it when the shape is settled or a later step needs the real geometry. Say which you did.
 4. Measure the evaluated result with `whittle.mesh_report` (`whittle:mesh-check`). Exact booleans leave near-duplicate vertices and slivers along the cut, so weld after applying.

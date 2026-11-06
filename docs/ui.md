@@ -16,8 +16,8 @@ panel that is always open.
 1. **One conversation, one prompt.** The panel reads top to bottom as: what Claude is
    working on (the target line), the conversation, the Sketch button, the prompt. No
    section headers apart from the panel's own title.
-2. **Nothing until it is relevant.** A control shows only in the state it serves: the
-   stroke types only while sketching, the stroke count only once there are strokes,
+2. **Nothing until it is relevant.** A control shows only in the state it serves: Capture
+   View only while sketching, the stroke count only once there are strokes,
    Amend and Answer only once there is something to send with them, the start points
    only before anything has been sent, the switcher only on a message with siblings.
    Everything is said once: no busy sign repeated in three places, no draft shown both
@@ -503,29 +503,20 @@ Not sketching:
 
 `whittle.sketch`, text `Sketch`, left-aligned.
 
-While sketching, two rows packed to the left:
+While sketching, one row packed to the left:
 
 ```
  [✎ Sketch][📷 Capture View]
- [〰][+][−][⌇][▭][≡] ·Carve·
 ```
 
-The Sketch button stays where it was, pressed, with Capture View beside it; the stroke
-types are a `row(align=True)` of their own, then the active type's name (dim):
+The Sketch button stays where it was, pressed, with Capture View beside it. There is
+nothing to pick before drawing: a stroke is just a stroke, and the prompt says what it
+means.
 
 | Button | Operator | Icon | Notes |
 |---|---|---|---|
 | Sketch (stop) | `whittle.sketch_stop` | `GREASEPENCIL` | text `Sketch`, `depress=True` |
-| Free | `whittle.stroke_type type=free` | `STROKE` | `depress` = active type |
-| Add | `… type=add` | `ADD` | |
-| Carve | `… type=carve` | `REMOVE` | |
-| Crease | `… type=crease` | `MOD_BEVEL` | |
-| Region | `… type=region` | `SELECT_SET` | a dashed box: an area, not a solid |
-| Note | `… type=note` | `TEXT` | a text page: words, not a letter |
 | Capture View | `whittle.capture_view` | `CAMERA_DATA` | text `Capture View` |
-
-`whittle.stroke_type`'s `description` names each type and its meaning (`Carve: remove
-material here`).
 
 **Stroke count**, only when there is something to count: outside a turn, the pending
 strokes, the strokes an earlier turn was sent with that are still shown (a stopped turn,
@@ -561,7 +552,6 @@ mode, Draw Mode included; listed and rebindable in Preferences → Keymap under 
 | Key | Operator | Does |
 |---|---|---|
 | Shift+Alt+D | `whittle.sketch_toggle` | Toggle Sketch Mode: starts sketching, or stops |
-| Shift+Alt+N | `whittle.next_stroke_type` | the next stroke type (free → add → carve → crease → region → note) |
 | Shift+Alt+V | `whittle.capture_view` | Capture View |
 | Shift+Alt+Enter | `whittle.send_key` | Send between turns (unlike Enter in the box, also with strokes or a reference and no text), Amend while Claude works (with typed text or new strokes), Answer while Claude asks (with an answer typed); nothing when there is nothing to send |
 
@@ -959,7 +949,7 @@ closed panel; dim text is marked `·dim·`.
  [       ▶ Send       ][Opus 5.5 ▾][🕘]
 ```
 
-Send is disabled (nothing to send). No stroke row, no stroke types, no placeholders.
+Send is disabled (nothing to send). No stroke row, no placeholders.
 
 ### 4.2 Prompt typed (Crate selected)
 
@@ -1080,7 +1070,6 @@ prompt, strokes and references are back in the composer, and:
 ```
  ▣ Crate                          (Auto)
  [✎ Sketch][📷 Capture View]               Sketch depressed
- [〰][+][−̲][⌇][▭][≡] ·Carve·               Carve depressed
  ▾ 3 strokes · 2 views                🗑
    📷 View 1 · 1 stroke               ✕
    🎥 View 2 · 2 strokes  ·current·   ✕
@@ -1348,7 +1337,6 @@ Changed:
   back. Its poll explains a comparison and a missing environment with `poll_message_set`.
 - `whittle.history_branch` on a folded turn only puts its prompt back
   (`operators.can_branch` allows it while the scene is at its parent).
-- `whittle.stroke_type` has a per-type `description`.
 - `whittle.history_restore` has a `description` naming the node (`n0003 · label`).
 - `whittle.compare_toggle` and `whittle.compare_end` tooltips say that saving during a
   comparison saves what is shown.
@@ -1419,8 +1407,6 @@ Every feature of the old panels, and where it lives now.
 | Reference thumbnail | Request row | Reference chip icon |
 | Edit a reference's path | Request row path field | Remove and add again |
 | Sketch / Stop Sketching | Sketch panel | Sketch button |
-| Stroke types (6) | Sketch panel grid | Icon buttons while sketching (tooltips name them; the active one is named) |
-| Next stroke type | keymap only | Shift+Alt+N (keymap only) |
 | Toggle sketch mode | — (new) | Shift+Alt+D (keymap only; the Sketch button does the same) |
 | Capture View | Sketch panel | Capture View beside Sketch while sketching; Shift+Alt+V |
 | View list with stroke counts, current view | Sketch panel | Stroke count ▸ (whenever strokes or views are shown, sent ones included) |
@@ -1491,12 +1477,12 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 
 | Scenario | Check |
 |---|---|
-| `empty` | 4.1; "Nothing selected: Claude adds new objects"; one start row under "Start from", buttons not cut; no stroke row, no stroke types; nothing red |
+| `empty` | 4.1; "Nothing selected: Claude adds new objects"; one start row under "Start from", buttons not cut; no stroke row; nothing red |
 | `start` | default cube scene, start row shown under "Start from" |
 | `prompt_typed` | 4.2; no start row |
 | `shortcut_popup` | §3.12; the `Ask Claude` popup under the pointer, its one-line field in edit mode holding the half-typed prompt, the dim hint whole below it |
 | `prompt_only_done` | one finished prompt-only turn; no red; no start line |
-| `sketching` | 4.7; Sketch pressed with Capture View beside it, types on their own row, depressed correctly, the active one named; view list open, no view dimmed, the current one tagged, rows left-aligned like labels, the markers checkbox under them; the draft once, in its field |
+| `sketching` | 4.7; Sketch pressed with Capture View beside it; view list open, no view dimmed, the current one tagged, rows left-aligned like labels, the markers checkbox under them; the draft once, in its field |
 | `view_markers` | a viewport shot, not the sidebar: one marker per view, each pointing at the crate, the current one in the theme's active colour (blue); none on top of the eye |
 | `streaming` | 4.3; gear in the header; one busy sign: "Running 2 tools" in the group header, no Working…; Stop alone; Auto dim |
 | `asking` | 4.4; question not red and said once; Stop alone; placeholder `Ask Claude…` |
@@ -1529,7 +1515,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `delete_confirm` | the confirmation of 🗑 on a chat: its title, turns and size, "leaves this file the next time you save" |
 | `delete_many` | the Delete Chats dialog on `Older Than a Month`, with the count and size line |
 | `model_menu` | the model menu over a chat on Sonnet 5.5: Opus 5.5, Sonnet 5.5 (✓), Haiku 5.5, Fable 5.1, then Older Models ▸ and Other Model…, `Use Sonnet 5.5 for New Chats`, the dim source line `Listed by the Models API 1 hour ago`; names whole, icons in one column; no item hovered |
-| `hero` | the whole window at 1600×1000, no desktop around it: the crate with its lid and rope handles in matcap shading, no selection outlines; one stroke of each kind (add, carve, crease, a filled region, a note arrow) in its colour; the sidebar widened, in sketch mode, scrolled to its end: the last turn with its render, the sketch row on Note, `6 strokes · 2 views`, the prompt typed |
+| `hero` | the whole window at 1600×1000, no desktop around it: the crate with its lid and rope handles in matcap shading, no selection outlines; white strokes over it (the latch's outline, a slot, an edge, a side panel and an arrow); the sidebar widened, in sketch mode, scrolled to its end: the last turn with its render, the sketch row, `6 strokes · 2 views`, the prompt typed |
 | `model_menu_older` | the Older Models submenu with the chat on Opus 4.6: one column per family under its dim name, newest first, ✓ on Opus 4.6; no title or rule over the first column alone |
 
 Popover and menu scenarios end by returning a `Popup` (`tests/screens/scenarios.py`):

@@ -77,59 +77,53 @@ Some requests are easier to draw than to describe. This one has four parts: a la
 front, a finger slot in the lid, a sharper front edge on the lid, and a painted panel on the
 side.
 
-Press **Sketch** (or **Shift+Alt+D** over the viewport). Blender goes into Draw Mode, and a
-row of stroke types appears in the sidebar. Each type has its own colour and tells Claude
-what you mean. The icons have no labels: from left to right they are Free, Add, Carve,
-Crease, Region and Note. Hover over one to see its name and meaning, and the active type's
-name shows beside the row.
+Press **Sketch** (or **Shift+Alt+D** over the viewport). Blender goes into Draw Mode, and
+**Capture View** appears beside the button.
 
 ```{figure} images/walkthrough/sketch-start.png
-:alt: The top of the sidebar in Sketch mode. Sketch is pressed, beside Capture View. Below them is a row of six icons with the first active, and the name Free beside the row.
+:alt: The top of the sidebar in Sketch mode. Sketch is pressed, beside Capture View.
 
-Sketch mode, with Free picked and nothing drawn yet.
+Sketch mode, with nothing drawn yet.
 ```
 
-Pick a type, then draw on the model; strokes stick to the surface under them.
+Now draw on the model, as you would redline a drawing; strokes stick to the surface under
+them. Every stroke looks the same, and your prompt will say what each one is for.
 
-Orbit to the front of the crate and draw five strokes, one each of Add, Carve and Crease and
-two of Note:
+Orbit to the front of the crate and draw five strokes:
 
-| Stroke | Colour | What it says | Drawn here |
-|---|---|---|---|
-| Add | Green | Build material here | The outline of the latch |
-| Carve | Red | Remove material here | The finger slot in the lid |
-| Crease | Yellow | A sharp edge or a bevel along this line | Along the lid's front edge |
-| Note | Grey | A note for Claude: an arrow, a circle, a label | An arrow pointing at the latch, in two strokes: the shaft, then the head |
+- the outline of the latch
+- the finger slot in the lid
+- a line along the lid's front edge
+- an arrow pointing at the latch, in two strokes: the shaft, then the head
 
 ```{figure} images/walkthrough/sketch-front.png
-:alt: The crate from the front, drawn over with a green outline below the lid, a red slot on the lid, a yellow line along the lid's front edge and a grey arrow pointing at the green outline.
+:alt: The crate from the front, drawn over in white: an outline below the lid, a slot on the lid, a line along the lid's front edge and an arrow pointing at the outline.
 
 Five strokes from the first view: the arrow is two of them.
 ```
 
 The side panel can't be seen from here, so orbit round to the side. Press **Capture View**
 (or **Shift+Alt+V**) to record the new angle. If you forget, drawing from a clearly
-different angle records one for you. Pick **Region**, the type for "the area this request
-is about", and outline the panel.
+different angle records one for you. Outline the panel.
 
 ```{figure} images/walkthrough/sketch-side.png
-:alt: The crate from its left side with a translucent blue area drawn low on the side. The earlier strokes can be seen edge-on at the top right.
+:alt: The crate from its left side with a white outline drawn low on the side. The earlier strokes can be seen edge-on at the top right.
 
-A region from the second view. The first view's strokes stay where they were drawn.
+An outline from the second view. The first view's strokes stay where they were drawn.
 ```
 
 Now write the request: `Add a latch here, carve a finger slot in the lid, sharpen its front
 edge and paint the side panel.` The strokes say where, so the prompt only has to say what. The
-row under the stroke types counts what you have drawn; open it to see each view. Click a
+row under the Sketch button counts what you have drawn; open it to see each view. Click a
 view's name to go back to it.
 
 ```{figure} images/walkthrough/sketch-ready.png
-:alt: The sketch part of the sidebar. Sketch is pressed, beside Capture View, then come the six stroke types with Region active. The stroke count reads 6 strokes, 2 views, above rows for View 1 with 5 strokes and View 2 with 1 stroke, and a prompt ready to send.
+:alt: The sketch part of the sidebar. Sketch is pressed, beside Capture View. The stroke count reads 6 strokes, 2 views, above rows for View 1 with 5 strokes and View 2 with 1 stroke, and a prompt ready to send.
 
 Six strokes over two views, and the prompt that goes with them.
 ```
 
-Press **Send**. {doc}`guides/sketching` covers all the stroke types and views.
+Press **Send**. {doc}`guides/sketching` covers strokes and views.
 
 ## Answer a question
 

@@ -82,7 +82,7 @@ class RenderTest(unittest.TestCase):
 
     def test_keep_strokes_hides_the_others(self):
         obj = sketch.find_sketch_object()
-        drawing = obj.data.layers["add"].frames[0].drawing
+        drawing = obj.data.layers[sketch.LAYER_NAME].frames[0].drawing
         turns = sketch.ensure_int_attribute(drawing, sketch.TURN_ATTRIBUTE).data
         turns[0].value = 1
         before = sorted(a.name for a in drawing.attributes)
@@ -93,17 +93,16 @@ class RenderTest(unittest.TestCase):
         none = render.load_pixels(self.render(mode="overlay", view=1, size=256)["strokes_path"])
         self.assertGreater((everything[..., 3] > 0).sum(), (only_one[..., 3] > 0).sum())
         self.assertGreater((only_one[..., 3] > 0).sum(), 0)
-        self.assertEqual((none[..., 3] > 0).sum(), 0, "fills and outlines both go")
+        self.assertEqual((none[..., 3] > 0).sum(), 0, "nothing is drawn")
         self.assertEqual(sorted(a.name for a in drawing.attributes), before)
 
     def test_stroke_colours_are_flat(self):
         data = self.render(mode="overlay", view=2, size=512)
         strokes = render.load_pixels(data["strokes_path"])
         solid = strokes[strokes[..., 3] > 0.95][:, :3]
-        red = solid[(solid[:, 0] > 0.5) & (solid[:, 1] < 0.4)]
-        self.assertGreater(len(red), 20)
-        # Unlit layers come out at full tint, not darkened by Workbench lighting.
-        self.assertGreater(red[:, 0].max(), 0.9)
+        self.assertGreater(len(solid), 20)
+        # Unlit strokes come out at full white, not darkened by Workbench lighting.
+        self.assertGreater(solid.min(axis=1).max(), 0.9)
 
     def test_scene_is_left_unchanged(self):
         before = scene_state(self.scene)
