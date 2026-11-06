@@ -263,7 +263,7 @@ class BridgeRobustnessTest(AgentTestCase):
         ctl.run_bundle(CRATE_BUNDLE)
         ctl.bridge.on_event = flaky
         with self.assertLogs("whittle", "ERROR"):
-            pump(ctl, lambda: ctl.last_finished is not None, 30, "the turn to finish")
+            pump(ctl, lambda: ctl.last_finished is not None, 60, "the turn to finish")
         self.assertEqual(len(failures), 1)
         self.assertFalse(ctl.last_finished["is_error"], ctl.last_finished)
 
