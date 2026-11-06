@@ -165,8 +165,10 @@ redraw never touches the disk (architecture §1, Style guides):
 
 - `Sent with each turn:` (dim) and the files, each on a `FILE_TEXT` line, the first
   `prefs.GUIDE_ROWS` (ten) and then `and 25 more files`, so a bad guide cannot fill the
-  popover. A file inside the first file's folder shows relative to it; one from elsewhere
-  shows in full and comes first, so it stands out and the cut-off cannot hide it. The rest
+  popover. A file inside the folder the path names shows relative to it; one from elsewhere
+  shows in full and comes first, so it stands out, and the first file does too if a link took
+  the path out of that folder. More from elsewhere than the list has rows still go behind
+  `and 25 more files`: first is as far as the order can go. The rest
   are in the order read. This is a display order only: what is sent keeps its import
   order. This list is what lets the user see what a `.blend` is sending.
 - Then each problem on an `ERROR` line, wrapped so no tooltip is needed: a file not found,
@@ -1245,8 +1247,11 @@ Switched to an older chat (the scene was left as the last chat had it):
 
 A file naming a style guide this install has not approved (`prefs.held_guide`), over the
 composer, below the Continue box if there is one. `ui.draw_guide_gate` draws it in any state but a running turn. The first
-line is dim. The path is `prefs.guide_location`, absolute and normalised whatever the field holds, so
-a `//` path shows where it leads. Send is disabled; its tooltip says why
+line is dim, and says who names the guide: `ui.GUIDE_NOTE` for the file, `ui.GUIDE_NOTE_DEFAULT`
+for a `//` path in the preferences' Defaults, where the file names nothing
+(`prefs.names_own_guide`). The path is `prefs.guide_location`, absolute and tidied whatever the field holds, so
+a `//` path shows where it leads, from the file's real folder, and a `..` after a name stays
+in view. Send is disabled; its tooltip says why
 (`operators.GUIDE_HELD`), and so does the error of anything else that tries.
 
 ```
@@ -1283,7 +1288,9 @@ lists it, and the question stands; a read approves nothing.
   goes, and it does not come back for this guide in any file on this machine.
 - **Read Now** is §3.1's button, with the box's path.
 - **Go Without It** (`whittle.style_guide_skip`) empties this file's Style Notes, the value
-  meaning no guide here. It is an undo step, and an undo asks again.
+  meaning no guide here. It is an undo step, and an undo asks again. On a linked scene it holds
+  until the file closes, as a host file does not save what it links, and it says so
+  (`operators.LINKED_SCENE`); For This File's reset says the same.
 
 ## 5. Menus
 
@@ -1585,6 +1592,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `guide_warning` | a finished turn whose style guide has a missing import: the conversation shows `Part of the style guide did not load` once, not in red |
 | `guide_gate` | 4.13; the `Use this style guide?` box above the sketch row, its note dim and wrapped, the absolute path whole with its `FILE_TEXT` icon; Use This Guide alone on its row, Read Now and Go Without It sharing one, neither cut; Send disabled; the draft kept; nothing red |
 | `guide_absolute` | §3.1; a saved file's absolute path in the agent popover: `This path is absolute, so it will not travel with the file.` on an `ERROR` line after the file list, wrapped to the popover |
+| `guide_gate_default` | 4.13 for a `//` path in the Defaults: the note says `Your Defaults name it`, not `This file names it`, wrapped and dim, and the rest of the box as in `guide_gate` |
 | `guide_gate_read` | 4.13 after Read Now: `It would send:` dim, the file from elsewhere first and in full, the rest by name, the missing import on an `ERROR` line, wrapped, and the buttons still there |
 | `developer` | Developer Extras on: Development panel shown; off (every other scenario): absent |
 | `chat_menu` | three chats, the second-newest current: New Chat first; Conversations; each entry's title whole, its dim `N turns · <age> · <size>` line; ✓ on the current entry (marked by its check mark only, not highlighted), 🗑 on the others; the footer total and three items; nothing red |

@@ -13,6 +13,7 @@ import os
 import shutil
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import bpy
 from mathutils import Vector
@@ -643,6 +644,19 @@ def guide_gate(stage: Stage):
     """A file naming a style guide this install has not approved: the box
     over the composer, and Send disabled."""
     _held_guide(stage)
+    yield 0.5
+
+
+@scenario
+def guide_gate_default(stage: Stage):
+    """The box when the path is the preferences' and the file names nothing.
+    Whittle has no preferences here, as it runs from the source, and a
+    scenario's Blender ends with it."""
+    stage.crate()
+    bpy.ops.wm.save_as_mainfile(filepath=str(stage.work / "crate.blend"))
+    real = prefs.get
+    prefs.get = lambda: SimpleNamespace(**{**vars(real()), "style_file": "//crates.md"})
+    stage.props.prompt = "Add a lid and rope handles."
     yield 0.5
 
 

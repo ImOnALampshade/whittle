@@ -445,7 +445,10 @@ CHAT_GONE = "This chat is no longer in the file"
 # Send's tooltip in a chat made by another install, until it is continued.
 CHAT_FOREIGN = "This chat was made on another machine: Continue it to send, or start a New Chat"
 # Send's tooltip while the box over the prompt asks about a style guide.
-GUIDE_HELD = "This file's style guide needs your answer first: see the box over the prompt"
+GUIDE_HELD = "The style guide needs your answer first: see the box over the prompt"
+# A host file does not save what it links, so a change to a linked scene ends
+# with the session.
+LINKED_SCENE = "This scene is linked from another file, so this lasts only until the file closes"
 SETUP_FIRST = "Set up Claude to send"
 
 
@@ -1035,6 +1038,8 @@ class WHITTLE_OT_file_setting_reset(bpy.types.Operator):
         props.reset_file_setting(context.scene, self.key)
         if self.key == "style_file":
             prefs.refresh_style_guides(context.scene)
+        if context.scene.library is not None:
+            self.report({"WARNING"}, LINKED_SCENE)
         return {"FINISHED"}
 
 
@@ -1091,6 +1096,8 @@ class WHITTLE_OT_style_guide_skip(bpy.types.Operator):
 
     def execute(self, context):
         context.scene.whittle.style_file = ""
+        if context.scene.library is not None:
+            self.report({"WARNING"}, LINKED_SCENE)
         return {"FINISHED"}
 
 

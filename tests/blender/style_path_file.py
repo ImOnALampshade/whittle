@@ -309,6 +309,93 @@ def approvals() -> dict:
     unsaved_file(str(guide))
     save_as(filepath=str(root / "work" / "shots" / "e.blend"))
     result["symlink_first_save"] = {"path": stored_path(), "held": held(), "guide": state()["guide"]}
+
+    # A // path with a link in it that a `..` then leaves: a stranger's file
+    # beside an approved guide, reaching what the link leads out to.
+    real = root / "stranger"
+    write(real / "style.md", "Approved beside it.")
+    write(real / "secret" / "style.md", "@private.txt")
+    write(real / "secret" / "private.txt", "Private note.")
+    (real / "secret" / "deep").mkdir()
+    (real / "link").symlink_to(real / "secret" / "deep", target_is_directory=True)
+    fresh_file(real / "mine.blend", "//style.md")
+    bpy.ops.wm.save_mainfile()
+    bpy.data.scenes["Scene"].whittle[STORE] = "//link/../style.md"
+    save_as(filepath=str(real / "theirs.blend"))
+    bpy.ops.wm.open_mainfile(filepath=str(real / "theirs.blend"))
+    scene = bpy.data.scenes["Scene"]
+    reads.clear()
+    result["dotdot_after_a_link"] = {"held": held(), "where": prefs.guide_location(stored_path()),
+                                     "sent": prefs.session_settings(scene)["style_guide"], "reads": len(reads)}
+
+    # A Save As through a link: the same key, and no other file gets one.
+    world = root / "world"
+    write(world / "x" / "g.md", "Approved.")
+    write(world / "a" / "b" / "g.md", "A DIFFERENT FILE")
+    (world / "x" / "y").mkdir()
+    (world / "a" / "b" / "link").symlink_to(world / "x" / "y", target_is_directory=True)
+    fresh_file(world / "x" / "y" / "s.blend", "//../g.md")
+    keys = style.read_approved(os.environ["WHITTLE_USER_DIR"])
+    save_as(filepath=str(world / "a" / "b" / "link" / "s.blend"))
+    result["save_as_through_a_link"] = {
+        "path": stored_path(), "held": held(), "guide": state()["guide"],
+        "new_keys": sorted(style.read_approved(os.environ["WHITTLE_USER_DIR"]) - keys)}
+    unsaved_file("//g.md", stored=True)
+    save_as(filepath=str(world / "a" / "b" / "stranger.blend"))
+    result["beside_the_link"] = held()
+    return result
+
+
+def not_recorded() -> dict:
+    """An approval the record cannot take, through a real load."""
+    root = ROOT / "unrecorded"
+    write(root / "g.md", "Approved.")
+    unsaved_file("", stored=True)
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / "a.blend"))
+    bpy.data.scenes["Scene"].whittle[STORE] = "//g.md"
+    bpy.ops.wm.save_mainfile()
+    with mock.patch.object(style, "write_approved", side_effect=OSError("read-only")):
+        recorded = prefs.approve_guide("//g.md")
+        before = held()
+        bpy.ops.wm.open_mainfile(filepath=str(root / "a.blend"))
+    return {"recorded": recorded, "before": before, "after_a_load": held()}
+
+
+def replaced_before_saving() -> dict:
+    """A // path set in an unsaved file and gone by the first save."""
+    root = ROOT / "typo"
+    write(root / "typo.md", "Someone else's.")
+    unsaved_file("//typo.md")
+    bpy.data.scenes["Scene"].whittle.style_file = ""
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / "a.blend"))
+    key = prefs.guide_key("//typo.md")
+    return {"approved": key in style.read_approved(os.environ["WHITTLE_USER_DIR"])}
+
+
+def linked_scene() -> dict:
+    """Go Without It on a linked scene: it holds for the session, and the
+    host file has nowhere to keep it."""
+    root = ROOT / "linking"
+    write(root / "g.md", "Theirs.")
+    unsaved_file("//g.md", stored=True)
+    bpy.data.scenes["Scene"].name = "Theirs"
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / "library.blend"))
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    with bpy.data.libraries.load(str(root / "library.blend"), link=True) as (_source, linked):
+        linked.scenes = ["Theirs"]
+    bpy.context.window.scene = bpy.data.scenes["Theirs"]
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / "host.blend"))
+    scene = bpy.context.window.scene
+    reads.clear()
+    result = {"linked": scene.library is not None, "held": prefs.held_guide(scene)}
+    result["skip"] = sorted(bpy.ops.whittle.style_guide_skip())
+    result["after"] = prefs.held_guide(scene)
+    result["sent"] = prefs.session_settings(scene)["style_guide"]
+    bpy.ops.wm.save_mainfile()
+    bpy.ops.wm.open_mainfile(filepath=str(root / "host.blend"))
+    scene = bpy.context.window.scene
+    result["reopened"] = prefs.held_guide(scene)
+    result["reads"] = len(reads)
     return result
 
 
@@ -389,6 +476,9 @@ def main() -> dict:
     result["backslash_folder"] = out_of_a_backslash_folder()
     result["first_saves"] = first_saves()
     result["approvals"] = approvals()
+    result["not_recorded"] = not_recorded()
+    result["replaced_before_saving"] = replaced_before_saving()
+    result["linked_scene"] = linked_scene()
     return result
 
 

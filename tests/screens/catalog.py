@@ -36,6 +36,8 @@ SCENARIOS = {
     "guide_warning": "A finished turn whose style guide has a missing import: the conversation's one warning.",
     "guide_gate": "A file naming a style guide this install has not approved: the box over the prompt, "
                   "Send disabled.",
+    "guide_gate_default": "The box for a // path in the preferences' Defaults: it says the Defaults name the guide, "
+                          "not the file.",
     "guide_gate_read": "The same after Read Now: the box lists the guide's files, and a missing import.",
     "guide_absolute": "The agent popover of a saved file whose Style Notes path is absolute: the line "
                       "saying it will not travel.",

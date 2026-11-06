@@ -83,6 +83,8 @@ FOREIGN_NOTE = "It was made on another machine."
 GUIDE_TITLE = "Use this style guide?"
 GUIDE_NOTE = ("This file names it. Its text and everything it imports go to Claude with each turn, "
               "so use it only if you trust the file.")
+GUIDE_NOTE_DEFAULT = ("Your Defaults name it, counted from this file's folder. Its text and everything it imports "
+                      "go to Claude with each turn, so check where it leads.")
 GUIDE_FILES = "It would send:"
 ASSET_HINT = "Or right-click an asset in the Asset Browser"
 WRAP_CACHE = 1024
@@ -1472,7 +1474,7 @@ def draw_guide_gate(layout, ctx: Ctx) -> None:
     box.label(text=GUIDE_TITLE, icon="QUESTION")
     col = box.column()
     col.active = False
-    _wrapped(col, GUIDE_NOTE, ctx, width, icon="BLANK1")
+    _wrapped(col, GUIDE_NOTE if prefs.names_own_guide(ctx.scene) else GUIDE_NOTE_DEFAULT, ctx, width, icon="BLANK1")
     _wrapped(box, prefs.guide_location(path), ctx, width, icon="FILE_TEXT")
     guide = prefs.style_guide(path)
     if guide is not None:

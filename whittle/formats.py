@@ -44,7 +44,9 @@ def write_json_atomic(path, obj) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        # backslashreplace as in protocol.encode: a path that is not UTF-8
+        # decodes to lone surrogates, and json reads the escapes back the same.
+        with os.fdopen(fd, "w", encoding="utf-8", errors="backslashreplace") as f:
             json.dump(obj, f, ensure_ascii=False, indent=1)
             f.write("\n")
         # mkstemp creates the file private; give it the usual permissions.
@@ -67,7 +69,7 @@ def read_json(path) -> dict:
             obj = json.load(f)
     except FileNotFoundError:
         raise FormatError(f"{path}: missing") from None
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise FormatError(f"{path}: invalid JSON: {exc}") from None
     if not isinstance(obj, dict):
         raise FormatError(f"{path}: top level is not an object")

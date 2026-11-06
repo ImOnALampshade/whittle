@@ -42,7 +42,7 @@ class TempUserDir:
     """Points WHITTLE_USER_DIR at a fresh temp folder for one test."""
 
     def __enter__(self) -> Path:
-        self.path = Path(tempfile.mkdtemp(prefix="whittle-test-"))
+        self.path = Path(os.path.realpath(tempfile.mkdtemp(prefix="whittle-test-")))
         self._old = os.environ.get("WHITTLE_USER_DIR")
         os.environ["WHITTLE_USER_DIR"] = str(self.path)
         return self.path

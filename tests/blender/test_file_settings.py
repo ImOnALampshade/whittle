@@ -501,6 +501,33 @@ class StylePathSaveTest(unittest.TestCase):
         self.assertEqual((found["symlink_save_as"]["held"], found["symlink_save_as"]["guide"]), ("", "Approved."))
         self.assertEqual((found["symlink_first_save"]["held"], found["symlink_first_save"]["guide"]), ("", "Approved."))
 
+    def test_a_dotdot_after_a_link_does_not_pass_for_the_approved_file(self):
+        found = self.r["approvals"]
+        if "dotdot_after_a_link" not in found:
+            self.skipTest("no symlinks here")
+        self.assertEqual(found["dotdot_after_a_link"]["held"], "//link/../style.md")
+        self.assertTrue(found["dotdot_after_a_link"]["where"].endswith(os.path.join("link", "..", "style.md")))
+        self.assertEqual((found["dotdot_after_a_link"]["sent"], found["dotdot_after_a_link"]["reads"]), ("", 0))
+
+    def test_a_save_as_through_a_link_approves_no_other_file(self):
+        found = self.r["approvals"]
+        if "save_as_through_a_link" not in found:
+            self.skipTest("no symlinks here")
+        self.assertEqual({key: found["save_as_through_a_link"][key] for key in ("held", "guide", "new_keys")},
+                         {"held": "", "guide": "Approved.", "new_keys": []})
+        self.assertEqual(found["beside_the_link"], "//g.md", "a stranger's file still asks")
+
+    def test_an_approval_that_was_not_recorded_lasts_past_a_real_load(self):
+        self.assertEqual(self.r["not_recorded"], {"recorded": False, "before": "", "after_a_load": ""})
+
+    def test_a_path_replaced_before_the_first_save_is_not_approved(self):
+        self.assertEqual(self.r["replaced_before_saving"], {"approved": False})
+
+    def test_go_without_it_on_a_linked_scene_holds_until_the_file_closes(self):
+        self.assertEqual(self.r["linked_scene"],
+                         {"linked": True, "held": "//g.md", "skip": ["FINISHED"], "after": "", "sent": "",
+                          "reopened": "//g.md", "reads": 0})
+
     def test_a_backslash_in_a_folder_name_survives_a_move(self):
         if self.r["backslash_folder"] is None:
             self.skipTest("a backslash is a separator here")
@@ -568,9 +595,9 @@ class StyleFileTest(FileSettingsCase):
 
     def test_a_relative_path_follows_the_blend(self):
         self.write("style.md", "Beside the file.")
-        with mock.patch.object(bpy.path, "abspath", lambda p: str(self.folder / p[2:])), \
-                mock.patch.object(prefs, "bpy", SimpleNamespace(data=SimpleNamespace(filepath="/x/a.blend"),
-                                                                path=bpy.path, context=bpy.context)):
+        blend = str(self.folder / "a.blend")
+        with mock.patch.object(prefs, "bpy", SimpleNamespace(data=SimpleNamespace(filepath=blend),
+                                                             path=bpy.path, context=bpy.context)):
             guide = prefs.read_style_guide("//style.md")
             self.assertEqual(guide.text, "Beside the file.")
             self.assertIs(prefs.style_guide("//style.md"), guide)

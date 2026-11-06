@@ -16,17 +16,17 @@ from tests.blender.test_chats import ChatCase
 from tests.blender.test_file_settings import PREFS, FileSettingsCase
 from tests.blender.test_keys import press_enter
 from tests.blender.ui_helpers import RecordingLayout
-from whittle import style
+from whittle import protocol, style
 import whittle.addon as addon
-from whittle.addon import history, operators, prefs, props, shortcut, turn, ui
+from whittle.addon import history, operators, prefs, props, turn, ui
 
 STORE = props.FILE_SETTINGS["style_file"]
 
 
 def saved_as(blend) -> mock._patch:
     """The open file as if saved at blend, for code that only asks where it is."""
-    return mock.patch.object(prefs, "bpy", SimpleNamespace(data=SimpleNamespace(filepath=str(blend)), path=bpy.path,
-                                                           context=bpy.context))
+    return mock.patch.object(prefs, "bpy", SimpleNamespace(data=SimpleNamespace(filepath=str(blend), scenes=bpy.data.scenes),
+                                                           path=bpy.path, context=bpy.context))
 
 
 class GateCase(FileSettingsCase):
@@ -103,13 +103,69 @@ class WhichPathsTest(GateCase):
         self.arrive(self.guide)
         self.assertEqual(prefs.held_guide(other), "")
 
-    def test_the_key_is_a_string_and_the_same_for_the_same_file(self):
-        inside = self.folder / "sub"
-        with mock.patch("os.path.realpath", side_effect=AssertionError("touched the disk")), \
-                mock.patch("os.stat", side_effect=AssertionError("touched the disk")):
-            key = prefs.guide_key(str(self.guide))
-            self.assertEqual(prefs.guide_key("//../style.md", str(inside / "a.blend")), key)
-            self.assertEqual(prefs.guide_key(f"{inside}/../style.md"), key)
+    def test_the_key_is_the_same_for_the_same_file(self):
+        key = prefs.guide_key(str(self.guide))
+        (self.folder / "sub").mkdir()
+        with saved_as(self.folder / "sub" / "a.blend"):
+            self.assertEqual(prefs.guide_key("//../style.md"), key)
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(prefs.guide_key("//style.md"), key)
+
+    def test_a_question_reaches_only_the_open_files_folder(self):
+        self.arrive("//link/../secret/style.md")
+        with saved_as(self.folder / "a.blend"):
+            self.held()
+            with mock.patch("os.path.realpath", side_effect=AssertionError("touched the disk")), \
+                    mock.patch("os.lstat", side_effect=AssertionError("touched the disk")), \
+                    mock.patch("os.stat", side_effect=AssertionError("touched the disk")):
+                self.held()
+                prefs.guide_location("//link/../secret/style.md")
+
+    def test_a_link_with_a_dotdot_after_it_asks(self):
+        # //link/../style.md reads secret/style.md through the link, whatever
+        # the text says: an approval of the file beside the .blend says nothing.
+        link = self.folder / "link"
+        (self.folder / "secret" / "deep").mkdir(parents=True)
+        (self.folder / "secret" / "style.md").write_text("@private.txt")
+        (self.folder / "secret" / "private.txt").write_text("Private.")
+        try:
+            link.symlink_to(self.folder / "secret" / "deep", target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"cannot make a symlink here: {exc}")
+        self.arrive("//link/../style.md")
+        with saved_as(self.folder / "a.blend"):
+            self.assertTrue(prefs.approve_guide("//style.md"))
+            self.assertEqual(self.held(), "//link/../style.md")
+            self.assertIn(str(link), prefs.guide_location("//link/../style.md"), "and the box shows it")
+            self.assertEqual(prefs.session_settings(self.scene)["style_guide"], "")
+            self.assertEqual(bpy.ops.whittle.style_guide_read(path="//link/../style.md"), {"FINISHED"})
+            self.assertEqual(prefs.style_guide("//link/../style.md").text, "Private.", "Read Now tells the truth")
+
+    def test_nor_does_a_users_preference_pass_it(self):
+        link = self.folder / "link"
+        (self.folder / "secret").mkdir()
+        try:
+            link.symlink_to(self.folder / "secret", target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"cannot make a symlink here: {exc}")
+        PREFS.style_file = str(self.guide)
+        self.arrive(f"{link}/../style.md")
+        self.assertEqual(self.held(), f"{link}/../style.md")
+
+    def test_a_file_opened_through_a_link_counts_from_where_it_is(self):
+        # The read walks up from the real folder, so the key has to.
+        real = self.folder / "deep" / "shots"
+        real.mkdir(parents=True)
+        (self.folder / "deep" / "style.md").write_text("Theirs.")
+        try:
+            (self.folder / "shots").symlink_to(real, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"cannot make a symlink here: {exc}")
+        self.arrive("//../style.md")
+        self.assertTrue(prefs.approve_keys({prefs.guide_key(str(self.guide))}))
+        with saved_as(self.folder / "shots" / "a.blend"):
+            self.assertEqual(self.held(), "//../style.md", "it does not lead to the approved file")
+            self.assertEqual(prefs.guide_location("//../style.md"), str(self.folder / "deep" / "style.md"))
 
 
 class ApprovalTest(GateCase):
@@ -120,9 +176,37 @@ class ApprovalTest(GateCase):
 
     def test_setting_the_preference_approves_it(self):
         with saved_as(self.folder / "a.blend"):
-            prefs._style_file_changed(SimpleNamespace(style_file="//style.md"), None)
+            prefs._style_file_set(None, "//style.md", "", True)
             self.arrive("//style.md")
             self.assertEqual(prefs.held_guide(self.scene), "")
+
+    def test_confirming_the_field_unchanged_approves_nothing(self):
+        path = self.arrive(self.guide)
+        with mock.patch.object(style, "load_guide", side_effect=AssertionError("read")):
+            self.props.style_file = path
+        self.assertEqual(prefs.held_guide(self.scene), path)
+        self.assertFalse((self.folder / style.APPROVALS_NAME).exists())
+
+    def test_nor_does_an_unset_field_showing_a_relative_default(self):
+        PREFS.style_file = "//style.md"
+        with saved_as(self.folder / "a.blend"), mock.patch.object(style, "load_guide",
+                                                                  side_effect=AssertionError("read")):
+            self.props.style_file = "//style.md"
+            self.assertEqual(prefs.held_guide(self.scene), "//style.md")
+        self.assertNotIn(STORE, self.props, "and it pins nothing on the file")
+
+    def test_changing_a_held_path_is_a_choice(self):
+        self.arrive(self.write("theirs.md", "Theirs."))
+        self.props.style_file = str(self.guide)
+        self.assertEqual(prefs.held_guide(self.scene), "")
+        self.assertEqual(prefs.session_settings(self.scene)["style_guide"], "Theirs.")
+
+    def test_the_preferences_field_unchanged_approves_nothing(self):
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(prefs._style_file_set(None, "//style.md", "//style.md", True), "//style.md")
+            self.assertFalse((self.folder / style.APPROVALS_NAME).exists())
+            with mock.patch.object(style, "load_guide", side_effect=AssertionError("read")):
+                prefs._style_file_changed(SimpleNamespace(style_file="//style.md"), None)
 
     def test_a_load_approves_nothing(self):
         self.arrive(self.guide)
@@ -168,9 +252,72 @@ class ApprovalTest(GateCase):
 
     def test_a_record_that_cannot_be_written_lasts_until_blender_closes(self):
         self.arrive(self.guide)
+        self.addCleanup(prefs._unrecorded.clear)
         with mock.patch.object(style, "write_approved", side_effect=OSError("read-only")):
             self.assertFalse(prefs.approve_guide(str(self.guide)))
+            self.assertEqual(prefs.held_guide(self.scene), "")
+            with mock.patch.object(addon.chats, "after_load"), mock.patch.object(addon.history, "sync_from_scene"), \
+                    mock.patch.object(addon.history, "invalidate"):
+                addon._after_load()
+            self.assertEqual(prefs.held_guide(self.scene), "", "past a load in the same Blender")
+
+    def test_the_next_write_records_what_could_not_be(self):
+        other = str(self.write("other.md", "Other."))
+        with mock.patch.object(style, "write_approved", side_effect=OSError("read-only")):
+            prefs.approve_guide(str(self.guide))
+        self.assertTrue(prefs.approve_guide(other))
+        self.assertEqual(style.read_approved(self.folder), {prefs.guide_key(other), prefs.guide_key(str(self.guide))})
+        self.assertEqual(prefs._unrecorded, {})
+
+    def test_an_approval_is_not_lost_to_a_later_versions_record(self):
+        later = {"format": style.APPROVALS_FORMAT, "version": 2, "guides": ["/keep/me.md"]}
+        (self.folder / style.APPROVALS_NAME).write_text(json.dumps(later))
+        self.addCleanup(prefs._unrecorded.clear)
+        path = self.arrive(self.guide)
+        self.assertEqual(prefs.held_guide(self.scene), path)
+        self.assertFalse(prefs.approve_guide(path), "the operator warns")
         self.assertEqual(prefs.held_guide(self.scene), "")
+        self.assertEqual(json.loads((self.folder / style.APPROVALS_NAME).read_text()), later)
+
+    def test_a_deeply_nested_record_only_asks(self):
+        (self.folder / style.APPROVALS_NAME).write_text("[" * 200000)
+        path = self.arrive(self.guide)
+        self.assertEqual(prefs.held_guide(self.scene), path)
+        self.assertEqual(bpy.ops.whittle.style_guide_approve(), {"FINISHED"})
+        self.assertEqual(prefs.held_guide(self.scene), "")
+
+    def test_a_path_that_is_not_utf8_is_approved_like_any_other(self):
+        path = self.arrive(f"{self.folder}/caf\udce9.md")
+        self.assertEqual(prefs.held_guide(self.scene), path)
+        self.assertEqual(bpy.ops.whittle.style_guide_approve(), {"FINISHED"})
+        self.assertEqual(prefs.held_guide(self.scene), "")
+        prefs.forget_approvals()
+        self.assertEqual(prefs.held_guide(self.scene), "", "from the record")
+        self.arrive(self.guide)
+        self.assertEqual(bpy.ops.whittle.style_guide_approve(), {"FINISHED"}, "and the next one still records")
+        self.assertEqual(len(style.read_approved(self.folder)), 2)
+
+    def test_a_relative_path_set_and_replaced_before_the_first_save_is_not_approved(self):
+        self.props.style_file = "//typo.md"
+        self.props.style_file = ""
+        self.props.style_file = "//kept.md"
+        with saved_as(self.folder / "a.blend"):
+            prefs.settle_unsaved_approvals()
+            self.assertEqual(style.read_approved(self.folder), {prefs.guide_key("//kept.md")})
+        self.assertEqual(prefs._approved_unsaved, set())
+
+    def test_a_relative_preference_replaced_before_the_first_save_is_not_approved(self):
+        prefs._style_file_set(None, "//typo.md", "", True)
+        PREFS.style_file = "//typo.md"
+        with saved_as(self.folder / "a.blend"):
+            prefs.settle_unsaved_approvals()
+            kept = {prefs.guide_key("//typo.md")}
+        self.assertEqual(style.read_approved(self.folder), kept, "still set, so approved")
+        prefs._style_file_set(None, "//typo2.md", "", True)
+        PREFS.style_file = "//other.md"
+        with saved_as(self.folder / "b.blend"):
+            prefs.settle_unsaved_approvals()
+        self.assertEqual(style.read_approved(self.folder), kept)
 
     def test_the_record_is_read_once_and_not_by_a_redraw(self):
         self.arrive(self.guide)
@@ -251,10 +398,34 @@ class GateBoxTest(GateCase):
         self.assertFalse(layout.is_enabled(send))
 
     def test_the_box_shows_the_absolute_path_of_a_relative_one(self):
-        self.arrive("//sub/../style.md")
-        with saved_as(self.folder / "a.blend"):
+        self.arrive("//../style.md")
+        with saved_as(self.folder / "sub" / "a.blend"):
             lines = "".join(self.draw().labels())
         self.assertIn(str(self.guide), lines)
+
+    def test_the_box_says_who_names_the_guide(self):
+        self.arrive(self.guide)
+        self.assertIn("This file names it", " ".join(self.draw().labels()))
+        props.reset_file_setting(self.scene, "style_file")
+        PREFS.style_file = "//style.md"
+        with saved_as(self.folder / "a.blend"):
+            lines = " ".join(self.draw().labels())
+        self.assertNotIn("This file names", lines)
+        self.assertIn("Your Defaults name it", lines)
+
+    def test_more_from_elsewhere_than_rows_shows_the_count(self):
+        elsewhere = self.folder / "oth"
+        elsewhere.mkdir()
+        names = [f"a{i:02}.md" for i in range(12)] + ["z-private.md"]
+        for name in names:
+            (elsewhere / name).write_text("x")
+        (self.folder / "pack").mkdir()
+        self.arrive(self.write("pack/top.md", "\n".join(f"@../oth/{name}" for name in names)))
+        path = str(self.folder / "pack" / "top.md")
+        bpy.ops.whittle.style_guide_read(path=path)
+        labels = self.draw().labels()
+        self.assertFalse([text for text in labels if "z-private" in text], "hidden behind the rows")
+        self.assertIn("and 4 more files", labels)
 
     def test_read_now_lists_the_files(self):
         self.write("base.md", "Base.")
@@ -290,6 +461,20 @@ class GateBoxTest(GateCase):
         with saved_as(self.folder / "a.blend"):
             self.assertEqual(bpy.ops.whittle.style_guide_skip(), {"FINISHED"})
             self.assertEqual(prefs.held_guide(self.scene), "")
+
+    def test_a_linked_scene_says_it_will_not_keep(self):
+        self.arrive(self.guide)
+        reports = []
+        context = SimpleNamespace(scene=SimpleNamespace(whittle=self.props, library=object()))
+        operator = SimpleNamespace(report=lambda kind, text: reports.append((kind, text)))
+        operators.WHITTLE_OT_style_guide_skip.execute(operator, context)
+        self.assertEqual(reports, [({"WARNING"}, operators.LINKED_SCENE)])
+        self.arrive(self.guide)
+        operator.key = "style_file"
+        context = SimpleNamespace(scene=SimpleNamespace(whittle=self.props, library=object()), area=None)
+        with mock.patch.object(props, "reset_file_setting"), mock.patch.object(prefs, "refresh_style_guides"):
+            operators.WHITTLE_OT_file_setting_reset.execute(operator, context)
+        self.assertEqual(reports[1:], [({"WARNING"}, operators.LINKED_SCENE)])
 
     def test_the_popover_says_it_is_held(self):
         path = self.arrive(self.guide)
@@ -386,11 +571,10 @@ class SendRoutesTest(ChatCase):
         submit.assert_not_called()
         self.refused()
 
-    def test_enter_and_the_ask_claude_prompt(self):
-        # The popup types into the same field, and Enter sends it the same way.
+    def test_enter(self):
+        # Enter in the Ask Claude popup is this too: guide_gate presses it there.
         self.arrive()
         self.props.prompt = "Add a lid."
-        self.assertEqual(shortcut.field(None), "prompt")
         with mock.patch.object(operators, "submit_sketch") as submit:
             self.assertEqual(press_enter(), ({"PASS_THROUGH"}, []))
         submit.assert_not_called()
@@ -438,11 +622,17 @@ class SendRoutesTest(ChatCase):
         self.load.assert_not_called()
 
     def test_answer_reads_nothing(self):
+        ctl, _node = self.send("Make the crate bigger.")
+        self.load.reset_mock()
         self.arrive()
-        ctl = mock.MagicMock(answer=mock.MagicMock(return_value=True))
+        ctl.question = {"question": "Which wood?"}
+        real = ctl.process
+        self.addCleanup(setattr, ctl, "process", real)
+        ctl.process = mock.MagicMock(bridge=mock.MagicMock(deferred={"c1": protocol.Method.ASK}))
         self.props.ask_answer = "Oak."
-        with mock.patch.object(turn, "current", return_value=ctl):
-            self.assertTrue(operators.answer(bpy.context))
+        self.assertTrue(operators.answer(bpy.context))
+        ctl.process.bridge.resolve.assert_called_once()
+        self.assertEqual(self.props.ask_answer, "")
         self.load.assert_not_called()
 
     def test_the_turn_runs_with_the_guide_once_approved(self):

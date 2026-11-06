@@ -13,6 +13,24 @@ REPO = Path(__file__).resolve().parents[2]
 BUNDLE = REPO / "tests" / "fixtures" / "crate" / "request"
 
 
+class JsonFileTest(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.path = Path(folder.name) / "x.json"
+
+    def test_a_path_that_is_not_utf8_reads_back_the_same(self):
+        obj = {"path": "/art/caf\udce9.md", "name": "café"}
+        formats.write_json_atomic(self.path, obj)
+        self.assertEqual(formats.read_json(self.path), obj)
+        self.assertIn("café", self.path.read_text(encoding="utf-8"), "other text stays readable")
+
+    def test_deep_nesting_is_a_format_error(self):
+        self.path.write_text("[" * 200000)
+        with self.assertRaises(FormatError):
+            formats.read_json(self.path)
+
+
 class BundleTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="whittle-formats-"))

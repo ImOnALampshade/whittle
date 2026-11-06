@@ -19,7 +19,7 @@ everywhere and Save As keeps a // path on the same file."""
 import os
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import formats
@@ -50,19 +50,23 @@ _DRIVE = re.compile(r"[A-Za-z]:")
 @dataclass(frozen=True)
 class Guide:
     """A style guide as read from disk: the combined text, the files it came
-    from (resolved, in the order read) and what went wrong, for the user."""
+    from (resolved, in the order read), what went wrong, for the user, and the
+    folder the path asked for names, before any link in it is followed."""
     text: str = ""
     files: tuple[str, ...] = ()
     problems: tuple[str, ...] = ()
+    home: str = field(default="", compare=False)
 
     def names(self) -> list[str]:
-        """The files for the user: relative to the first one's folder where
-        they are inside it, so a file from elsewhere stands out in full, and
-        those from elsewhere first, so a list cut short cannot hide one.
-        Otherwise in the order read, which files and the text always keep."""
+        """The files for the user: relative to home where they are inside it,
+        so a file from elsewhere stands out in full, the first one too if a
+        link took the path out of its folder. Those from elsewhere come first,
+        so they fill a list cut short before anything else does; more of them
+        than it has rows still go behind its count. Otherwise in the order
+        read, which files and the text always keep."""
         if not self.files:
             return []
-        folder = os.path.join(os.path.dirname(self.files[0]), "")
+        folder = os.path.join(self.home or os.path.dirname(self.files[0]), "")
         inside = [path.removeprefix(folder) for path in self.files if path.startswith(folder)]
         return [path for path in self.files if not path.startswith(folder)] + inside
 
@@ -84,14 +88,41 @@ def is_absolute(path: str) -> bool:
     return not path.startswith("//") and (path[:1] in ("/", "\\") or bool(_DRIVE.match(path)))
 
 
+def tidied(path: str, flavour=os.path) -> str:
+    """A path in its one spelling, with no `.`, doubled separators or `..` at
+    the root. Unlike normpath it keeps a `..` after a name: a read follows
+    that name first, and if it is a link the `..` leads out of where the link
+    goes, so only the disk can say what such a path names. Keeping it means
+    two spellings of a path never pass for one file when they are two."""
+    drive, root, tail = flavour.splitroot(path.replace(flavour.altsep or flavour.sep, flavour.sep))
+    kept: list[str] = []
+    for part in tail.split(flavour.sep):
+        if part not in ("", ".") and not (part == ".." and root and not kept):
+            kept.append(part)
+    return drive + root + flavour.sep.join(kept)
+
+
+def resolved(path: str, folder: str, flavour=os.path) -> str:
+    """Where a // path leads from a folder with its links resolved. There a
+    leading `..` is plain string work, since every name it walks up is a real
+    folder; any later one stays, by tidied's rule. Other paths are as they were."""
+    if not path.startswith("//"):
+        return path
+    folder = flavour.normpath(folder)
+    rest = tidied(portable_path(path)[2:], flavour)
+    while rest == ".." or rest.startswith(".." + flavour.sep):
+        folder, rest = flavour.dirname(folder), rest[3:]
+    return flavour.join(folder, rest)
+
+
 def absolute_path(path: str, flavour=os.path) -> str:
     """Where a path with its // already resolved leads, for the user to read:
-    ~ expanded and normalised, or nothing if it is not absolute here, which
+    ~ expanded and tidied, or nothing if it is not absolute here, which
     load_guide refuses without looking. Only strings, as with rebased_path:
     real paths touch the disk, and on Windows a UNC path would reach the
     network before anyone has said it may."""
     expanded = flavour.expanduser(portable_path(path))
-    return flavour.normpath(expanded) if flavour.isabs(expanded) else ""
+    return tidied(expanded, flavour) if flavour.isabs(expanded) else ""
 
 
 def guide_key(path: str, flavour=os.path) -> str:
@@ -111,7 +142,7 @@ def rebased_path(path: str, old_folder: str, new_folder: str, flavour=os.path) -
     same = [flavour.normcase(flavour.normpath(folder)) for folder in (old_folder, new_folder)]
     if same[0] == same[1]:
         return path
-    return _from_folder(flavour.normpath(flavour.join(old_folder, portable_path(path)[2:])), new_folder, flavour)
+    return _from_folder(resolved(path, old_folder, flavour), new_folder, flavour)
 
 
 def relative_path(path: str, folder: str, flavour=os.path) -> str:
@@ -120,14 +151,16 @@ def relative_path(path: str, folder: str, flavour=os.path) -> str:
     # A // path is absolute to the platform on Linux and macOS.
     if path.startswith("//") or not flavour.isabs(path):
         return path
-    found = _from_folder(flavour.normpath(path), folder, flavour)
+    found = _from_folder(tidied(path, flavour), folder, flavour)
     return found if found.startswith("//") else path
 
 
 def _from_folder(target: str, folder: str, flavour) -> str:
-    """The // path naming target from folder, or target if there is none."""
+    """The // path naming target from folder, or target if there is none.
+    relpath would collapse a `..` tidied kept, so it sees only what comes before."""
+    head, up, tail = target.partition(f"{flavour.sep}..{flavour.sep}")
     try:
-        relative = flavour.relpath(target, folder).replace(flavour.sep, "/")
+        relative = (flavour.relpath(head, folder) + up + tail).replace(flavour.sep, "/")
     except ValueError:
         return target
     return target if "\\" in relative else "//" + relative
@@ -135,7 +168,8 @@ def _from_folder(target: str, folder: str, flavour) -> str:
 
 def read_approved(user_dir) -> set[str]:
     """The guides this install approved. A record that cannot be read, or from
-    a later version, approves nothing: the user is asked again."""
+    a later version, approves nothing: the user is asked again. The record
+    decides nothing else, so a file of any shape only ever closes the gate."""
     try:
         found = formats.read_json(Path(user_dir) / APPROVALS_NAME)
     except (formats.FormatError, OSError):
@@ -147,9 +181,22 @@ def read_approved(user_dir) -> set[str]:
 
 
 def write_approved(user_dir, keys) -> None:
-    """Writes the record through a temp file, so a crash leaves the old one."""
+    """Writes the record through a temp file, so a crash leaves the old one.
+    Raises OSError rather than replace a later version's record, which this
+    one cannot read and whose approvals are not its to lose."""
+    if _later_version(user_dir):
+        raise OSError(f"{APPROVALS_NAME} is from a later version of Whittle")
     formats.write_json_atomic(Path(user_dir) / APPROVALS_NAME,
                               {"format": APPROVALS_FORMAT, "version": 1, "guides": sorted(keys)})
+
+
+def _later_version(user_dir) -> bool:
+    try:
+        found = formats.read_json(Path(user_dir) / APPROVALS_NAME)
+    except (formats.FormatError, OSError):
+        return False
+    version = found.get("version")
+    return found.get("format") == APPROVALS_FORMAT and isinstance(version, int) and version > 1
 
 
 def _import_target(line: str) -> str | None:
@@ -247,7 +294,9 @@ def load_guide(path: str) -> Guide:
         stack.append((real, _lines(text)))
 
     expanded = os.path.expanduser(portable_path(path))
+    home = ""
     if os.path.isabs(expanded):
+        home = os.path.dirname(tidied(expanded))
         visit(expanded, path)
     else:
         problems.append(f"{path} is not an absolute path.")
@@ -262,7 +311,7 @@ def load_guide(path: str) -> Guide:
         else:
             target = os.path.join(os.path.dirname(importer), os.path.expanduser(portable_path(found[1])))
             visit(target, f"@{found[1]} in {os.path.basename(importer)}")
-    return Guide("\n".join(out).strip(), tuple(files), tuple(problems))
+    return Guide("\n".join(out).strip(), tuple(files), tuple(problems), home)
 
 
 def guide_section(text: str, incomplete: bool = False) -> str:

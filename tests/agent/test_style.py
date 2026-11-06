@@ -342,6 +342,31 @@ class GuideTest(unittest.TestCase):
         self.assertEqual(guide.names(), [*elsewhere, "style.md", str(Path("sub") / "a.md")])
         self.assertEqual(style.Guide().names(), [])
 
+    def test_names_of_a_link_out_of_the_folder(self):
+        # The box shows where the path is, so what the link leads to must
+        # not pass as a file in that folder, nor what it imports from there.
+        self.write("notes/other.md", "Other.")
+        private = self.write("notes/private.md", "@other.md\nSecret.")
+        (self.dir / "pack").mkdir()
+        guide = self.load(self.link("pack/style.md", private))
+        self.assertEqual(guide.names(), [str(private), str(self.dir / "notes" / "other.md")])
+
+    def test_names_through_a_linked_folder(self):
+        private = self.write("notes/private.md", "Secret.")
+        (self.dir / "pack").mkdir()
+        self.link("pack/link", self.dir / "notes")
+        self.assertEqual(self.load(self.dir / "pack" / "link" / "private.md").names(), [str(private)])
+
+    def test_files_from_elsewhere_beyond_the_rows_go_behind_the_count(self):
+        # First is all the order can do: decoys from elsewhere fill the rows
+        # like anything else, and the list's count says more is going.
+        imports = [str(self.write(f"oth/a{i:02}.md", "a")) for i in range(12)]
+        private = str(self.write("oth/z-private.md", "Secret."))
+        guide = self.load(self.write("pack/style.md", "\n".join(f"@{path}" for path in [*imports, private])))
+        self.assertEqual(guide.names()[:10], imports[:10])
+        self.assertEqual(guide.names()[12:], [private, "style.md"])
+        self.assertEqual(len(guide.files), 14)
+
     def test_names_at_a_filesystem_root(self):
         self.assertEqual(style.Guide("", ("/style.md", "/a.md")).names(), ["style.md", "a.md"])
 
@@ -446,9 +471,30 @@ if __name__ == "__main__":
 
 
 class GuideKeyTest(unittest.TestCase):
-    def test_a_path_is_normalised(self):
-        self.assertEqual(style.guide_key("/repo/props/../style/./a.md", posixpath), "/repo/style/a.md")
-        self.assertEqual(style.absolute_path("/repo/props/../style/a.md", posixpath), "/repo/style/a.md")
+    def test_a_path_has_one_spelling(self):
+        self.assertEqual(style.guide_key("/repo//style/./a.md", posixpath), "/repo/style/a.md")
+        self.assertEqual(style.absolute_path("/../repo/./a.md", posixpath), "/repo/a.md")
+        self.assertEqual(style.absolute_path("C:/repo//./a.md", ntpath), "C:\\repo\\a.md")
+
+    def test_a_dotdot_after_a_name_stays(self):
+        # A read follows the name first, so the text alone cannot say what
+        # it leads to: it must never pass for the plain path.
+        self.assertEqual(style.guide_key("/repo/link/../a.md", posixpath), "/repo/link/../a.md")
+        self.assertEqual(style.absolute_path("C:\\repo\\link\\..\\a.md", ntpath), "C:\\repo\\link\\..\\a.md")
+
+    def test_a_relative_path_counts_up_from_a_real_folder(self):
+        self.assertEqual(style.resolved("//../../g.md", "/a/b/c", posixpath), "/a/g.md")
+        self.assertEqual(style.resolved("//..\\g.md", "/a/b", posixpath), "/a/g.md")
+        self.assertEqual(style.resolved("//../link/../g.md", "/a/b", posixpath), "/a/link/../g.md")
+        self.assertEqual(style.resolved("//../../../../g.md", "/a/b", posixpath), "/g.md")
+        self.assertEqual(style.resolved("//..\\g.md", "C:\\a\\b", ntpath), "C:\\a\\g.md")
+        self.assertEqual(style.resolved("/a/g.md", "/x", posixpath), "/a/g.md", "others stay")
+
+    def test_a_rewrite_keeps_what_the_path_names(self):
+        kept = style.rebased_path("//link/../g.md", "/a/b", "/a/c", posixpath)
+        self.assertEqual(kept, "//../b/link/../g.md")
+        self.assertEqual(style.resolved(kept, "/a/c", posixpath), "/a/b/link/../g.md")
+        self.assertEqual(style.relative_path("/a/b/link/../g.md", "/a/c", posixpath), "//../b/link/../g.md")
 
     def test_windows_ignores_case_in_the_key_only(self):
         self.assertEqual(style.guide_key("C:\\Repo\\Style\\A.md", ntpath), "c:\\repo\\style\\a.md")
@@ -470,6 +516,37 @@ class GuideKeyTest(unittest.TestCase):
         for path in ("", "style.md", "x/style.md"):
             self.assertEqual(style.guide_key(path, posixpath), "", path)
         self.assertEqual(style.guide_key("C:style.md", ntpath), "", "against the drive's current folder")
+
+
+class ApprovalsRecordTest(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.dir = Path(folder.name)
+        self.path = self.dir / style.APPROVALS_NAME
+
+    def test_a_path_that_is_not_utf8_comes_back_the_same(self):
+        key = "/art/caf\udce9.md"
+        style.write_approved(self.dir, {key, "/art/plain.md"})
+        self.assertEqual(style.read_approved(self.dir), {key, "/art/plain.md"})
+
+    def test_a_later_versions_record_is_left_alone(self):
+        later = {"format": style.APPROVALS_FORMAT, "version": 2, "guides": ["/keep/me.md"]}
+        self.path.write_text(json.dumps(later))
+        self.assertEqual(style.read_approved(self.dir), set(), "it approves nothing here")
+        with self.assertRaises(OSError):
+            style.write_approved(self.dir, {"/new.md"})
+        self.assertEqual(json.loads(self.path.read_text()), later)
+
+    def test_a_record_of_any_other_shape_is_replaced(self):
+        for text in ("{", "[]", '{"format": "other", "version": 2}', '{"version": "2"}'):
+            self.path.write_text(text)
+            style.write_approved(self.dir, {"/new.md"})
+            self.assertEqual(style.read_approved(self.dir), {"/new.md"}, text)
+
+    def test_a_deeply_nested_record_approves_nothing(self):
+        self.path.write_text("[" * 200000)
+        self.assertEqual(style.read_approved(self.dir), set())
 
 
 class IsAbsoluteTest(unittest.TestCase):

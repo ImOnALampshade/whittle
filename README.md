@@ -197,8 +197,8 @@ a `.blend` from someone else could name any file on your computer; the agent pop
 what is sent, the first ten files and then how many more. For the same reason Send stays disabled
 for a guide this computer has not approved, under a box with **Use This Guide**, **Read Now**
 and **Go Without It**: you are asked once per guide on each computer, not once per file, and
-nothing is added to the `.blend`. Choosing a guide yourself counts as approving it, and approving
-it covers what it imports. A file that cannot load is a warning, and the turn still runs. Guides are read
+nothing is added to the `.blend`. Choosing a guide yourself counts as approving it, leaving the
+field as it was does not, and approving it covers what it imports. A file that cannot load is a warning, and the turn still runs. Guides are read
 again before each turn, so an edit applies from the next one.
 [Style guides](docs/site/guides/settings.md#style-guides) has a worked example.
 

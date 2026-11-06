@@ -57,6 +57,11 @@ GUIDE_ROWS = 10
 # while the file has no folder is approved once the first save gives it one.
 _approved: tuple[str | None, set[str]] | None = None
 _approved_unsaved: set[str] = set()
+# Approvals the record could not take, by user folder: they last until Blender
+# closes, so past a load, which reads the record again.
+_unrecorded: dict[str | None, set[str]] = {}
+# Each folder a // path counted from, with its links resolved (_real_folder).
+_real_folders: dict[str, str] = {}
 HELD_NOTE = "Not sent until you approve it in the sidebar."
 ABSOLUTE_GUIDE = "This path is absolute, so it will not travel with the file."
 LOG_LINES = 8
@@ -89,10 +94,18 @@ def _key_changed(_self, _context):
         ctl.process.clear_key()
 
 
+def _style_file_set(_p, value: str, current: str, _is_set: bool) -> str:
+    # Runs for a set and not when the preferences load. Blender sets a text
+    # field on any confirm, typed in or not, and leaving it unchanged is no
+    # choice of the guide it shows.
+    if value.strip() != current.strip():
+        approve_guide(value)
+    return value
+
+
 def _style_file_changed(p, _context):
-    # Runs when the path is set and not when the preferences load.
-    approve_guide(p.style_file)
-    read_style_guide(p.style_file)
+    if not guide_held(p.style_file, per_file=False):
+        read_style_guide(p.style_file)
 
 
 def _environment_changed(_self, _context):
@@ -135,8 +148,8 @@ class WhittlePreferences(bpy.types.AddonPreferences):
     poly_budget: IntProperty(name="Triangle Budget", default=DEFAULTS["poly_budget"], min=MIN_POLY_BUDGET,
                              description=DESCRIPTIONS["poly_budget"])
     style_file: StringProperty(name="Style Notes", subtype="FILE_PATH", default=DEFAULTS["style_file"],
-                               options={"PATH_SUPPORTS_BLEND_RELATIVE"}, update=_style_file_changed,
-                               description=DESCRIPTIONS["style_file"])
+                               options={"PATH_SUPPORTS_BLEND_RELATIVE"}, set_transform=_style_file_set,
+                               update=_style_file_changed, description=DESCRIPTIONS["style_file"])
     store_chats: BoolProperty(
         name="Save Chats in the .blend", default=DEFAULTS["store_chats"],
         description="Store every chat inside the .blend when it is saved, so it travels with the file: "
@@ -364,7 +377,7 @@ def read_style_guide(path: str) -> style.Guide:
     elif path.startswith("//") and not bpy.data.filepath:
         guide = style.Guide(problems=(f"{path} is relative to the .blend: save the file to use it.",))
     else:
-        guide = style.load_guide(bpy.path.abspath(style.portable_path(path)))
+        guide = style.load_guide(_resolved(path, bpy.data.filepath))
     key = _guide_key(path)
     _guides.pop(key, None)
     _guides[key] = guide
@@ -405,17 +418,31 @@ def _style_path(scene=None) -> tuple[str, bool]:
     return (get().style_file, False) if found is None else (found, True)
 
 
+def _real_folder(blend: str) -> str:
+    """The folder of a .blend with its links resolved, kept since redraws ask.
+    The one disk access a question makes: the folder the user opened or saved
+    the file in, so it reaches nothing that file's text chose."""
+    folder = os.path.dirname(blend)
+    if folder not in _real_folders:
+        _real_folders[folder] = os.path.realpath(folder)
+    return _real_folders[folder]
+
+
 def _resolved(path: str, blend: str) -> str:
-    return "" if path.startswith("//") and not blend else \
-        bpy.path.abspath(style.portable_path(path), start=os.path.dirname(blend))
+    """The absolute path a read of path starts from, and the one an approval
+    is of: the same string, so neither can lead anywhere the other does not."""
+    if not path.startswith("//"):
+        return path
+    return style.resolved(path, _real_folder(blend)) if blend else ""
 
 
-def guide_key(path: str, blend: str | None = None) -> str:
+def guide_key(path: str) -> str:
     """What this install's approval of a path is kept under, with // counted
-    from blend, by default the open file. Nothing for a path that cannot be
-    read as it stands: load_guide refuses it, and there is nothing to approve.
-    Only strings, so asking whether a path is approved reaches nothing."""
-    return style.guide_key(_resolved(path.strip(), bpy.data.filepath if blend is None else blend))
+    from the open file. Nothing for a path that cannot be read as it stands:
+    load_guide refuses it, and there is nothing to approve. Strings, past the
+    open file's own folder, so asking whether a path is approved reaches
+    nothing the path chose."""
+    return style.guide_key(_resolved(path.strip(), bpy.data.filepath))
 
 
 def guide_location(path: str) -> str:
@@ -431,25 +458,29 @@ def _approved_keys() -> set[str]:
     folder = os.environ.get("WHITTLE_USER_DIR")
     if _approved is None or _approved[0] != folder:
         try:
-            _approved = (folder, style.read_approved(paths.user_dir()))
+            found = style.read_approved(paths.user_dir())
         except OSError as exc:
             log.warning("cannot read the approved style guides: %s", exc)
-            _approved = (folder, set())
+            found = set()
+        _approved = (folder, found | _unrecorded.get(folder, set()))
     return _approved[1]
 
 
 def forget_approvals() -> None:
     """A file was loaded: the record is read again at the next question, so
-    what another Blender approved counts here too."""
+    what another Blender approved counts here too. What it could not take
+    stays with _unrecorded."""
     global _approved
     _approved = None
     _approved_unsaved.clear()
+    _real_folders.clear()
 
 
 def approve_keys(keys) -> bool:
     """Adds to the guides this install approved, and to its record if it can:
-    they count until Blender closes either way. Returns whether the record has
-    them. What another Blender added since this one read it stays."""
+    they count until Blender closes either way, through any load. Returns
+    whether the record has them. What another Blender added since this one
+    read it stays."""
     global _approved
     from . import paths
 
@@ -457,21 +488,24 @@ def approve_keys(keys) -> bool:
     known = _approved_keys()
     if keys <= known:
         return True
-    _approved = (_approved[0], known | keys)
+    named = _approved[0]
+    _approved = (named, known | keys)
     try:
         folder = paths.user_dir()
-        _approved = (_approved[0], _approved[1] | style.read_approved(folder))
+        _approved = (named, _approved[1] | style.read_approved(folder))
         style.write_approved(folder, _approved[1])
     except OSError as exc:
         log.warning("cannot keep the approved style guides: %s", exc)
+        _unrecorded.setdefault(named, set()).update(keys)
         return False
+    _unrecorded.pop(named, None)
     return True
 
 
 def approve_guide(path: str) -> bool:
     """This install may read and send the guide at path, here and in any file
     that leads to it. For what the user did: their Use This Guide, or their
-    setting a Style Notes field. Returns whether that was recorded."""
+    changing a Style Notes field to it. Returns whether that was recorded."""
     path = path.strip()
     if path.startswith("//") and not bpy.data.filepath:
         _approved_unsaved.add(path)
@@ -480,9 +514,15 @@ def approve_guide(path: str) -> bool:
 
 
 def settle_unsaved_approvals() -> None:
-    """After a save: a // path set in the unsaved file names a guide now."""
+    """After a save: a // path set in the unsaved file names a guide now, if
+    a Style Notes field still holds it. One replaced since was no choice of
+    whatever the new folder has by that name."""
+    from . import props
+
     if bpy.data.filepath:
-        approve_keys({guide_key(path) for path in _approved_unsaved})
+        named = {get().style_file.strip()}
+        named.update(props.file_settings(scene).get("style_file", "").strip() for scene in bpy.data.scenes)
+        approve_keys({guide_key(path) for path in _approved_unsaved & named})
         _approved_unsaved.clear()
 
 
@@ -491,8 +531,8 @@ def guide_held(path: str, *, per_file: bool) -> bool:
     it. A file's own path does, and a // one in the preferences, since the
     open file decides where that leads, unless this install approved where it
     leads. The rest of the preferences' are the user's own, and so is a
-    file's path to the guide they name. Never touches the disk: this decides
-    whether anything may."""
+    file's path to the guide they name. Touches nothing the path chose (see
+    guide_key): this decides whether anything may."""
     path = path.strip()
     if not per_file and not path.startswith("//"):
         return False
@@ -508,6 +548,12 @@ def held_guide(scene=None) -> str:
     user answers; empty if there is none. Fit for a redraw."""
     path, per_file = _style_path(scene)
     return path.strip() if guide_held(path, per_file=per_file) else ""
+
+
+def names_own_guide(scene=None) -> bool:
+    """Whether the path the scene's next session gets is the file's own, or
+    the preferences' and so the user's words and not the file's."""
+    return _style_path(scene)[1]
 
 
 def absolute_guide_warning(scene) -> str:

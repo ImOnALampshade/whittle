@@ -220,8 +220,8 @@ With a file from someone else:
 - A new chat still reads the scene, so don't run Whittle at all on a file you don't trust.
 - Press **Read Now** before **Use This Guide**, to list the files. What loads is sent with your
   turns, and though only `.md` and `.txt` files load, a private note of that kind could. The
-  list names only the first ten files: **and N more files** means more is sent than you can
-  see, so in a file you don't trust, press **Go Without It**. See
+  list names only the first ten files, those from outside the guide's folder first: **and N more files**
+  means more is sent than you can see, from anywhere, so in a file you don't trust, press **Go Without It**. See
   [Style guides](settings.md#style-guides).
 - A guide you approved stays approved, from any file, even if it changes.
 

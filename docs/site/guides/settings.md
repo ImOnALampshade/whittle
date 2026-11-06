@@ -186,9 +186,11 @@ A file naming a guide this computer has not approved.
 
 - **Use This Guide** approves it. Claude gets the guide from the next turn on.
 - **Read Now** lists the files it would send, and approves nothing. A file from outside the
-  guide's folder comes first and in full.
+  guide's folder comes first and in full, as does the guide itself if the path is a link that leads
+  out of it.
 - **Go Without It** empties **Style Notes** for this file, so it sends no guide. Save the file to keep that;
-  Ctrl+Z brings the path back.
+  Ctrl+Z brings the path back. A scene linked from another file can't keep it, as a file doesn't save
+  what it links: the box returns when you reopen, and Whittle says so.
 
 ```{figure} ../images/guides-settings/guide-gate-read.png
 :alt: The same box after Read Now. Under It would send it lists /home/artist/notes/palette.md in full, then crates.md and base.md, then a warning that @props.md was not found.
@@ -199,7 +201,11 @@ After **Read Now**, the box lists the files, with a file from elsewhere first.
 Which paths ask:
 
 - A path set under **For This File**, unless you set it on this computer.
-- A `//` path in **Defaults**, since the open file decides where that leads.
+- A `//` path in **Defaults**, since the open file decides where that leads. The box then says
+  your Defaults name the guide.
+- A path that goes into a folder and back out, such as `//props/../style.md`, unless you set it
+  on this computer. If `props` is a link, that leads somewhere other than it looks, so it never counts as
+  `//style.md`, and the box shows it as written. Write it the short way.
 
 Which never do:
 
@@ -213,8 +219,10 @@ machine and each guide asks once there. A second clone in another folder on the 
 another path, so it asks once too.
 
 Choosing a guide yourself counts as approving it: typing the path, or picking it, in **For
-This File** or **Defaults**. So does anything you run that sets the field, Claude's own Python
-included, as that can read your files anyway. A first save and Save As keep the approval, and never ask.
+This File** or **Defaults**. So does anything you run that changes the field, Claude's own Python
+included, as that can read your files anyway. Clicking into the field to read a long path and leaving it as it
+was doesn't count, and neither does pressing Enter there. A first save and Save As keep the approval, and never ask. A
+`//` path you typed before the first save and replaced by then isn't approved.
 
 Approving a guide also covers the files it imports, which is why **Read Now** lists them. The
 approval is of the path: later edits to the guide, a new import in it included, are not
@@ -298,11 +306,12 @@ Change `base.md` once, and both follow.
 
 - **The list.** Under the field, **Sent with each turn** shows the files loaded, the first
   ten and how many more. A file from outside the top guide's folder is shown in full and
-  listed first, so it cannot hide past the tenth row; the rest follow in import order, and
+  listed first, so files beside the guide can't push it off the list; the rest follow in import order, and
   the text is sent in import order whatever the list shows. Their text goes to Anthropic
   with your turns, so look here in a `.blend` you did not make: the path is stored in the
   file and could name something private of yours. [Approving a guide](#approving-a-guide)
-  asks before that happens, but a guide you approved can change. **and N more files** means more is being sent than you can see, so in a
+  asks before that happens, but a guide you approved can change. **and N more files** means more is being sent than you can see, and that can
+  include files from elsewhere, if there are more than ten. So in a
   file you do not trust, clear **Style Notes** rather than send.
 - **The last read.** The list and its warnings show what the last read found, not what is on
   disk now. After you edit a guide or fix an import, they catch up at the next turn or save,

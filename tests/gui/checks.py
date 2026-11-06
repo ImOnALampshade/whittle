@@ -15,6 +15,7 @@ import math
 import os
 import time
 from pathlib import Path
+from unittest import mock
 
 import bpy
 from bpy_extras import view3d_utils
@@ -2150,6 +2151,14 @@ def guide_gate_asks(stage: GuiStage):
     expect(not turn.busy(stage.ctl), "Shift+Alt+Enter started a turn")
     expect_equal(prefs.style_guide(GUIDE_PATH), None, "the last read after Shift+Alt+Enter")
 
+    # The Ask Claude popup types into the same draft, and its Enter sends nothing either.
+    yield from shortcut(stage, "Add a lid.")
+    yield from stage.settle()
+    expect("lid" in stage.props.prompt, f"the prompt after the popup's Enter: {stage.props.prompt!r}")
+    expect(not turn.busy(stage.ctl), "the popup's Enter started a turn")
+    expect_equal(prefs.style_guide(GUIDE_PATH), None, "the last read after the popup's Enter")
+    stage.props.prompt = "Add a lid."
+
     yield from stage.click(*(yield from sidebar_button(stage, "style_guide_read")))
     yield Until(lambda: prefs.style_guide(GUIDE_PATH) is not None, "Read Now to read the guide")
     side = yield from drawn(panel, "the guide's files", lambda d: "base.md" in d.labels())
@@ -2176,6 +2185,100 @@ def guide_gate_remembers(stage: GuiStage):
     yield from drawn(panel, "the sidebar", lambda d: ui.GUIDE_TITLE not in d.labels())
     expect(bpy.ops.whittle.submit.poll(), "Send is disabled in a fresh Blender")
     expect_equal((yield from guide_turn(stage, "reopened", "Add handles.")), GUIDE_TEXT, "what the session got")
+
+
+FIELD_GUIDE = "//theirs.md"
+
+
+@phase("guide_field_confirm")
+def guide_field_arrives(stage: GuiStage):
+    from whittle.addon import props
+
+    stage.crate()
+    (stage.work / "theirs.md").write_text("Theirs.\n")
+    stage.save_as(stage.work / "scene.blend")
+    yield from stage.settle()
+    bpy.context.scene.whittle[props.FILE_SETTINGS["style_file"]] = FIELD_GUIDE
+    stage.save_as(stage.work / "scene.blend")
+    yield from stage.settle()
+
+
+def open_style_field(stage: GuiStage, popover):
+    """The agent popover open, and where its Style Notes field is."""
+    gear = yield from gear_button(stage)
+    count = popover.count
+    yield from stage.click(*gear)
+    yield Until(lambda: popover.count > count, "the agent popover to draw")
+    for row in range(gear[1], gear[1] - 700, -8):
+        if (yield from hovered_copy(stage, gear[0] - 100, row)) == FIELD_GUIDE:
+            return gear[0] - 100, row
+    raise AssertionError("the Style Notes field is not in the popover")
+
+
+def expect_still_held(stage: GuiStage, what: str):
+    from whittle import style
+    from whittle.addon import paths, prefs
+
+    expect_equal(prefs.held_guide(), FIELD_GUIDE, f"the guide waiting {what}")
+    expect_equal(prefs.style_guide(FIELD_GUIDE), None, f"the last read {what}")
+    expect_equal(style.read_approved(paths.user_dir()), set(), f"the approvals {what}")
+
+
+@phase("guide_field_confirm")
+def guide_field_unchanged(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle import style
+    from whittle.addon import paths, prefs, props, ui
+
+    store = props.FILE_SETTINGS["style_file"]
+    yield from show_sidebar(stage)
+    popover = Spy(ui.WHITTLE_PT_agent)
+    expect_still_held(stage, "after a real load")
+
+    # Into the field, typing nothing, and Enter.
+    spot = yield from open_style_field(stage, popover)
+    yield from stage.click(*spot)
+    yield 0.3
+    yield from stage.key("RET")
+    yield from stage.settle()
+    expect_still_held(stage, "after Enter in the field")
+    yield from stage.key("ESC")
+    yield 0.3
+
+    # Into the field, typing nothing, and a click elsewhere in the popover.
+    spot = yield from open_style_field(stage, popover)
+    yield from stage.click(*spot)
+    yield 0.3
+    yield from stage.click(spot[0], spot[1] + 40)
+    yield from stage.settle()
+    expect_still_held(stage, "after a click out of the field")
+    yield from stage.key("ESC")
+    yield 0.3
+
+    # An unset field shows the preference, and a // one goes through the same set.
+    # Set with no approval, as one made from another file's folder would be.
+    p = addon_preferences()
+    with mock.patch.object(prefs, "approve_guide"):
+        p.style_file = FIELD_GUIDE
+    del stage.props[store]
+    yield from stage.settle()
+    expect_still_held(stage, "as a default")
+    spot = yield from open_style_field(stage, popover)
+    yield from stage.click(*spot)
+    yield 0.3
+    yield from stage.key("RET")
+    yield from stage.settle()
+    expect_still_held(stage, "after Enter in a field showing the default")
+    expect(store not in stage.props, "the unset field took an override from a confirm")
+    yield from stage.key("ESC")
+    yield 0.3
+
+    # The preference's own field, set as a confirm sets it, then changed.
+    p.style_file = FIELD_GUIDE
+    expect_still_held(stage, "after setting the preference to what it was")
+    p.style_file = "//theirs.txt"
+    expect_equal(style.read_approved(paths.user_dir()), {prefs.guide_key("//theirs.txt")},
+                 "the changed preference's approval")
 
 
 @phase("preferences_defaults")

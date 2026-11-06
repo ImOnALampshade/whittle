@@ -41,11 +41,9 @@ class WhittleTarget(bpy.types.PropertyGroup):
 FILE_SETTINGS = {key: f"file_{key}" for key in prefs.SESSION_SETTINGS}
 
 # The save under way: the file it started from, and each scene whose Style
-# Notes it rewrote with the text from before (rebase_style_paths), and the
-# approvals the new texts inherit once it is saved.
+# Notes it rewrote with the text from before (rebase_style_paths).
 _rebased_from = ""
 _rebased: list[tuple[bpy.types.Scene, str]] = []
-_carried: set[str] = set()
 
 # Where a // Style Notes counts from, for what an undo brings back. Undo leaves
 # the file where it is but puts back text written from an earlier folder, so
@@ -103,13 +101,13 @@ def rebase_style_paths(target: str) -> None:
     takes it back for a copy. Written straight to the store: the property's
     update would read the new text from the old folder, as bpy.data.filepath
     has not moved yet, and save_post reads it once it has. The setter never
-    runs, so the approval of what a text named moves to the new text here. A
-    read walks a `..` up from a folder's real place, so the rewrite starts
-    from there too, not from the symlink a file was saved through."""
+    runs, and no approval has to move: the new text counted from the new
+    folder is the same key as the old from the old. That holds because a read
+    walks a `..` up from a folder's real place, so the rewrite and the key
+    start from there too, not from the symlink a file was saved through."""
     global _rebased_from
     _rebased_from = bpy.data.filepath
     _rebased.clear()
-    _carried.clear()
     store = FILE_SETTINGS["style_file"]
     new_folder = _real_folder(target)
     old_folder = _real_folder(_rebased_from) if _rebased_from else ""
@@ -119,8 +117,6 @@ def rebase_style_paths(target: str) -> None:
             continue
         rebased = _rewritten(path, old_folder, new_folder)
         if rebased != path:
-            if not prefs.guide_held(path, per_file=True):
-                _carried.add(prefs.guide_key(rebased, target))
             _rebased.append((scene, scene.whittle[store]))
             scene.whittle[store] = rebased
 
@@ -137,8 +133,8 @@ def settle_style_paths(saved: bool = True) -> None:
     """After a save or a failed one: if the open file stayed where it was,
     a copy was saved or nothing was, and its paths are back as they were.
     A failed Save As leaves bpy.data.filepath alone too. Otherwise the file
-    moved, and the text rewritten says so. Whatever was saved, a copy too, was
-    written with the new texts, so the approvals follow unless the save failed."""
+    moved, and the text rewritten says so. A // path set before the first
+    save names a guide once one worked."""
     global _rebased_from, _start_folder, _first_save_moved
     left, _rebased_from = _rebased_from, ""
     if bpy.data.filepath == left:
@@ -154,10 +150,8 @@ def settle_style_paths(saved: bool = True) -> None:
             _start_folder = _real_folder(left)
         _note_move()
     if saved:
-        prefs.approve_keys(_carried)
         prefs.settle_unsaved_approvals()
     _rebased.clear()
-    _carried.clear()
 
 
 def _note_move() -> None:
@@ -174,7 +168,7 @@ def follow_style_paths() -> None:
     from the new folder, where it can name another file with no warning, so
     it is rewritten to name what it named when it was written, and an absolute
     path from before the first save becomes the // path that save made of it.
-    The new text is the one the save left, whose approval it carried, so none
+    The new text names the same key as the one the save left, so no approval
     moves here. The steps themselves cannot hold this, as the rewrite makes
     none. Linked scenes are their own files' to rewrite."""
     if not _latest_move:
@@ -217,10 +211,15 @@ def _file_setting(key: str) -> dict:
         return found if found is not None else getattr(prefs.get(), key)
 
     def setter(props, value):
+        # Blender sets a text field on any confirm, typed in or not. Leaving
+        # the path as it was is no choice of the guide, and no override of a
+        # default either.
+        if key == "style_file" and value.strip() and value.strip() == getter(props).strip():
+            return
         props[FILE_SETTINGS[key]] = _clean(key, value)
         if key == "style_file":
             # Blender runs this for a set and not for a load, so what a
-            # file brings with it stays unapproved. A script's set counts:
+            # file brings with it stays unapproved. A script's change counts:
             # a script could read the file itself.
             prefs.approve_guide(value)
             if _latest_move:
@@ -231,7 +230,9 @@ def _file_setting(key: str) -> dict:
 
 def _style_file_changed(props, _context) -> None:
     # The popover redraws from what was read: it never reads the disk itself.
-    prefs.read_style_guide(props.style_file)
+    # An unchanged confirm of a held path gets here too.
+    if not prefs.held_guide(props.id_data):
+        prefs.read_style_guide(props.style_file)
 
 
 def _file_description(key: str) -> str:

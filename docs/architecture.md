@@ -225,17 +225,25 @@ no chats meets no Continue box, so a turn does not read or send a guide this ins
 approved. The record is per guide and per install, in the user folder's `guides.json`:
 `{"format": "whittle.guides", "version": 1, "guides": [key, ...]}`, read by
 `style.read_approved` and written by `style.write_approved` through
-`formats.write_json_atomic`, so through `platforms.replace`. One that cannot be read approves nothing. Nothing goes in the
+`formats.write_json_atomic`, so through `platforms.replace`. One that cannot be read, or a
+later version's, approves nothing, and `write_approved` will not replace a later version's. Nothing goes in the
 `.blend`, so a repository of files sharing guides asks once per guide per machine, with no
 binary churn. `prefs._approved` keeps the record in memory, since poll and draw code ask: it is read at
 the first question and again after a load, and `prefs.approve_keys` merges what is on disk
 before it writes, so two Blenders keep each other's approvals. If it cannot write, the approval
-lasts until Blender closes.
+stays in `prefs._unrecorded`, which a load leaves alone, so it lasts until Blender closes, and the next write that works records it.
 
-The key is `style.guide_key`: `~` expanded, normalised and in the platform's case, with `//`
-resolved from the open file by `prefs.guide_key`. It is string work only. `realpath` would touch
-the disk, and on Windows a UNC path would reach the network, which is what the question holds
-back. A path `load_guide` would refuse unread (not absolute, or `//` in an unsaved file) has no
+The key is `style.guide_key`: `~` expanded, tidied and in the platform's case, with `//`
+resolved by `prefs.guide_key` from the open file's real folder (`prefs._real_folder`, the one
+disk access, and of the folder the user opened the file from, kept so redraws do not repeat it).
+Past that it is string work: `realpath` of the path would touch the disk, and on Windows a UNC path would
+reach the network, which is what the question holds back. What keeps a string honest is what
+`style.tidied` leaves. Going up from a real folder is exact, so `//../x.md` collapses, but a `..`
+after any other name stays in the key, as `proj/link/../x.md`: a read follows `link` first, and
+only the disk could say where the `..` then leads. So a path that spells an approved one with a
+detour has a key of its own and asks, whatever `link` is, and the box shows it as it stands. Reads start from the same
+string (`prefs._resolved`), so the key always names what `load_guide` opens, as far as a path can.
+A path `load_guide` would refuse unread (not absolute, or `//` in an unsaved file) has no
 key and nothing to approve.
 
 `prefs.guide_held(path, per_file=)` says whether a path waits: a file's own path, and a `//`
@@ -244,13 +252,16 @@ preference that is absolute or under `~` is the user's own and never asks, and n
 file's path to the same guide. `prefs.held_guide(scene)` answers for a scene's next session.
 Before any read: `refresh_style_guides` skips a held path, so a save, a Send and a reset
 read nothing of it, and `session_settings` gives no text for one, even with a Read Now's in
-`_guides`, so no route can send it. Read Now is the one read of a held guide, as the user asked for it.
+`_guides`, so no route can send it unasked. Read Now is the one read of a held guide, as the user asked for it.
 
-What approves is the user: **Use This Guide**, and setting a Style Notes field, in this install. The
-scene property's setter and the preference's update run on a set and not on a load, so what a
-file brings stays held. A script's set counts too, the agent's `exec` included: it could read
+What approves is the user: **Use This Guide**, and changing a Style Notes field, in this install. The
+scene property's setter and the preference's `set_transform` run on a set and not on a load, so what a
+file brings stays held. Blender sets a text field on every confirm, typed in or not, so both
+compare with what the field showed: the same text approves nothing, reads nothing held, and
+writes no override on an unset field. A script's change counts too, the agent's `exec` included: it could read
 the file itself. A `//` path set in an unsaved file has no key yet, so
-`prefs.approve_guide` keeps its text and `save_post` approves it with the file's folder. A
+`prefs.approve_guide` keeps its text and `save_post` approves it with the file's folder, if a
+field still holds it. A
 file a guide imports is covered by approving the guide: Read Now lists them all.
 
 `operators.refuse_send` is the gate, for Send, the keys, the Ask Claude prompt (which sends
@@ -266,10 +277,9 @@ every local scene's `file_style_file` with `style.rebased_path`, straight into t
 update callback's read does not run, and keeps the old text. Afterwards
 `props.settle_style_paths`, from `save_post` and `save_post_fail`, puts the old text back if
 `bpy.data.filepath` has not moved, which is both a Save Copy and a failed save; the file
-written keeps the new text. Writing the store passes the setter, so `rebase_style_paths` notes the key of
-each new text whose old text was approved, and `settle_style_paths` approves them unless
-the save failed: through a symlinked folder the new text can have another key as a string, and a Save As must
-not ask. An unapproved path stays so.
+written keeps the new text. Writing the store passes the setter, and no approval has to move:
+the rewrite starts from both folders' real places, as the key does, so the new text from the new folder is the same
+key as the old from the old, and a Save As neither asks nor approves any other file. An unapproved path stays so.
 
 The first save of a file has no folder to leave (`bpy.data.filepath` is empty), and a guide picked
 before it was stored absolute, which would not work on a clone. So there the same pass turns
@@ -282,7 +292,7 @@ leave an absolute path alone, as a path set absolute in a saved file was meant.
 The undo story of a first save is a Save As's: `settle_style_paths` notes a move with the file's folder as the start, and
 an undo bringing back the absolute text finds no stamp from a move, so `follow_style_paths`
 makes it relative again (`props._first_save_moved` says this applies, and a path set later has a stamp). An undo that rewrites a text arrives at the text the
-save left, whose key is in the record already. Both folders are the `.blend`'s with symlinks resolved, since a
+save left, whose key is the same. Both folders are the `.blend`'s with symlinks resolved, since a
 read's `realpath` walks a `..` up from a folder's real place; the guide's own path is never
 looked at. `rebased_path` falls back on the absolute path where a relative one would carry a
 backslash from a folder's name, which `portable_path` would read as a separator.

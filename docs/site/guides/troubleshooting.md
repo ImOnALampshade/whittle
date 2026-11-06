@@ -275,14 +275,15 @@ or until you pick the file again.
 
 ## Whittle asks about a style guide
 
-The box **Use this style guide?** over the prompt means this file names a guide this computer
-has not approved, and **Send** stays disabled until you answer. You will see it once for each guide on each
+The box **Use this style guide?** over the prompt means this file, or a `//` path in your
+**Defaults**, leads to a guide this computer has not approved, and **Send** stays disabled until you answer. You will see it once for each guide on each
 computer: after a clone, in a file from someone else, or in a second clone in another folder,
 which is another path. It also appears when a guide or the `.blend` moves, since the path is what was approved.
 [Approving a guide](settings.md#approving-a-guide) says what each button does.
 
 If it asks again for a guide you approved, on the same computer and at the same path, Whittle could not keep the
-approval: check that it can write to its [user folder](privacy.md). **Enter** and **Shift+Alt+Enter** do nothing while the
+approval: check that it can write to its [user folder](privacy.md). A warning says so when you approve; the approval
+then lasts until Blender closes. **Enter** and **Shift+Alt+Enter** do nothing while the
 box is open, and your draft stays where it is.
 
 ## Send is dim

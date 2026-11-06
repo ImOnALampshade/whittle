@@ -144,11 +144,17 @@ CHECKS = {
     "guide_gate": Check(
         "A .blend saved as another install would, with a chat from there and a // Style Notes path nothing "
         "here approved, opens with Send disabled, the guide unread and the box over the composer; a real "
-        "Shift+Alt+Enter sends nothing, even once the chat is continued. Read Now, clicked in the sidebar, "
-        "lists the guide and its import and approves nothing. Use This Guide, clicked, closes the box, and "
-        "a turn runs with the guide's text. Reopened in a fresh Blender, nothing asks and nothing is read "
-        "until the next turn, which sends it.",
+        "Shift+Alt+Enter sends nothing, even once the chat is continued, and neither does Enter in the real "
+        "Ask Claude popup. Read Now, clicked in the sidebar, lists the guide and its import and approves "
+        "nothing. Use This Guide, clicked, closes the box, and a turn runs with the guide's text. Reopened "
+        "in a fresh Blender, nothing asks and nothing is read until the next turn, which sends it.",
         (Phase(), Phase(open="scene.blend", deadline=180.0), Phase(open="scene.blend"))),
+    "guide_field_confirm": Check(
+        "A file holding a // Style Notes path nothing here approved: clicking into the agent popover's "
+        "field, typing nothing and pressing Enter, or clicking out of it, approves nothing and reads "
+        "nothing, and the same for an unset field showing a // default, which takes no override. The "
+        "installed preference's own set, to what it holds, approves nothing; to another path, it approves that.",
+        (Phase(), Phase(open="scene.blend", deadline=180.0))),
     "preferences_key": Check(
         "With no API key, Send asks for one: the sidebar's box has Get a Key (the Console's keys "
         "page) and Preferences…, which opens the Preferences on Whittle. There the API Key field "
