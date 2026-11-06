@@ -48,7 +48,7 @@ the history), the sketching model, the agent's shape, history, start points and 
 phases. Read it for intent, and treat its details as history. A banner at the top lists what
 has since gone: the target lock (a warning whenever the user touched the target during a
 turn), the `<name>.whittle/` folder beside the `.blend`, the Blank start point's ground grid
-and scale reference, stroke types, and Blender 4.2. Its §10 lists the open questions that `decisions.md`
+and scale reference, and Blender 4.2. Its §10 lists the open questions that `decisions.md`
 resolves, and the first five areas in `progress.md` still cite its sections and build phases.
 
 ### decisions.md

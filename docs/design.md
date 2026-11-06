@@ -5,8 +5,7 @@
 > `architecture.md` win, and `progress.md` says what is built. Superseded here: the target
 > lock (removed), the `<name>.whittle/` folder beside the `.blend` (chats now live inside
 > the `.blend` and a hidden cache), Blank's ground grid and scale reference (Blank adds
-> nothing), stroke types (removed: a stroke is just a stroke, and the prompt says what it
-> means), and Blender 4.2 (5.2 is required).
+> nothing), and Blender 4.2 (5.2 is required).
 
 A **Blender extension** for AI-assisted modeling. You orbit a model, **sketch over it with Grease Pencil**, optionally add a text prompt or reference images, and a Claude agent (Anthropic **Agent SDK**) makes the edit in your open Blender scene. You watch it happen, steer it mid-turn, and every completed turn becomes a node in a branching history.
 
@@ -21,8 +20,7 @@ First target: **game props** — hard-surface / low-poly objects (lanterns, crat
 |---|---|
 | Host | Blender extension (Blender 5.2+) |
 | Scope | Game props first: bmesh + modifiers, low-poly |
-| Sketching | Grease Pencil, Surface placement, one layer per stroke type (superseded: one plain stroke) |
-| Strokes | Free by default, **optional** stroke types (superseded: one plain stroke) |
+| Sketching | Grease Pencil, Surface placement |
 | Agent reach | Mesh geometry, new objects, materials & UVs, geometry nodes |
 | Interaction | Watch and steer: live stream, interrupt / amend mid-turn |
 | History | Branching snapshot tree |
@@ -97,24 +95,7 @@ The agent edits the live scene while you can still orbit and sketch. Rules:
 
 ### Setup
 - A **Whittle Sketch** Grease Pencil object per session, placement mode **Surface** (strokes stick to the target's surface; strokes off the surface fall back to the view plane at the cursor depth).
-- Tablet pressure, eraser end, and strength are Blender's own. Map tablet buttons to Whittle operators via normal keymaps (submit, next stroke type, capture view).
-
-### Stroke types: free by default, typed for precision
-> Stroke types were built and then removed: a stroke is just a stroke, and the prompt says
-> what it means (`decisions.md`, Sketching). This section records the original plan.
-
-One **layer per type**, each with its own colour. Drawing on the default layer = free.
-
-| Layer | Meaning to the agent | Colour |
-|---|---|---|
-| free | interpret with the prompt | white |
-| add / outline | "the shape should reach here" | green |
-| carve | remove material | red |
-| crease | hard edge / loop cut / bevel line | yellow |
-| region | prompt applies to this area (fill) | blue |
-| note | annotation (arrows, circles); never geometry | grey |
-
-A sidebar row of type buttons switches the active layer.
+- Tablet pressure, eraser end, and strength are Blender's own. Map tablet buttons to Whittle operators via normal keymaps (submit, capture view).
 
 ### Views
 A view = a camera snapshot (view matrix, projection, viewport size). Whittle captures one automatically when you start drawing from a substantially new angle, or explicitly with **Capture View**. Strokes are tagged with the view they were drawn from (stroke attribute / frame metadata). Views can be shown as small camera gizmos and clicked to snap back.
@@ -123,13 +104,13 @@ A view = a camera snapshot (view matrix, projection, viewport size). Whittle cap
 
 ```
 <chat folder>/nodes/<node-id>/request/      # superseded: was <blend name>.whittle/ beside the file
-  request.json      # prompt, parent node, target names, stroke types used, refs
+  request.json      # prompt, parent node, target names, refs
   views/
     0/camera.json   # view, projection, size
     0/overlay.png   # viewport render with strokes composited
     0/strokes.png   # strokes only, transparent
     1/...
-  strokes.json      # every stroke: type, view id, points (world xyz),
+  strokes.json      # every stroke: view id, points (world xyz),
                     # on-surface flag + normal, pressure
   refs/             # reference images
 ```
@@ -142,7 +123,7 @@ Strokes are already in world space (Grease Pencil gives us the projection), so t
 
 ### Harness
 - Claude Agent SDK, Python, one `ClaudeSDKClient` conversation **per session** so follow-ups keep context; the session id is stored with the history so it can resume after Blender restarts.
-- System prompt: Whittle conventions (scale and units, a loose triangle budget, material rules, naming, "sketch is intent, not exact geometry", stroke-type meanings, don't touch objects outside the target unless asked).
+- System prompt: Whittle conventions (scale and units, a loose triangle budget, material rules, naming, "sketch is intent, not exact geometry", don't touch objects outside the target unless asked).
 - Built-in file/shell tools off; the agent works through Whittle tools only.
 - bpy recipe **skills**: mesh check, fuse parts, blockout from silhouette, extrude along stroke, boolean carve, bevel/crease edges, mirror/array, lathe from profile, vertex-colour painting, geometry-node scatter.
 - Modeling practice in the prompt: parts that belong together become one closed shell, never a part buried in the body; defaults with reasons rather than hard rules (see [modeling-practices.md](modeling-practices.md)).
@@ -182,7 +163,7 @@ Strokes are already in world space (Grease Pencil gives us the projection), so t
 
 - **3D viewport → Sidebar (N) → "Whittle" tab**
   - Target picker, session status, agent connection.
-  - Stroke type buttons, Capture View, view list.
+  - Capture View, view list.
   - Prompt box, reference image list, **Submit**.
   - Stream (latest N entries; full transcript opens in a Text Editor block).
   - Interrupt / Amend.
@@ -233,7 +214,7 @@ Blender's UI is plainer than a web panel — that's the accepted trade.
 ## 9. Build phases (rough)
 
 1. **Agent + bridge**: agent process, socket bridge, timer-driven command queue, `exec`/`inspect`/`render`; drive it from a hand-made request bundle. Self-check loop working.
-2. **Sketch capture**: Whittle Sketch object, type layers, view capture, bundle writer.
+2. **Sketch capture**: Whittle Sketch object, view capture, bundle writer.
 3. **Sidebar + steering**: prompt, submit, stream, interrupt, amend, `whittle.ask` (and a target lock, since removed).
 4. **History**: per-node library snapshots, restore, branch, compare.
 5. **Starting points + preferences + packaging**.
