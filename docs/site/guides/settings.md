@@ -233,9 +233,11 @@ Change `base.md` once, and both follow.
 ### What loads, and when
 
 - **The list.** Under the field, **Sent with each turn** shows the files loaded, the first
-  ten and how many more. Their text goes to Anthropic with your turns, so look here in a
-  `.blend` you did not make: the path is stored in the file and could name something
-  private of yours. **and N more files** means more is being sent than you can see, so in a
+  ten and how many more. A file from outside the top guide's folder is shown in full and
+  listed first, so it cannot hide past the tenth row; the rest follow in import order, and
+  the text is sent in import order whatever the list shows. Their text goes to Anthropic
+  with your turns, so look here in a `.blend` you did not make: the path is stored in the
+  file and could name something private of yours. **and N more files** means more is being sent than you can see, so in a
   file you do not trust, clear **Style Notes** rather than send.
 - **The last read.** The list and its warnings show what the last read found, not what is on
   disk now. After you edit a guide or fix an import, they catch up at the next turn or save,

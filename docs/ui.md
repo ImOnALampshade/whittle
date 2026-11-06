@@ -127,7 +127,7 @@ repeated here: the attention box has them.
                                           (half a separator)
  Style Notes                              label at the field's left edge
  [ //style/crates.md             🗀 ][⟲]   a file field; reset in the column above
-   Sent with each turn:                   (dim) the files, in the order read
+   Sent with each turn:                   (dim) the files, any from elsewhere first
  ▤ crates.md                              (FILE_TEXT)
  ▤ base.md
  ⚠ @props.md in crates.md was not         (ERROR) wrapped to the popover;
@@ -163,10 +163,12 @@ lines, and which `//` makes relative to the `.blend`. Empty means no guide, and 
 chooses. Under the field, `prefs.draw_style_guide` shows the last read, from a cache, so a
 redraw never touches the disk (architecture §1, Style guides):
 
-- `Sent with each turn:` (dim) and the files, in the order read, each on a `FILE_TEXT`
-  line, the first `prefs.GUIDE_ROWS` (ten) and then `and 25 more files`, so a bad guide
-  cannot fill the popover. A file inside the first file's folder shows relative to it; one from elsewhere shows
-  in full, so it stands out. This is what lets the user see what a `.blend` is sending.
+- `Sent with each turn:` (dim) and the files, each on a `FILE_TEXT` line, the first
+  `prefs.GUIDE_ROWS` (ten) and then `and 25 more files`, so a bad guide cannot fill the
+  popover. A file inside the first file's folder shows relative to it; one from elsewhere
+  shows in full and comes first, so it stands out and the cut-off cannot hide it. The rest
+  are in the order read. This is a display order only: what is sent keeps its import
+  order. This list is what lets the user see what a `.blend` is sending.
 - Then each problem on an `ERROR` line, wrapped so no tooltip is needed: a file not found,
   one refused for its type, one that cannot be read, the size limit, or a `//` path in an
   unsaved file (`//style.md is relative to the .blend: save the file to use it.`). The first

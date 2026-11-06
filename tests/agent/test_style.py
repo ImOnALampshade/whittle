@@ -334,12 +334,15 @@ class GuideTest(unittest.TestCase):
         self.write("art/base.md", "base")
         outside = self.write("elsewhere/other.md", "other")
         guide = self.load(self.write("project/style.md", f"@../art/base.md\n@sub/a.md\n@{outside}"))
-        self.assertEqual(guide.names()[0], "style.md")
-        self.assertEqual(guide.names()[1], str(self.dir / "art" / "base.md"), "from elsewhere: in full")
+        elsewhere = [str(self.dir / "art" / "base.md"), str(outside)]
+        self.assertEqual(guide.names(), [*elsewhere, "style.md"], "from elsewhere: in full, and first")
         self.write("project/sub/a.md", "a")
         guide = self.load(self.dir / "project" / "style.md")
-        self.assertEqual(guide.names()[2], str(Path("sub") / "a.md"))
+        self.assertEqual(guide.names(), [*elsewhere, "style.md", str(Path("sub") / "a.md")])
         self.assertEqual(style.Guide().names(), [])
+
+    def test_names_at_a_filesystem_root(self):
+        self.assertEqual(style.Guide("", ("/style.md", "/a.md")).names(), ["style.md", "a.md"])
 
 
 class SectionTest(unittest.TestCase):

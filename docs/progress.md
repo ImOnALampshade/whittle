@@ -302,7 +302,7 @@ session can start from the scene, from nothing, from a primitive or from an asse
   the conversation, and the agent gets a line saying part of the guide is missing; the turn
   runs. The guide is read again before each turn and a changed text restarts the agent;
   amends do not reread. The agent popover and the Defaults box list the files being sent,
-  the first ten and how many more. Opening a file reads only the preferences' own path; the
+  the first ten and how many more, any from outside the top guide's folder first. Opening a file reads only the preferences' own path; the
   file's waits for a Send, a save or **Read Now** (`whittle.style_guide_read`), so a `.blend`
   cannot reach a network share just by being opened. Backslashes in a relative path read as
   slashes on every platform, in the field and in imports, and a Save As or Save Copy into

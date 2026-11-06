@@ -44,11 +44,14 @@ class Guide:
 
     def names(self) -> list[str]:
         """The files for the user: relative to the first one's folder where
-        they are inside it, so a file from elsewhere stands out in full."""
+        they are inside it, so a file from elsewhere stands out in full, and
+        those from elsewhere first, so a list cut short cannot hide one.
+        Otherwise in the order read, which files and the text always keep."""
         if not self.files:
             return []
-        folder = os.path.dirname(self.files[0]) + os.sep
-        return [path.removeprefix(folder) for path in self.files]
+        folder = os.path.join(os.path.dirname(self.files[0]), "")
+        inside = [path.removeprefix(folder) for path in self.files if path.startswith(folder)]
+        return [path for path in self.files if not path.startswith(folder)] + inside
 
 
 def portable_path(path: str) -> str:

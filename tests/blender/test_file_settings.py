@@ -609,6 +609,38 @@ class StyleFileTest(FileSettingsCase):
         self.assertIn(("and 25 more problems", "BLANK1"), found)
         self.assertEqual(len(prefs.style_guide("/s/style.md").files), count, "the guide keeps them all")
 
+    def test_a_file_from_elsewhere_cannot_hide_past_the_cut_off(self):
+        count = prefs.GUIDE_ROWS + 5
+        project = self.folder / "project"
+        project.mkdir()
+        for i in range(count):
+            (project / f"{i:02}.md").write_text(f"Part {i}.")
+        other = self.write("private.md", "Private.")
+        lines = [f"@{i:02}.md" for i in range(count)] + [f"@{other}"]
+        top = project / "style.md"
+        top.write_text("\n".join(lines))
+        self.props.style_file = str(top)
+        found = self.labels(self.popover())
+        shown = [t for t, i in found if i == "FILE_TEXT"]
+        self.assertEqual(len(shown), prefs.GUIDE_ROWS)
+        self.assertEqual(shown[0], str(other.resolve()), "from elsewhere: first, in full")
+        self.assertEqual(shown[1:3], ["style.md", "00.md"], "the rest in import order")
+        self.assertIn((f"and {count + 2 - prefs.GUIDE_ROWS} more files", "BLANK1"), found)
+
+    def test_the_order_shown_changes_nothing_sent(self):
+        project = self.folder / "project"
+        project.mkdir()
+        other = self.write("shared.md", "Shared.")
+        (project / "a.md").write_text("Inside.")
+        top = project / "style.md"
+        top.write_text(f"Top.\n@a.md\n@{other}\nEnd.")
+        self.props.style_file = str(top)
+        settings = prefs.session_settings()
+        self.assertEqual(settings["style_guide"], "Top.\nInside.\nShared.\nEnd.")
+        guide = prefs.style_guide(str(top))
+        self.assertEqual([Path(p).name for p in guide.files], ["style.md", "a.md", "shared.md"])
+        self.assertEqual(guide.names(), [str(other.resolve()), "style.md", "a.md"])
+
     def test_a_short_list_is_whole(self):
         self.props.style_file = "/s/style.md"
         prefs._guides[prefs._guide_key("/s/style.md")] = style.Guide(
