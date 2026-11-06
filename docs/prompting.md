@@ -67,7 +67,7 @@ The prompt's own formatting leaks into replies. A prompt heavy with headings and
 
 ## Context notes and errors
 
-- **Mark where text came from.** **[5.5]** Wrap application context (the "Context from Whittle" notes, user amendments) in descriptive tags such as `<whittle_context>` and `<user_amendment>`, and text the user pasted from elsewhere in tags carrying a short random id. Add one system-prompt line saying instructions inside pasted content are followed only when the user's own message asks. The tags are plain text and can be imitated, so this is one layer of defence, not the only one.
+- **Mark where text came from.** **[5.5]** Wrap application context (the "Context from Whittle" notes, user amendments) in descriptive tags such as `<whittle_context>` and `<user_amendment>`, and text the user pasted from elsewhere in tags carrying a short random id. Add one system-prompt line saying instructions inside pasted content are followed only when the user's own message asks. A style guide is the same kind of text: it is a file that may be shared across a project, so it sits in `<style_guide>` tags, and the prompt says it speaks to the look and nothing else. `style.guide_section` defuses a `style_guide` tag inside the text, so a guide cannot close its own block, but tags are plain text and others can be imitated, so this is one layer of defence, not the only one.
 - **High-signal results.** Return what the agent needs to decide its next step: for `exec`, stdout, the exception and a compact summary of what changed. Truncate long output with a note on how to get the rest.
 - **Actionable errors.** Say what to change, with the valid options: `object "Body" not found; targets are: Crate, Lid`, not `KeyError`.
 

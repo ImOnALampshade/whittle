@@ -38,7 +38,7 @@ Windows or macOS yet: reports welcome (see [Platforms](#platforms)).
 
 | The chat menu | The agent popover |
 |---|---|
-| ![The chat menu: New Chat, three conversations with their turns, age and size, and the rename and delete items](docs/images/chat-menu.png) | ![The agent popover: the agent's state, model and effort, this file's triangle budget, self-check rounds, render size, palette, bevel style and style notes, each with its reset button, and Start Agent](docs/images/agent-popover.png) |
+| ![The chat menu: New Chat, three conversations with their turns, age and size, and the rename and delete items](docs/images/chat-menu.png) | ![The agent popover: the agent's state, model and effort, this file's triangle budget, self-check rounds and render size, its Style Notes file with the files it sends and a warning, each setting with its reset button, and Start Agent](docs/images/agent-popover.png) |
 
 ## Status and limitations
 
@@ -175,14 +175,21 @@ sends renders back to the model. Set spending limits in the Console.
 **Model for New Chats** is the model a new chat starts on, `claude-opus-5-5` by default;
 it suggests the models last reported for your key and the ones Whittle knows, and takes any other model id. The **Defaults** box
 sets what every session starts with: the triangle budget, self-check rounds and render
-size, and the style Claude works to: a **Palette** (a short list of colours, such as
-"weathered oak, dark iron"), a **Bevel Style** (none, subtle or chunky, or your own words)
-and free **Style Notes**. The palette and bevel style are empty by default, which leaves
-those choices to Claude. A file can set its own value for each of them in the agent
-popover (the icon at the right of the panel's header) under **For This File**: an unset
-one shows the preference's value and says "(default)", and the reset button beside a set
-one goes back to it. They are saved with the .blend. Claude reads the style as the
-preferences for that file, not as rules: a request's prompt or sketch still wins.
+size, and **Style Notes**, the path to a style guide. A file can set its own value for
+each of them in the agent popover (the icon at the right of the panel's header) under
+**For This File**: an unset one shows the preference's value and says "(default)", and the
+reset button beside a set one goes back to it. They are saved with the .blend.
+
+A style guide is a `.md` or `.txt` file saying how things should look: colours, edges,
+materials, mood, in your own words. Many `.blend` files can point at one guide, and a guide
+can import others with a line holding only `@path`, so a project's base look is written
+once. `//` at the start of the path means the `.blend`'s folder. Empty leaves the look to
+Claude. Claude reads the guide as your preferences for that file, not as rules: a request's
+prompt or sketch still wins. Only `.md` and `.txt` files load, up to 128 KiB in all, since
+a `.blend` from someone else could name any file on your computer; the agent popover lists
+what is sent. A file that cannot load is a warning, and the turn still runs. Guides are read
+again before each turn, so an edit applies from the next one.
+[Style guides](docs/site/guides/settings.md#style-guides) has a worked example.
 
 ## Use
 
@@ -272,11 +279,12 @@ environment sets that variable. What a turn sends:
 
 - your prompts, amendments and answers to Claude's questions, and the reference images
   you attach or pin;
-- the sketch: the strokes with their types and positions, the camera of each view, and
+- the sketch: the strokes with their positions, the camera of each view, and
   the overlay images of your strokes over the viewport;
 - what Claude looks at while it works: scene information it asks for (object names,
   transforms, mesh statistics, materials, modifiers, node groups), the output and errors
   of the Python it runs, and the self-check renders it makes of the target;
+- the text of the style guide, if the file has one: every file the agent popover lists;
 - Whittle's system prompt and recipe skills, and the conversation so far.
 
 Anthropic's handling of API data is set out in its
@@ -401,7 +409,7 @@ WHITTLE_GUI=1 ./run_tests.sh            # the whole suite, then every check
 
 Some things only a GUI Blender does: a real Ctrl+Z (undo needs a window), the draw tool
 placing strokes on surfaces, a transform's modal operator, the Asset Browser's context
-menu, file browsers, Blender's autosave and File → Recover, the title bar's `*`, the
+menu, file browsers (a reference's, Style Notes'), Blender's autosave and File → Recover, the title bar's `*`, the
 Preferences window.
 `gui_checks.sh` first builds the extension with `build.sh` and installs it the way you
 would, with `blender --command extension install-file`, into a local extension

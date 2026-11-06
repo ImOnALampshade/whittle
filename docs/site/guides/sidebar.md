@@ -55,7 +55,7 @@ The panel's header has the chat on the left and the agent on the right.
   conversation instead, so the gear stays a gear.
 
 ```{figure} ../images/guides-sidebar/agent-popover.png
-:alt: The agent popover: the agent's state, the model and effort, the For This File settings with a reset button on each line, then Start Agent and Preferences.
+:alt: The agent popover: the agent's state, the model and effort, the For This File settings with a reset button on each line and the style guide's files under Style Notes, then Start Agent and Preferences.
 
 The agent popover. At the top are the agent's state, and the current chat's model and
 effort. **For This File** holds the settings stored in this `.blend`. At the bottom are

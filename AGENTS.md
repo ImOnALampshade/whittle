@@ -222,13 +222,23 @@ Auth and Distribution).
   and effort (`models.EFFORTS`, High by default), set from the menu beside Send and
   recorded in its chat entry. **Model for New Chats** in the preferences only seeds new
   chats.
-- **Per-file settings** (ui.md §3.1, the agent popover's For This File): the six session
+- **Per-file settings** (ui.md §3.1, the agent popover's For This File): the four session
   settings in `prefs.SESSION_SETTINGS` (triangle budget, self-check rounds, render size,
-  palette, bevel style, style notes) are the preferences' Defaults, and a file can
-  override each one (`props.FILE_SETTINGS`, stored on the scene, so they travel with the
-  `.blend`). `prefs.session_settings()` merges them; a change restarts the agent before
+  style notes) are the preferences' Defaults, and a file can override each one
+  (`props.FILE_SETTINGS`, stored on the scene, so they travel with the `.blend`). `prefs.session_settings()` merges them; a change restarts the agent before
   the next turn. Names, tooltips and bounds live once in `prefs.py` (`LABELS`,
-  `DESCRIPTIONS`, `LIMITS`); `whittle/style.py` words the style for the agent.
+  `DESCRIPTIONS`, `LIMITS`).
+- **Style guides** (architecture §1, decisions Behaviour): Style Notes (`style_file`) is
+  a path to a `.md` or `.txt` file, which `style.load_guide` reads with its `@path`
+  imports. Draw code only asks `prefs.style_guide` for the last read; the disk is read
+  before each turn and when a path may have changed, never from a redraw or during a
+  turn. `session_settings` carries the text, so a changed guide restarts the agent like a
+  changed setting. Nothing about a guide fails a turn: a problem is a warning for the
+  user and one line for the agent. A `.blend` from someone else can name any path and
+  what loads goes to the API, so keep the file-type check on the resolved path and the
+  128 KiB cap. A save into another folder rewrites `//` overrides as strings only
+  (`props.rebase_style_paths`): it never reads the guide, and it writes the store, not the
+  property, whose update reads. `style.portable_path` leaves rooted paths alone.
 - **Chats from another machine** (ui.md §3.11): every chat records the install that
   made it (`origin`, the random id in the user folder's `install.json`). A chat from
   another install opens with a **Continue this chat?** box; Send stays disabled
@@ -265,6 +275,10 @@ Auth and Distribution).
   `tests/blender/test_prefs.py`, and the README. A session setting a file may override
   also goes in `prefs.SESSION_SETTINGS` (with its `LABELS` and `DESCRIPTIONS`), which
   gives it a field in For This File; tests in `tests/blender/test_file_settings.py`.
+- **The style guide**: resolving it and its wording in `whittle/style.py` (tests in
+  `tests/agent/test_style.py`), the last reads and what the sidebar shows in
+  `addon/prefs.py`, how the agent is to read it in `agent/system_prompt.md`, and the
+  user's view in `docs/site/guides/settings.md`.
 - **Something platform-specific**: `whittle/platforms.py` (with the platform passed
   in, tested in `tests/agent/test_platforms.py`), `venv.compatible()` for which
   platforms set up at all, and the README's Platforms table.

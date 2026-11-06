@@ -133,6 +133,13 @@ class ToolHandlerTest(unittest.IsolatedAsyncioTestCase):
         base64_chars = -(-formats.REQUEST_IMAGE_BYTES // 3) * 4
         self.assertLess(base64_chars + 2 * tools.STROKES_TEXT_LIMIT, 256 * 1024 * 1024)
 
+    def test_the_request_shows_no_style_settings(self):
+        bundle = formats.read_bundle(BUNDLE)
+        bundle.request.settings = {"poly_budget": 500, "style_file": "/home/me/style.md", "palette": "oak, iron",
+                                   "bevel_style": "subtle", "style_notes": "An older request's notes."}
+        text = tools.describe_bundle(bundle)[0]["text"]
+        self.assertIn('Settings: {"poly_budget": 500}\n', text)
+
     def test_dense_strokes_are_decimated_into_valid_json(self):
         bundle = formats.read_bundle(BUNDLE)
         long = make_stroke(0, 20_000)

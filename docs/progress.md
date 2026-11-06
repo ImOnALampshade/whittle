@@ -279,27 +279,48 @@ session can start from the scene, from nothing, from a primitive or from an asse
   a row of its own so it is never cut off, a Get an API Key link under it, the model for new chats, the Powered by Claude line),
   Agent Environment (folder, status on rows of its own, wrapped to the window and a long
   path broken after a folder, Install / Reinstall / Cancel, the setup log),
-  Defaults (triangle budget, self-check rounds, render size, palette, bevel style, style
-  notes) and Development (agent Python). Every default comes from `DEFAULTS`; the palette
-  and bevel style are empty, which leaves those choices to the agent.
+  Defaults (triangle budget, self-check rounds, render size, style notes, with what the
+  guide sends under its field) and Development (agent Python). Every default comes from
+  `DEFAULTS`; the style notes are empty, which leaves the look to the agent.
 - **Per-file settings** (design §10 guardrails, ui.md §3.1): `scene.whittle.poly_budget`,
-  `self_check_rounds`, `render_size`, `palette`, `bevel_style` and `style_notes` override
+  `self_check_rounds`, `render_size` and `style_file` override
   the preferences for one file and are saved with it; the agent popover edits them under
   For This File, each "(default)" while unset and with a reset button
   (`whittle.file_setting_reset`). `prefs.session_settings(scene)` puts them over the
   preferences, so the session, the request bundle and the restart check all use the
-  file's values. Bevel Style suggests none / subtle / chunky and takes any text.
+  file's values.
   Tests: `tests/blender/test_file_settings.py` (the default read through, an override and
   its reset, the bounds, a wrong-typed value, another scene, the popover's names, order
   and resets, the values in a saved file read by a fresh Blender, a restart on each kind
-  of change, the palette and bevel style in the built prompt), `tests/blender/test_prefs.py`
-  (names, tooltips, bounds, the bevel suggestions).
-- **Style in the system prompt**: the prompt ends with "Style for this file", the
-  palette, bevel style and notes as the user's preferences for the file, applied with
-  judgement (`whittle/style.py` words them; a suggested bevel style is spelled out, an
-  empty value leaves the choice to the agent). Tests: `tests/agent/test_prompt.py`,
-  `tests/agent/test_dispatch.py` (a non-string style value is refused). How the model
-  responds to the wording is unchecked: no live run has had a palette or bevel style yet.
+  of change, the guide in the built prompt), `tests/blender/test_prefs.py`
+  (names, tooltips, bounds).
+- **Style guides** (architecture §1, Style guides; decisions Behaviour): Style Notes
+  (`style_file`) is a path to a `.md` or `.txt` file, `//` paths included, shared by as many
+  `.blend` files as point at it. `style.load_guide` reads it with its `@path` imports: in
+  place, nested, relative to the importer, a file reached twice included once, the file type
+  judged after symlinks, 128 KiB in all. A problem is a warning under the field and once in
+  the conversation, and the agent gets a line saying part of the guide is missing; the turn
+  runs. The guide is read again before each turn and a changed text restarts the agent;
+  amends do not reread. The agent popover and the Defaults box list the files being sent,
+  the first ten and how many more. Opening a file reads only the preferences' own path; the
+  file's waits for a Send, a save or **Read Now** (`whittle.style_guide_read`), so a `.blend`
+  cannot reach a network share just by being opened. Backslashes in a relative path read as
+  slashes on every platform, in the field and in imports, and a Save As or Save Copy into
+  another folder rewrites each scene's `//` override (`props.rebase_style_paths`), with no
+  read and no restart of the agent, and an undo or redo across it rewrites what it brings back
+  (`props.follow_style_paths`), so the path goes on naming the same guide.
+  Old `palette`, `bevel_style` and `style_notes` values are ignored, in preferences, scenes
+  and bundles alike. Tests: `tests/agent/test_style.py`, `test_file_settings.StyleFileTest`,
+  `test_file_settings.StylePathSaveTest` (real saves, `tests/blender/style_path_file.py`),
+  `test_runner.py` (`.system_prompt.md`), the GUI check `style_notes_picker`.
+- **Style in the system prompt**: the prompt ends with "Style for this file", the guide in
+  `<style_guide>` tags as the user's for the file, applied with judgement and speaking to
+  the look only (`style.guide_section` words it; with no guide, the look is left to the
+  agent). The prompt reaches the CLI by file, `.system_prompt.md` in the session folder,
+  since a full-size guide does not fit on a command line. Tests:
+  `tests/agent/test_prompt.py`, `tests/agent/test_dispatch.py` (a wrong-typed style value is
+  refused). How the model responds to the wording is unchecked: no live run has had a style
+  guide yet.
 - **API key only** (architecture §2, Authentication): the agent starts only with a key
   (the preference, else `ANTHROPIC_API_KEY` in Blender's environment); without one the
   process goes to `needs_key` and the attention box asks for a key. The agent's
@@ -342,7 +363,8 @@ these are fixed, each with a regression test.
 
 - **Settings changes restart an idle agent**: `operators.controller()` compares what the
   running agent was started with (`TurnController.launch_settings()`: Python, fake script,
-  API key digest, model, session settings) with the settings now. A changed fake script
+  API key digest, model, session settings, the style guide's text among them) with the
+  settings now. A changed fake script
   replaces the controller; anything else stops the idle agent, so the next run starts a
   fresh one and resumes the conversation from the history. A busy controller is never
   touched (`test_steering.ControllerTest`).
@@ -460,12 +482,12 @@ timer).
 - `tests/gui/checks.py`: `GuiStage` (the screenshot stage plus simulated keys, clicks,
   drags and typing, `button()` running an operator as a sidebar button does, in the
   sidebar region with an undo step, File-menu saves and opens, and the fake agent's log)
-  and 30 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
+  and 31 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
   `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `fold_undo`,
   `fold_undo_object`, `fold_undo_chat`, `undo_compare`,
   `modal_wait`, `save_as`, `recover_autosave`, `recover_last_session`,
   `crash_keeps_chats`, `dirty_flag`, `send_key`, `send_key_errors`, `shortcut`, `auto_targets`, `branch_undo`,
-  `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`, `preferences_key`,
+  `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`, `style_notes_picker`, `preferences_key`,
   `preferences_environment`, `preferences_defaults`. Each says what it confirms in the
   catalog. The preference checks open the Preferences through Preferences… as the
   sidebar runs it, use fake API keys only (Blender has no online access, and the
@@ -738,6 +760,15 @@ them at each save. Nothing is written beside the `.blend`.
   platform, even where pip installs the same 30 packages, so each one needs **Reinstall**.
   CI's Blender bundles Python 3.13, so it can only exercise the cp313 wheel of 311; the
   cp314 wheel is not exercised by CI.
+- **Style guides**: a `.blend` moved outside Blender (a file manager, `git mv`) gets no
+  save, so its `//` Style Notes path is not rewritten: the guide then shows a not-found
+  warning and the turn runs. A Save As with Remap Relative off
+  rewrites the path all the same, since the handlers cannot see that option. The file browser does not filter to `.md` and `.txt`, so another file
+  can be picked and is then refused with a warning; a filter needs a custom operator. A file
+  that would pass the 128 KiB cap ends the guide there, the rest of the files still open
+  included, so a single guide over it sends nothing,
+  and a non-UTF-8 file is refused, so a Latin-1 file with one accented letter gives a
+  warning: both are as built, for the maintainer to confirm.
 - **Found while writing the documentation site**. The site describes what happens today, so
   a fix here also changes its page:
   - **A system-wide pip config** still reaches setup through `extra-index-url`, `find-links`
@@ -1027,13 +1058,18 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     viewport goes back there, and a stroke drawn now joins that view (its row's count
     goes up, no new view). Untick Markers While Sketching: they go.
 13. **Per-file settings by hand** (`stream.json`): the agent popover's For This File shows
-    the preferences' six settings, each "(default)" with its reset button greyed out. Type
+    the preferences' four settings, each "(default)" with its reset button greyed out. Type
     a budget into its field, then press its reset button: the "(default)" goes, then comes
     back with the preferences' value (the checks set the field and run the button as it
-    would, and check that the palette and bevel style reach `request.json`:
-    `preferences_defaults`). Click into Bevel Style: none, subtle and chunky are offered,
-    and other text can be typed.
+    would, and check that the settings reach `request.json`: `preferences_defaults`).
 14. **Images too big**: attach references that come to more than 180 MB and Send: an error
     says how big they are, nothing is sent, the prompt and chips stay, and the next turn takes
     the same number. With `too_large.json`, Send: the turn ends with its reason in red and
     **Edit** in Retry's place; Edit brings the request back to change.
+15. **A style guide across files**: point two saved `.blend` files at guides that import one
+    base file (`style_notes_picker` covers picking a file, one missing import, and Read Now after
+    reopening). Both list the base under Style Notes. Edit the base and send a turn in each: the agent restarts
+    first, and `.system_prompt.md` in the session folder holds the edit. Clear the field: it
+    says no guide is set. In an unsaved file, a `//` path warns and a turn still runs.
+    Save As into another folder through the file browser: the field shows the rewritten path
+    and the guide stays listed, and Ctrl+Z and Ctrl+Shift+Z across it leave the guide listed. A `.blend` and guides shared with a Windows machine read there too.

@@ -96,7 +96,7 @@ def main():
         target=[{"uid": "fixture-crate", "name": "Crate", "type": "MESH"}],
         views=[v.id for v in views], refs=[],
         units={"system": "METRIC", "scale_length": 1.0},
-        settings={"self_check_rounds": 2, "poly_budget": 500, "style_notes": ""},
+        settings={"self_check_rounds": 2, "poly_budget": 500, "style_file": ""},
     )
     formats.write_request(OUT, request, strokes, views)
 

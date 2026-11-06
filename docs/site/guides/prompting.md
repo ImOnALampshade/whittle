@@ -39,8 +39,9 @@ say where: "carve this slot" over a stroke needs nothing more.
   is fused into one closed mesh, and a part that moves on its own, like a lid or a wheel,
   stays a separate object parented to the body. Ask if you want it otherwise.
 - **Name the look.** Claude uses flat colours or vertex colours, not textures. For a look
-  that should hold across a whole file, set a palette, bevel style or style notes in
-  [Settings](settings.md) instead of repeating it. A prompt or sketch wins over those.
+  that should hold across a whole file or project, write a
+  [style guide](settings.md#style-guides) instead of repeating it. A prompt or sketch wins
+  over the guide.
 - **Ask for one edit at a time.** Each turn is a step in the
   [history](history.md) you can go back to or branch from, so smaller turns give you more
   places to return to.

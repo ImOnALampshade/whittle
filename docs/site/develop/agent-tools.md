@@ -203,7 +203,8 @@ The result is one text block and then the images:
 
 - The node and its parent, the prompt, the targets and any target collection.
 - A line on the strokes: how many, their views and how many points lie on a surface.
-- Units and the session settings.
+- Units, and the self-check rounds and triangle budget (`tools.SHOWN_SETTINGS`). The style
+  guide is in the system prompt instead.
 - Each sketch view's size, camera type, eye position and strokes-only PNG path.
 - The strokes as world-space JSON.
 - An overlay image per sketch view, then each reference image, each under its own `image:` line.
@@ -295,8 +296,10 @@ in `tests/agent/test_tools.py` against a stub connection. See {doc}`Development 
 
 `prompt.build(settings, inline_skills=False)` fills `agent/system_prompt.md` with
 `string.Template` and appends a section on the recipes. The runner builds it once, when a
-session starts, because the prompt and tool list stay fixed for a session. A changed setting
-restarts the agent before the next turn; see {doc}`Settings <../guides/settings>`.
+session starts, because the prompt and tool list stay fixed for a session, and writes it to
+`.system_prompt.md` in the session folder for the CLI to read: a full-size style guide would not
+fit on a command line. A changed setting or style guide restarts the agent before the next turn;
+see {doc}`Settings <../guides/settings>`.
 
 | Section | Sets |
 |---|---|
@@ -309,7 +312,7 @@ restarts the agent before the next turn; see {doc}`Settings <../guides/settings>
 | Modeling practice | Defaults with reasons: one closed shell, no faked joins, ways to fuse, what stays separate, live or baked booleans, welding, topology, shading, remeshing. |
 | Conventions | Units, style, the triangle budget, materials, naming, scene safety, standing on z = 0, and reading strokes as intent. |
 | Reading the sketch | Strokes are markup and the prompt says what they mean, what to go on when it says little, and how to read `on_surface` and off-surface points. |
-| Style for this file | The palette, bevel style and notes, to apply with judgement. |
+| Style for this file | The file's style guide, to apply with judgement, and that it speaks to the look and nothing else. |
 | bpy recipes | Added by `prompt.build`: the skills by name, and when to load one. |
 
 The research behind Modeling practice is in `docs/modeling-practices.md`.
@@ -320,15 +323,14 @@ The research behind Modeling practice is in `docs/modeling-practices.md`.
 |---|---|---|
 | `$self_check_rounds` | 3 | |
 | `$poly_budget` | 2000 | |
-| `$palette` | empty | `none set; pick colours that suit the object and the prompt.` |
-| `$bevel_style` | empty | `none set; bevel where the shape and the style call for it.` |
-| `$style_notes` | empty | `none.` |
+| `$style_guide` | empty | `style.NO_STYLE_GUIDE`: none is set, so the look is the agent's to choose. |
 
-The defaults are `prompt.DEFAULTS`, and the wording is `whittle/style.py`. A bevel style of
-`none`, `subtle` or `chunky` is spelled out for the agent; anything else goes in as typed. The
-values come from `prefs.session_settings`: the preferences, with the file's overrides on top.
+The defaults are `prompt.DEFAULTS`, and the wording is `whittle/style.py`. `style.guide_section`
+puts a guide's text in `<style_guide>` tags, after `style.GUIDE_INCOMPLETE` if part of it did not
+load. The values come from `prefs.session_settings`: the preferences, with the file's overrides
+on top, and the text of the guide `style_file` points at. The agent never sees that path.
 
-`render_size` is the sixth session setting, but the prompt text does not use it. It reaches the
+`render_size` is a session setting too, but the prompt text does not use it. It reaches the
 agent as the default `size` of `render` and as the size of the overlay images in the bundle.
 
 ### What each turn adds

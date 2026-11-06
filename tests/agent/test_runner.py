@@ -4,8 +4,9 @@ import base64
 import io
 import json
 import os
+import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest import mock
 
 from claude_agent_sdk import (AssistantMessage, CLIJSONDecodeError, RateLimitEvent, SystemMessage, TextBlock,
@@ -13,12 +14,14 @@ from claude_agent_sdk import (AssistantMessage, CLIJSONDecodeError, RateLimitEve
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
 from tests.agent.fakes import FakeSdkClient, StubConnection, init_message, result_message
+from whittle import chats, style
 from whittle.agent import prompt, runner
 from whittle.agent.connection import BridgeCallError
 from whittle.agent.runner import SdkRunner, build_options, map_message, submit_text
 from whittle.agent.tools import TOOL_NAMES, ToolContext, build_servers
 
-PARAMS = {"session_dir": "/tmp/whittle-session", "model": "claude-haiku-5-5", "resume": None,
+SESSION_DIR = tempfile.TemporaryDirectory()
+PARAMS = {"session_dir": SESSION_DIR.name, "model": "claude-haiku-5-5", "resume": None,
           "fork": False, "settings": {"poly_budget": 777, "max_turns": 4, "max_budget_usd": 0.1}}
 
 
@@ -95,7 +98,7 @@ class OptionsTest(unittest.TestCase):
     def test_options(self):
         options = build_options({**PARAMS, "resume": "sess-0", "fork": True},
                                 build_servers(ToolContext(None)), inline_skills=False)
-        self.assertEqual(options.cwd, "/tmp/whittle-session")
+        self.assertEqual(options.cwd, SESSION_DIR.name)
         self.assertEqual(options.env["MCP_TOOL_TIMEOUT"], runner.MCP_TOOL_TIMEOUT_MS)
         self.assertTrue(options.env["CLAUDE_AGENT_SDK_CLIENT_APP"].startswith("whittle/"))
         self.assertEqual(options.max_budget_usd, 0.1)
@@ -491,6 +494,33 @@ class SdkRunnerTest(RunnerTestCase):
                 await r.start_session(PARAMS)
         self.assertIn("no CLI", cm.exception.message)
         self.assertEqual(self.events("error")[0][1]["code"], "connect_failed")
+
+
+class SystemPromptTest(RunnerTestCase):
+    async def test_a_long_guide_stays_off_the_command_line(self):
+        # One argument of 128 KiB or more cannot be passed on Linux, and a
+        # whole command line of 32 KiB on Windows.
+        r = self.make_runner()
+        guide = "é$\n" * (style.MAX_GUIDE_BYTES // 4)
+        await r.start_session({**PARAMS, "settings": {"style_guide": guide}})
+        options = FakeSdkClient.instances[-1].options
+        cmd = argv(options)
+        self.assertLess(sum(map(len, cmd)), 16 * 1024)
+        path = Path(flag(cmd, "--system-prompt-file"))
+        self.assertNotIn("--system-prompt", cmd)
+        self.assertEqual(path.parent, Path(SESSION_DIR.name))
+        self.assertEqual(path.read_text(encoding="utf-8"), prompt.build({"style_guide": guide}))
+        self.assertTrue(chats._skipped(PurePosixPath(path.name)), "kept out of what the chat packs")
+        await r.close()
+
+    async def test_a_new_session_writes_its_own_prompt(self):
+        r = self.make_runner()
+        await r.start_session({**PARAMS, "settings": {"style_guide": "First."}})
+        await r.start_session({**PARAMS, "settings": {"style_guide": "Second."}})
+        text = Path(flag(argv(FakeSdkClient.instances[-1].options), "--system-prompt-file")).read_text(encoding="utf-8")
+        self.assertIn("Second.", text)
+        self.assertNotIn("First.", text)
+        await r.close()
 
 
 class AmendTest(RunnerTestCase):

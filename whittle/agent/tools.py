@@ -302,6 +302,12 @@ def stroke_summary(bundle: formats.Bundle) -> str:
             f"{on} of {points} points on a surface")
 
 
+# What the agent is told of a request's settings. Its style guide is in its
+# system prompt: the path means nothing to it, and an older bundle's palette,
+# bevel style or notes are no longer the file's.
+SHOWN_SETTINGS = ("self_check_rounds", "poly_budget")
+
+
 def describe_bundle(bundle: formats.Bundle) -> list[dict]:
     """A bundle as tool result content: one text block with the request and its
     strokes, then each view's overlay and the reference images."""
@@ -313,7 +319,7 @@ def describe_bundle(bundle: formats.Bundle) -> list[dict]:
         *([f"New objects go in collection '{req.target_collection}'."] if req.target_collection else []),
         stroke_summary(bundle),
         f"Units: {req.units['system']}, scale_length {req.units['scale_length']}",
-        f"Settings: {json.dumps(req.settings)}",
+        f"Settings: {json.dumps({k: v for k, v in req.settings.items() if k in SHOWN_SETTINGS})}",
     ]
     if not bundle.views and not bundle.strokes:
         lines.append("Sketch: none. There are no strokes, sketch views or overlay images in this "

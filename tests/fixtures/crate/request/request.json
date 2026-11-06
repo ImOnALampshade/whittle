@@ -22,7 +22,7 @@
  "settings": {
   "self_check_rounds": 2,
   "poly_budget": 500,
-  "style_notes": ""
+  "style_file": ""
  },
  "refs": [],
  "amend": null,

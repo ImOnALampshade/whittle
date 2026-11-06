@@ -13,7 +13,7 @@ This page is a map of the package, then the generated listing. The
 
 **Settings and files**
 
-- {py:mod}`~whittle.addon.prefs`: the add-on preferences, with defaults when the add-on is not registered.
+- {py:mod}`~whittle.addon.prefs`: the add-on preferences, with defaults when the add-on is not registered, and the last read of each style guide.
 - {py:mod}`~whittle.addon.props`: per-scene state, `scene.whittle`.
 - {py:mod}`~whittle.addon.paths`: where Whittle keeps its files and which Python runs the agent.
 - {py:mod}`~whittle.addon.setup`: sets up the agent's private venv, and holds the operators behind the preferences' buttons.

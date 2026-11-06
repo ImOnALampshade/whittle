@@ -1,36 +1,208 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The style settings a file or the preferences give the agent: the bevel
-styles the Bevel Style field suggests, and how the system prompt words the
-palette, bevel style and style notes. Stdlib only: the add-on offers the
-suggestions, the agent's prompt.build words them.
+"""The style guide a file or the preferences point at: resolving it from disk
+and how the system prompt words it. Stdlib only: the add-on loads the guide
+and hands over its text, the agent's prompt.build words it.
 
-Bevel Style is free text with suggestions rather than a fixed list: the three
-named styles cover most props and each is spelled out for the agent, while a
-style of the user's own ("rounded corners only", "2 mm") reaches it as typed."""
+A guide is a text file that can import others, one `@path` per line, so a
+project's files can share a base. The path to it is stored in the .blend, and
+a file from someone else could name anything on this machine, so only text
+files load and the total is capped: what loads goes to the API.
 
-# Suggested bevel style -> what the system prompt tells the agent it means.
-BEVEL_STYLES = {
-    "none": "none: crisp, unbevelled edges",
-    "subtle": "subtle: narrow bevels on hard edges, just wide enough to catch the light",
-    "chunky": "chunky: wide, clearly visible bevels that round edges and corners off, a stylised look",
-}
+A guide and the .blend files naming it often live in one repository, shared
+between Windows and Linux at different paths, so relative paths read the same
+everywhere and Save As keeps a // path on the same file."""
 
-NO_PALETTE = "none set; pick colours that suit the object and the prompt."
-NO_BEVEL_STYLE = "none set; bevel where the shape and the style call for it."
-NO_STYLE_NOTES = "none."
+import os
+import re
+from collections.abc import Iterator
+from dataclasses import dataclass
+
+MAX_GUIDE_BYTES = 128 * 1024
+# Judged on the path with its symlinks resolved, so a notes.md link to a
+# private key is refused.
+GUIDE_SUFFIXES = (".md", ".txt")
+
+NO_STYLE_GUIDE = "No style guide is set for this file, so the look is yours to choose from the object and the prompt."
+GUIDE_INCOMPLETE = ("Part of the user's style guide could not be loaded and is missing here. Decide what it would "
+                    "have settled yourself, and if that shows in the result say so in a few words in your reply.")
+
+# Any indent and list or quote markers before it: a fence inside a list item
+# is still a fence, and guides show the import syntax in lists.
+_FENCE = re.compile(r"\s*(?:(?:[-*+]|\d+[.)])\s+|>\s*)*(`{3,}|~{3,})(.*)")
+_GUIDE_TAG = re.compile(r"<(?=\s*/?\s*style_guide\b)", re.IGNORECASE)
+# C:\x.md, and C:x.md, which Windows reads against that drive's current folder.
+_DRIVE = re.compile(r"[A-Za-z]:")
 
 
-def palette_text(palette: str) -> str:
-    """The palette for the system prompt: as typed, else NO_PALETTE."""
-    return palette.strip() or NO_PALETTE
+@dataclass(frozen=True)
+class Guide:
+    """A style guide as read from disk: the combined text, the files it came
+    from (resolved, in the order read) and what went wrong, for the user."""
+    text: str = ""
+    files: tuple[str, ...] = ()
+    problems: tuple[str, ...] = ()
+
+    def names(self) -> list[str]:
+        """The files for the user: relative to the first one's folder where
+        they are inside it, so a file from elsewhere stands out in full."""
+        if not self.files:
+            return []
+        folder = os.path.dirname(self.files[0]) + os.sep
+        return [path.removeprefix(folder) for path in self.files]
 
 
-def bevel_text(bevel_style: str) -> str:
-    """A suggested style spelled out; anything else as the user typed it."""
-    text = bevel_style.strip()
-    return BEVEL_STYLES.get(text.lower(), text) or NO_BEVEL_STYLE
+def portable_path(path: str) -> str:
+    r"""A path with the backslashes of a relative one made forward slashes, so
+    what was written on Windows reads on Linux and macOS: a // path, one
+    relative to an importing file, one under ~. A rooted path stays as it is,
+    since C:\x.md, \server\share and \x.md mean something on Windows only and
+    \server made //server would read as relative to the .blend. The same on
+    every platform, so a relative path cannot name a file with a backslash in
+    its name."""
+    if not path.startswith("//") and (path[:1] in ("/", "\\") or _DRIVE.match(path)):
+        return path
+    return path.replace("\\", "/")
 
 
-def notes_text(style_notes: str) -> str:
-    """The style notes for the system prompt: as typed, else NO_STYLE_NOTES."""
-    return style_notes.strip() or NO_STYLE_NOTES
+def rebased_path(path: str, old_folder: str, new_folder: str, flavour=os.path) -> str:
+    """A // path written from old_folder, as new_folder has to say it to name
+    the same file: forward slashes, so it stays portable, or the absolute path
+    if there is no way there, as from one Windows drive to another, or if a
+    folder on the way has a backslash in its name, which portable_path would
+    read as a separator. The text is unchanged when the folder is, and flavour
+    is ntpath or posixpath in the tests. Only strings: the path comes from the
+    file, and saving it is no reason to go and look at what it names."""
+    same = [flavour.normcase(flavour.normpath(folder)) for folder in (old_folder, new_folder)]
+    if same[0] == same[1]:
+        return path
+    target = flavour.normpath(flavour.join(old_folder, portable_path(path)[2:]))
+    try:
+        relative = flavour.relpath(target, new_folder).replace(flavour.sep, "/")
+    except ValueError:
+        return target
+    return target if "\\" in relative else "//" + relative
+
+
+def _import_target(line: str) -> str | None:
+    """What a line imports: it holds only @path. A path with a space in it
+    has to end like a guide file, so a line of prose starting with a handle
+    stays prose."""
+    line = line.strip()
+    if not line.startswith("@") or line[1:2].isspace() or len(line) == 1:
+        return None
+    path = line[1:]
+    if any(c.isspace() for c in path) and not path.lower().endswith(GUIDE_SUFFIXES):
+        return None
+    return path
+
+
+def _lines(text: str) -> Iterator[tuple[str, str | None]]:
+    """Each line of a file and what it imports, if anything. Lines in a
+    fenced code block never import: a guide can show the syntax."""
+    fence = None
+    for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        found = _FENCE.match(line)
+        if fence is not None:
+            if found and found[1].startswith(fence) and not found[2].strip():
+                fence = None
+            yield line, None
+        elif found and not (found[1][0] == "`" and "`" in found[2]):
+            fence = found[1]
+            yield line, None
+        else:
+            yield line, _import_target(line)
+
+
+def _identity(real: str) -> object:
+    """What makes a file the same file: a hard link, or another case of its
+    name on a case-insensitive volume, is a second path to it. Paths where
+    the file is gone, or where its volume gives no file ids."""
+    try:
+        found = os.stat(real)
+    except (OSError, ValueError):
+        return os.path.normcase(real)
+    return (found.st_dev, found.st_ino) if found.st_ino else os.path.normcase(real)
+
+
+def load_guide(path: str) -> Guide:
+    """Reads the guide at an absolute path (or one starting with ~), with
+    its imports in place of their @ lines. Import paths are relative to the
+    file importing them, and portable_path reads them. A file reached twice counts the first time only,
+    which also ends import loops. Nothing here fails: what cannot load is a
+    problem in the result, and the rest of the guide still counts."""
+    out: list[str] = []
+    files: list[str] = []
+    problems: list[str] = []
+    seen: set[object] = set()
+    room = MAX_GUIDE_BYTES
+    # The files being read, innermost last: their paths and remaining lines.
+    # A list rather than recursion, since a chain of imports can be deep.
+    stack: list[tuple[str, Iterator]] = []
+
+    def visit(target: str, shown: str) -> None:
+        nonlocal room
+        real = os.path.realpath(target)
+        key = _identity(real)
+        if key in seen:
+            return
+        seen.add(key)
+        if os.path.splitext(real)[1].lower() not in GUIDE_SUFFIXES:
+            problems.append(f"{shown} was refused: only .md and .txt files load.")
+            return
+        # A regular file only: reading a pipe called notes.md would never end.
+        if not os.path.isfile(real):
+            problems.append(f"{shown} was not found.")
+            return
+        try:
+            with open(real, "rb") as f:
+                data = f.read(room + 1)
+        except OSError as exc:
+            problems.append(f"{shown} cannot be read: {exc.strerror or exc}.")
+            return
+        if len(data) > room:
+            problems.append(f"{shown} passes the {MAX_GUIDE_BYTES // 1024} KiB limit: "
+                            "it and the rest of the guide were left out.")
+            room = -1
+            return
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = "\0"
+        if "\0" in text:
+            problems.append(f"{shown} cannot be read: it is not UTF-8 text.")
+            return
+        room -= len(data)
+        files.append(real)
+        stack.append((real, _lines(text)))
+
+    expanded = os.path.expanduser(portable_path(path))
+    if os.path.isabs(expanded):
+        visit(expanded, path)
+    else:
+        problems.append(f"{path} is not an absolute path.")
+    # The cap ends the walk: what follows was written to follow what is gone.
+    while stack and room >= 0:
+        importer, lines = stack[-1]
+        found = next(lines, None)
+        if found is None:
+            stack.pop()
+        elif found[1] is None:
+            out.append(found[0])
+        else:
+            target = os.path.join(os.path.dirname(importer), os.path.expanduser(portable_path(found[1])))
+            visit(target, f"@{found[1]} in {os.path.basename(importer)}")
+    return Guide("\n".join(out).strip(), tuple(files), tuple(problems))
+
+
+def guide_section(text: str, incomplete: bool = False) -> str:
+    """The guide for the system prompt: its text in tags, so its own headings
+    stay inside it, and a line if part of it is missing. A tag of the same
+    name in the text is defused: closing the block early would make what
+    follows read as Whittle's own prompt."""
+    text = _GUIDE_TAG.sub("&lt;", text.strip())
+    if not text and not incomplete:
+        return NO_STYLE_GUIDE
+    parts = [GUIDE_INCOMPLETE] if incomplete else []
+    if text:
+        parts.append(f"<style_guide>\n{text}\n</style_guide>")
+    return "\n\n".join(parts)

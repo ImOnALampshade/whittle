@@ -1958,8 +1958,127 @@ def defaults_turn(stage: GuiStage, prompt: str):
 
 
 def budget_and_style(sent: dict) -> tuple:
-    """The triangle budget, palette, bevel style and style notes sent."""
-    return tuple(sent["settings"][key] for key in ("poly_budget", "palette", "bevel_style", "style_notes"))
+    """The triangle budget and style notes file sent."""
+    return tuple(sent["settings"][key] for key in ("poly_budget", "style_file"))
+
+
+def hovered_copy(stage: GuiStage, x: int, y: int):
+    """What Ctrl+C copies with the pointer at x, y: Blender's way of naming
+    the button under it (a text field's text, a button's operator)."""
+    bpy.context.window_manager.clipboard = ""
+    yield from stage.move(x, y)
+    yield stage.STEP
+    yield from stage.key("C", ctrl=True)
+    return bpy.context.window_manager.clipboard
+
+
+def gear_button(stage: GuiStage):
+    """Where the panel header's gear is. Blender has no Python API for where
+    a button is drawn, so the pointer looks for it; Ctrl+C over a popover's
+    button names the panel."""
+    _area, region = sidebar(stage)
+    top, right = region.y + region.height, region.x + region.width
+    for y in range(top - 8, top - 72, -8):
+        for x in range(right - 30, right - 170, -8):
+            if "WHITTLE_PT_agent" in (yield from hovered_copy(stage, x, y)):
+                return x, y
+    raise AssertionError("no gear in the panel's header")
+
+
+def popover_browse_button(stage: GuiStage, x: int, y: int):
+    """Where the open popover has the Style Notes field's file icon, the
+    popover hanging from a button at x, y: down a column for the field (the
+    path is in it), then along the field's row for the icon."""
+    wanted = stage.props.style_file
+    for row in range(y, y - 700, -8):
+        if (yield from hovered_copy(stage, x - 100, row)) == wanted:
+            break
+    else:
+        raise AssertionError("the Style Notes field is not in the popover")
+    for column in range(x - 100, x + 200, 6):
+        if "file_browse" in (yield from hovered_copy(stage, column, row)):
+            return column, row
+    raise AssertionError(f"the file icon is not on the field's row: {row}")
+
+
+@phase("style_notes_picker")
+def style_notes_picker(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle.addon import prefs, ui
+
+    stage.crate()
+    stage.save_as(stage.work / "scene.blend")
+    yield from stage.settle()
+    yield from show_sidebar(stage)
+    folder = stage.work / "guides"
+    folder.mkdir()
+    (folder / "base.md").write_text("Worn painted wood.\n")
+    (folder / "style.md").write_text("@base.md\n@gone.md\nIron bands.\n")
+    # A path the field can be told by, and that the picker then replaces.
+    stage.props.style_file = "//placeholder.md"
+    yield from stage.settle()
+    popover = Spy(ui.WHITTLE_PT_agent)
+    gear = yield from gear_button(stage)
+    count = popover.count
+    yield from stage.click(*gear)
+    yield Until(lambda: popover.count > count, "the agent popover to draw")
+    spot = yield from popover_browse_button(stage, *gear)
+    yield from stage.click(*spot)
+    yield Until(lambda: file_browser()[0] is not None, "the Style Notes file browser")
+    win, browser = file_browser()
+    params = browser.spaces.active.params
+    params.directory = str(folder).encode()
+    params.filename = "style.md"
+    yield from confirm(stage, win, browser)
+    yield Until(lambda: file_browser()[0] is None, "the file browser to close")
+    yield Until(lambda: stage.props.style_file != "//placeholder.md", "the picked file to reach the field")
+    expect_equal(stage.props.style_file, "//guides/style.md", "the field after the file browser")
+
+    # The picked file is read at once: the popover lists it, its import and
+    # the import it could not find, in lines of their own.
+    layout = yield from agent_popover(stage, popover)
+    labels = layout.labels()
+    for name in ("style.md", "base.md"):
+        expect(name in labels, f"{name} is not listed: {labels}")
+    expect(any("@gone.md" in text for text in labels), f"no warning for gone.md: {labels}")
+
+    script = stage.script("guide", [{"steps": [say("Looked.")], "finish": done("Looked.")}])
+    node = stage.submit("Look at it.", script)
+    yield stage.finished(node)
+    settings = stage.ctl.session_starts[-1]["settings"]
+    expect_equal((settings["style_guide"], settings["style_incomplete"]), ("Worn painted wood.\n\nIron bands.", True),
+                 "what the session got")
+    expect_equal(stage.entries("warning", node), [turn.GUIDE_WARNING], "the conversation's warning")
+    stage.save_as(stage.work / "scene.blend")
+    yield from stage.settle()
+
+
+@phase("style_notes_picker")
+def style_notes_picker_reopen(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle.addon import prefs, ui
+
+    # Opening a file reads nothing it names: the path could be a network share.
+    expect_equal(prefs.style_guide("//guides/style.md"), None, "the last read just after opening the file")
+    yield from show_sidebar(stage)
+    popover = Spy(ui.WHITTLE_PT_agent)
+    gear = yield from gear_button(stage)
+    count = popover.count
+    yield from stage.click(*gear)
+    yield Until(lambda: popover.count > count, "the agent popover to draw")
+    labels = popover.latest.labels()
+    expect("Read at the next turn." in labels, f"the unread guide does not say so: {labels}")
+    for row in range(gear[1], gear[1] - 700, -8):
+        if "style_guide_read" in (yield from hovered_copy(stage, gear[0] - 100, row)):
+            break
+    else:
+        raise AssertionError("no Read Now button in the popover")
+    yield from stage.click(gear[0] - 100, row)
+    yield Until(lambda: prefs.style_guide("//guides/style.md") is not None, "Read Now to read the guide")
+    layout = yield from agent_popover(stage, popover)
+    labels = layout.labels()
+    for name in ("style.md", "base.md"):
+        expect(name in labels, f"{name} is not listed after Read Now: {labels}")
 
 
 @phase("preferences_defaults")
@@ -1976,7 +2095,7 @@ def preferences_defaults(stage: GuiStage):
     expect_equal([r.get("text") for r in in_box(page, "Claude") if r["kind"] == "prop" and r["prop"] == "model"],
                  ["Model for New Chats"], "the model field's label")
     expect_equal([r["prop"] for r in in_box(page, "Defaults") if r["kind"] == "prop"],
-                 ["poly_budget", "self_check_rounds", "render_size", "palette", "bevel_style", "style_notes"],
+                 ["poly_budget", "self_check_rounds", "render_size", "style_file"],
                  "the Defaults box's fields")
     expect_equal([r["prop"] for r in in_box(page, "Files") if r["kind"] == "prop"], ["store_chats"],
                  "the Files box's fields")
@@ -1988,26 +2107,25 @@ def preferences_defaults(stage: GuiStage):
     started, pid = yield from defaults_turn(stage, "Look at it.")
     first_chat, first_model = chats.get().current, started["model"]
     expect_equal(first_model, p.model, "the first chat's model")
-    expect_equal(budget_and_style(started), (p.poly_budget, p.palette, p.bevel_style, p.style_notes),
-                 "the first session's budget and style")
+    expect_equal(budget_and_style(started), (p.poly_budget, p.style_file), "the first session's budget and style")
     expect_equal(agent_environ(stage).get(NONESSENTIAL), "1", f"{NONESSENTIAL} with usage data off")
     layout = yield from agent_popover(stage, popover)
     expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget (default)", False), "For This File's budget")
-    for key in ("palette", "bevel_style", "style_notes"):
-        expect_equal(file_setting(layout, key), (f"{prefs.LABELS[key]} (default)", False), f"For This File's {key}")
+    expect_equal(file_setting(layout, "style_file"), ("Style Notes (default)", False), "For This File's style notes")
 
     # New defaults: the file shows them, and the next turn restarts the agent with them.
-    p.poly_budget, p.palette, p.bevel_style, p.style_notes = 1500, "oak, iron", "chunky", "worn wood"
+    guide = stage.work / "style.md"
+    guide.write_text("Worn wood.\n")
+    p.poly_budget, p.style_file = 1500, str(guide)
     layout = yield from agent_popover(stage, popover)
     expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget (default)", False),
                  "For This File's budget after the preference changed")
-    expect_equal((stage.props.poly_budget, stage.props.palette, stage.props.bevel_style, stage.props.style_notes),
-                 (1500, "oak, iron", "chunky", "worn wood"),
+    expect_equal((stage.props.poly_budget, stage.props.style_file), (1500, str(guide)),
                  "what For This File's fields show")
     started, pid2 = yield from defaults_turn(stage, "Look again.")
     expect(pid2 != pid, "the agent was not restarted for the new defaults")
-    expect_equal(budget_and_style(started), (1500, "oak, iron", "chunky", "worn wood"),
-                 "the session's budget and style")
+    expect_equal(budget_and_style(started), (1500, str(guide)), "the session's budget and style")
+    expect_equal(started["settings"]["style_guide"], "Worn wood.", "the guide's text the session got")
 
     # Usage data on: the restarted agent's CLI may send it.
     p.usage_data = True
@@ -2033,12 +2151,11 @@ def preferences_defaults(stage: GuiStage):
     stage.props.poly_budget = 800
     layout = yield from agent_popover(stage, popover)
     expect_equal(file_setting(layout, "poly_budget"), ("Triangle Budget", True), "For This File's own budget")
-    expect_equal(file_setting(layout, "style_notes"), ("Style Notes (default)", False),
+    expect_equal(file_setting(layout, "style_file"), ("Style Notes (default)", False),
                  "For This File's notes beside the file's own budget")
     started, pid5 = yield from defaults_turn(stage, "Look with the file's budget.")
     expect(pid5 != pid3, "the agent was not restarted for the file's budget")
-    expect_equal(budget_and_style(started), (800, "oak, iron", "chunky", "worn wood"),
-                 "the session's budget and style")
+    expect_equal(budget_and_style(started), (800, str(guide)), "the session's budget and style")
     stage.save_as(stage.work / "scene.blend")
     yield from stage.settle()
 
@@ -2050,7 +2167,7 @@ def preferences_defaults_reopen(stage: GuiStage):
 
     # A fresh Blender: the preferences are the run's again, since checks never save them.
     p = addon_preferences()
-    expect_equal((p.poly_budget, p.style_notes, p.model, p.usage_data),
+    expect_equal((p.poly_budget, p.style_file, p.model, p.usage_data),
                  (prefs.DEFAULTS["poly_budget"], "", prefs.DEFAULTS["model"], False),
                  "the preferences in a fresh Blender")
     yield from show_sidebar(stage)

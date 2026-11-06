@@ -26,6 +26,9 @@ def controller(fake_script: str = "") -> turn.TurnController:
     fake = Path(os.path.abspath(bpy.path.abspath(fake_script))) if fake_script else None
     if current is not None and busy(current):
         return current
+    # A running turn keeps its guide; the next one reads it again, and a text
+    # that changed is a changed setting.
+    prefs.refresh_style_guides()
     if current is not None and current.process.fake_script != fake:
         current.close()
         current = None
@@ -1012,6 +1015,24 @@ class WHITTLE_OT_file_setting_reset(bpy.types.Operator):
         from . import props
 
         props.reset_file_setting(context.scene, self.key)
+        if self.key == "style_file":
+            prefs.refresh_style_guides(context.scene)
+        return {"FINISHED"}
+
+
+class WHITTLE_OT_style_guide_read(bpy.types.Operator):
+    """Reads a style guide now, so its files are listed before anything is
+    sent. Opening a file does not read the path it stores."""
+    bl_idname = "whittle.style_guide_read"
+    bl_label = "Read Now"
+    bl_description = "Read this style guide now, to see which files it would send"
+
+    path: StringProperty(name="Path", default="", options={"SKIP_SAVE"})
+
+    def execute(self, context):
+        prefs.read_style_guide(self.path)
+        if context.area is not None:
+            context.area.tag_redraw()
         return {"FINISHED"}
 
 
@@ -1385,7 +1406,7 @@ CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_toggle, WHITTLE_OT_sketch_stop,
            WHITTLE_OT_interrupt, WHITTLE_OT_amend, WHITTLE_OT_answer, WHITTLE_OT_open_image,
            WHITTLE_OT_open_transcript, WHITTLE_OT_target_from_selection, WHITTLE_OT_target_add,
            WHITTLE_OT_target_remove, WHITTLE_OT_target_clear, WHITTLE_OT_view_remove, WHITTLE_OT_view_snap,
-           WHITTLE_OT_file_setting_reset, WHITTLE_OT_history_restore, WHITTLE_OT_history_branch,
+           WHITTLE_OT_file_setting_reset, WHITTLE_OT_style_guide_read, WHITTLE_OT_history_restore, WHITTLE_OT_history_branch,
            WHITTLE_OT_history_compare,
            WHITTLE_OT_branch_switch, WHITTLE_OT_retry, WHITTLE_OT_compare_toggle, WHITTLE_OT_compare_end, WHITTLE_OT_ghost_toggle,
            WHITTLE_OT_chat_new, WHITTLE_OT_chat_switch, WHITTLE_OT_chat_continue, WHITTLE_OT_chat_rename, WHITTLE_OT_chat_delete,

@@ -80,9 +80,15 @@ class DispatchTest(unittest.IsolatedAsyncioTestCase):
         await self.assertCode("bad_request", "start_session", {"session_dir": "/s", "settings": {"max_turns": "4"}})
         await self.assertCode("bad_request", "start_session",
                               {"session_dir": "/s", "settings": {"max_budget_usd": "cheap"}})
-        for key in ("style_notes", "palette", "bevel_style"):
+        for key in ("style_file", "style_guide", "style_incomplete"):
             await self.assertCode("bad_request", "start_session", {"session_dir": "/s", "settings": {key: 3}})
         await self.assertCode("bad_request", "start_session", {"session_dir": "/s", "settings": {"render_size": "big"}})
+
+    async def test_start_session_ignores_the_old_style_keys(self):
+        settings = {"palette": 3, "bevel_style": ["x"], "style_notes": "chunky", "style_guide": "Worn.",
+                    "style_incomplete": True}
+        await self.dispatch("start_session", {"session_dir": "/s", "settings": settings})
+        self.assertEqual(self.runner.calls[-1][0], "start_session")
 
     async def test_submit(self):
         self.assertEqual(await self.dispatch("submit", {"turn_id": "n0001", "bundle_dir": "/b"}),

@@ -15,5 +15,5 @@ def set_up(stage):
 
 SHOTS = [
     Shot("preferences", "All of Whittle's preferences, set up and with a key.", preferences(full=True), setup=set_up),
-    Shot("agent-popover", "The agent popover, four of For This File's settings set.", scenario="agent_popover"),
+    Shot("agent-popover", "The agent popover: two of For This File's settings set, a guide loaded, one import missing.", scenario="agent_popover"),
 ]

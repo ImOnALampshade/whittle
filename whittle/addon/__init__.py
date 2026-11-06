@@ -33,6 +33,7 @@ def _after_load(*_args):
     # A comparison or a ghost belongs to the session of the file it was made
     # in; a saved ghost is cleaned out of the file just loaded.
     compare.reset()
+    props.forget_style_moves()
     try:
         compare.clear_ghost()
     except Exception:
@@ -50,6 +51,10 @@ def _after_load(*_args):
         history.sync_from_scene(reason="load")
     except Exception:
         log.exception("could not match the history to the file just loaded")
+    try:
+        prefs.read_own_style_guide()
+    except Exception:
+        log.exception("could not read the style guide")
 
 
 @bpy.app.handlers.persistent
@@ -66,7 +71,8 @@ def _before_undo(*_args):
 
 @bpy.app.handlers.persistent
 def _after_undo(*_args):
-    for step in (history.sync_from_scene,
+    for step in (props.follow_style_paths,
+                 history.sync_from_scene,
                  history.release_folded_strokes,
                  # A comparison is no undo step: an undo puts back a scene from
                  # before it, so it is over.
@@ -87,7 +93,14 @@ def _tell_the_turn():
 
 
 @bpy.app.handlers.persistent
-def _before_save(*_args):
+def _before_save(*args):
+    # In the file being written, a // Style Notes names the same guide.
+    target = _filepath(args)
+    if target is not None:
+        try:
+            props.rebase_style_paths(target)
+        except Exception:
+            log.exception("could not rewrite the style guide's path")
     try:
         transcript.keep_out_of_file()
     except Exception:
@@ -101,16 +114,29 @@ def _before_save(*_args):
 
 @bpy.app.handlers.persistent
 def _after_save(*args):
+    try:
+        props.settle_style_paths()
+    except Exception:
+        log.exception("could not put the style guide's path back")
     # The open file lets go of the chats again. The cache stays where it
     # is, whatever the file is now called: its id names it.
     try:
         chats.after_save(_filepath(args))
     except Exception:
         log.exception("could not take the chats back out of the file")
+    # A // path now means the folder of the file just saved.
+    try:
+        prefs.refresh_style_guides()
+    except Exception:
+        log.exception("could not read the style guide")
 
 
 @bpy.app.handlers.persistent
 def _save_failed(*_args):
+    try:
+        props.settle_style_paths()
+    except Exception:
+        log.exception("could not put the style guide's path back")
     # No save_post comes: the chats must not stay in the open file's data.
     try:
         chats.save_failed()

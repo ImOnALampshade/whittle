@@ -248,6 +248,6 @@ Each phase gets tests run with `blender -b` (bridge round-trip, bundle contents,
 - **Render cost on the main thread**: are Workbench overlay renders fast enough not to make the UI stutter during self-check? Fallback: `gpu.types.GPUOffScreen` viewport draws.
 - **Target lock**: how strictly to enforce it (warn vs block), and what about the user editing materials/node groups the target shares with other objects?
 - **Branch semantics for the conversation**: fork the SDK session per branch, or one conversation told about the jump?
-- **Guardrails**: per-file settings for tri budget, palette, bevel style, injected into the system prompt. Resolved: each file can override the triangle budget, self-check rounds, render size, palette, bevel style and style notes (`ui.md` §3.1); the palette, bevel style and notes reach the system prompt as the file's style.
+- **Guardrails**: per-file settings for tri budget and style, injected into the system prompt. Resolved: each file can override the triangle budget, self-check rounds, render size and style notes (`ui.md` §3.1); the style notes point at a style guide, a text file a project can share, whose text reaches the system prompt (`decisions.md`, Behaviour).
 - **Cost / latency**: model per role, self-check round cap, render resolution.
 - **Distribution**: resolved: open source under GPL-3.0-or-later; extensions.blender.org later, if at all (`decisions.md`).

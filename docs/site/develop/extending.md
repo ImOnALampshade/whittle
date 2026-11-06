@@ -315,8 +315,8 @@ hidden Blender with simulated input. Use one only when a `blender -b` test canno
 
 A preference is either a plain add-on setting or a session setting, which reaches the agent and
 can differ per file. There is nothing between the two: `prefs.session_settings()`, which is what
-`start_session` carries, reads only the keys in `prefs.SESSION_SETTINGS`, and every one of those
-has a per-file override. A preference left out of that tuple never reaches the agent, and
+`start_session` carries, reads only the keys in `prefs.SESSION_SETTINGS` (and adds the style
+guide's text and whether it is whole), and every one of those has a per-file override. A preference left out of that tuple never reaches the agent, and
 `prompt.build` uses its own default whatever the user set. The current preferences are in
 [Settings](../guides/settings.md).
 
@@ -337,8 +337,9 @@ has a per-file override. A preference left out of that tuple never reaches the a
 6. A property on `WhittleSceneProps` in `addon/props.py`, which is written by hand:
 
    ```python
-   palette: StringProperty(
-       name="Palette", **_file_setting("palette"), description=_file_description("palette"))
+   poly_budget: IntProperty(
+       name="Triangle Budget", min=prefs.MIN_POLY_BUDGET, **_file_setting("poly_budget"),
+       description=_file_description("poly_budget"))
    ```
 
    `test_every_session_setting_has_an_override` fails without it.
@@ -351,6 +352,9 @@ has a per-file override. A preference left out of that tuple never reaches the a
 10. Its type in `dispatch.session_params`, which checks each setting `start_session` carries.
 11. Tests in `tests/blender/test_file_settings.py`.
 
+`style_file` is the exception to steps 8 and 9: the agent uses the guide's text, which
+`session_settings` adds as `style_guide`, and never the path.
+
 The rest follows from `SESSION_SETTINGS`: `props.FILE_SETTINGS`, the popover's field and reset
 button, `prefs.session_settings()`, and the agent's restart before the next turn when a value
 changes.
@@ -360,13 +364,13 @@ and effort are `start_session` parameters of their own, and `usage_data` goes in
 environment through `process.agent_environment`.
 
 ```{figure} ../images/develop-extending/preferences-defaults.png
-:alt: The Defaults box: Triangle Budget 2000, Self-check Rounds 3 and Render Size 512 in one row, then the Palette, Bevel Style and Style Notes fields
+:alt: The Defaults box: Triangle Budget 2000, Self-check Rounds 3 and Render Size 512 in one row, then the Style Notes file field
 
 The Defaults box in the preferences, drawn by hand in `WhittlePreferences.draw`.
 ```
 
 ```{figure} ../images/develop-extending/agent-popover.png
-:alt: The agent popover: the agent's state, model and effort, then For This File, where Triangle Budget and Render Size say (default) and the other four settings have values, each with a reset button
+:alt: The agent popover: the agent's state, model and effort, then For This File, where Triangle Budget and Render Size say (default) and Self-check Rounds and Style Notes have values, each with a reset button, and the style guide's files and a warning under Style Notes
 
 For This File in the agent popover, drawn from `props.FILE_SETTINGS`. An unset field says
 (default), and its reset button is greyed out.

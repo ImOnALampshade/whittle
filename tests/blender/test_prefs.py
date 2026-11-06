@@ -37,8 +37,8 @@ class PrefsDefaultsTest(unittest.TestCase):
         self.assertIsNone(bpy.context.preferences.addons.get(prefs.PACKAGE))
         self.assertEqual(vars(prefs.get()), prefs.DEFAULTS)
         self.assertEqual(prefs.session_settings(),
-                         {"self_check_rounds": 3, "poly_budget": 2000, "style_notes": "", "render_size": 512,
-                          "palette": "", "bevel_style": ""})
+                         {"self_check_rounds": 3, "poly_budget": 2000, "render_size": 512, "style_file": "",
+                          "style_guide": "", "style_incomplete": False})
 
     def test_style_preferences(self):
         bpy.utils.register_class(prefs.WhittlePreferences)
@@ -50,10 +50,11 @@ class PrefsDefaultsTest(unittest.TestCase):
                 self.assertEqual(props[key].description, prefs.DESCRIPTIONS[key])
         for key in ("self_check_rounds", "render_size"):
             self.assertEqual((props[key].hard_min, props[key].hard_max), prefs.LIMITS[key])
-        # Bevel Style suggests the named styles and takes any other text.
-        self.assertEqual(prefs.bevel_search(None, None, ""), ["none", "subtle", "chunky"])
-        self.assertEqual(prefs.bevel_search(None, None, " Chu"), ["chunky"])
-        self.assertEqual(prefs.bevel_search(None, None, "rounded"), [])
+        self.assertEqual(props["style_file"].subtype, "FILE_PATH")
+        self.assertTrue(props["style_file"].is_path_supports_blend_relative, "// works in it")
+        for key in ("palette", "bevel_style", "style_notes"):
+            self.assertNotIn(key, props)
+            self.assertNotIn(key, prefs.DEFAULTS)
 
     def test_agent_side_defaults_agree(self):
         for key, value in prompt.DEFAULTS.items():

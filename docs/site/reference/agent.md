@@ -14,7 +14,7 @@ process sits between Blender and the bundled CLI.
 | `__main__` | The entry point. Parses `--port`, `--host` and `--fake`, opens the connection, picks the runner, serves until `shutdown` or EOF, then closes the runner. |
 | `connection` | The agent's end of the bridge: {py:class}`~whittle.agent.connection.Connection` does the handshake, makes calls to Blender, sends events and reads Blender's calls. |
 | `dispatch` | Checks the parameters of Blender's calls and routes them to a runner. Defines the {py:class}`~whittle.agent.dispatch.Runner` protocol. |
-| `runner` | {py:class}`~whittle.agent.runner.SdkRunner`, the real runner. Builds the session's options, owns the SDK client, maps SDK messages to events and adds up each turn's cost. |
+| `runner` | {py:class}`~whittle.agent.runner.SdkRunner`, the real runner. Builds the session's options, writes the system prompt to the session folder, owns the SDK client, maps SDK messages to events and adds up each turn's cost. |
 | `fake` | {py:class}`~whittle.agent.fake.FakeRunner`, the scripted runner: the same `Runner` protocol, played from a JSON script. |
 | `tools` | The `TOOLS` table of agent tools, their handlers, {py:class}`~whittle.agent.tools.ToolContext`, and {py:func}`~whittle.agent.tools.build_servers`, which wraps them as the two in-process MCP servers. |
 | `prompt` | {py:func}`~whittle.agent.prompt.build` fills `system_prompt.md` in from the session settings. Also holds the `SKILLS` list and the plugin folder. |

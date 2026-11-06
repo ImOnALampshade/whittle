@@ -24,14 +24,14 @@ whittle/                          repo root
 │   ├── caches.py                 stdlib only: each file's hidden chats cache, its id and cleanup (§14)
 │   ├── markdown.py               stdlib only: Claude's Markdown (and its TeX, HTML) as Lines for the sidebar
 │   ├── models.py                 stdlib only: model ids by family and version, the model list's cache (§15)
-│   ├── style.py                  stdlib only: the bevel style suggestions and how the prompt words the style
+│   ├── style.py                  stdlib only: reading a style guide with its @ imports, and how the prompt words it
 │   ├── venv.py                   stdlib only: venv status, setup commands, the VenvSetup state machine
 │   ├── platforms.py              stdlib only: what differs on Windows and macOS (spawn flags, process trees, pid probe, replace, stale resume folders, lock markers)
 │   ├── requirements.lock         byte-identical copy of agent_env/requirements.lock (packaging step)
 │   ├── addon/                    Blender side; may import bpy everywhere
 │   │   ├── __init__.py           register()/unregister() for every class, handler and timer
 │   │   ├── paths.py              user dir, the open file, the cache and CLI config folders, agent python resolution
-│   │   ├── prefs.py              AddonPreferences
+│   │   ├── prefs.py              AddonPreferences, session_settings, the last read of each style guide
 │   │   ├── setup.py              the venv on the Blender side: checks, timer, install/cancel operators
 │   │   ├── start.py              start points (existing, blank, primitive, asset) and their helpers
 │   │   ├── refs.py               reference images: clearing sent ones, pinning, image empties
@@ -147,19 +147,19 @@ for text Whittle adds to a turn. The modeling practice
 live or baked booleans, topology, shading, remeshing, a loose triangle budget) is written
 as defaults with reasons rather than hard rules; the research behind it and its sources
 are in [modeling-practices.md](modeling-practices.md). Long technique detail lives in the
-skills. `prompt.build` fills `$self_check_rounds`, `$poly_budget`, `$render_size`,
-`$palette`, `$bevel_style` and `$style_notes`. The last three make the prompt's closing
-section, "Style for this file": a line each, introduced as the user's preferences for this
-file, to apply with judgement (a request's prompt or sketch wins, and a preference that
-does not suit a part can be left off it). `whittle/style.py` (stdlib, shared with the
-add-on) words them: a suggested bevel style (`none`, `subtle`, `chunky`) is spelled out,
-other text goes in as typed, and an empty one says none is set and leaves the choice to
-the agent.
+skills. `prompt.build` fills `$self_check_rounds`, `$poly_budget` and `$style_guide`. The
+last closes the prompt's "Style for this file" section, which introduces the guide as the
+user's for this file, to apply with judgement (a request's prompt or sketch wins, and
+guidance that does not suit a part can be left off it), and as speaking to how things look
+and nothing else, since it is a plain file that may not all be the user's writing.
+`style.guide_section` words it: the text in `<style_guide>` tags, so its own headings stay
+inside it, after a line saying part of it is missing if so; with no guide, a line leaving
+the look to the agent.
 
 Those settings come from `prefs.session_settings(scene)`: the preferences' Defaults
 (`prefs.SESSION_SETTINGS`), with the scene's per-file overrides on top. Each of
-`scene.whittle.poly_budget`, `self_check_rounds`, `render_size`, `palette`, `bevel_style`
-and `style_notes` reads and writes a custom property (`props.FILE_SETTINGS`:
+`scene.whittle.poly_budget`, `self_check_rounds`, `render_size` and `style_file` reads and
+writes a custom property (`props.FILE_SETTINGS`:
 `file_<setting>`) on the scene's property group, so they are saved with the file. An
 unset one reads the preference, a value of the wrong type counts as unset, an integer
 is kept inside the preference's bounds (`prefs.LIMITS`), and
@@ -167,6 +167,101 @@ is kept inside the preference's bounds (`prefs.LIMITS`), and
 amendment passes its own), and the controller's launch settings include the result, so a
 changed override restarts an idle agent before the next turn, as a changed preference
 does.
+
+### Style guides
+
+Style Notes (`style_file`, a `FILE_PATH` field that takes `//` paths) points at a text file,
+and `whittle/style.py` (stdlib, shared with the add-on) reads it. `load_guide(path)` returns
+a `Guide`: the combined `text`, the `files` read (resolved, in order) and the `problems`, for
+the user. Why it works this way is in decisions.md, Behaviour.
+
+- **Imports.** A line holding only `@path`, after trimming, is replaced in place by that
+  file. A path with a space in it has to end in `.md` or `.txt`, so `@alice likes it` stays
+  prose, and lines in a fenced code block never import, a fence being one at any indent and
+  after list or quote markers, so a fence in a list item counts. Paths are relative to the real file
+  importing them, so a symlinked guide imports from where it really lives; absolute paths
+  and `~` work too, and `style.portable_path` reads a backslash in a relative path as a
+  slash, so a guide written on Windows imports on Linux; a rooted path (drive, UNC, `\folder`)
+  is left as it is. `//` means nothing in an import. Imports nest, on an explicit stack
+  rather than recursion, so a long chain cannot reach the recursion limit.
+- **Reached twice.** A file counts the first time only, keyed on its identity (`st_dev` and
+  `st_ino`), so a hard link or another case of its name on a case-insensitive volume is the
+  same file; the normcased resolved path where the file is gone or the volume gives no ids.
+  This also ends loops.
+- **What loads.** Only `style.GUIDE_SUFFIXES` (`.md`, `.txt`), judged on the resolved path;
+  regular files only, since reading a pipe called `notes.md` would never end; UTF-8 without
+  NUL bytes, so a non-UTF-8 file is refused rather than decoded with replacements.
+- **The cap.** `MAX_GUIDE_BYTES` (128 KiB) over all files. A file that would pass it is left
+  out whole and the walk ends there, the rest of the files still open included, so the agent
+  never gets half a sentence, or text written to follow something missing; what came before
+  stays. A single guide over the cap therefore sends nothing and warns.
+- **Nothing raises.** What cannot load is a problem in the result, a missing top-level file
+  included, and the rest still counts.
+
+`prefs.read_style_guide(path)` adds what needs `bpy`: empty means no guide, a `//` path in
+an unsaved file is a problem, anything else goes through `portable_path` and
+`bpy.path.abspath`. A field's own
+relative path that is not `//` is a problem too (`load_guide` takes an absolute path or `~`).
+Each read is kept in `prefs._guides`, by path as written and `.blend` path since a `//` path
+means another file in another folder, the last `MAX_GUIDES_KEPT` only. `prefs.style_guide` gives
+the last read and never touches the disk, so draw code can ask.
+
+The disk is read by the fields' update callbacks (the preference and the scene property),
+`whittle.file_setting_reset`, `whittle.style_guide_read` (**Read Now**), `save_post` (a `//`
+path now means another folder) and `operators.controller`, through
+`prefs.refresh_style_guides`. The controller reads after its busy check, so a running turn
+and its amendments keep their guide; an amend's bundle takes `prefs.session_values`, which
+never reads. `load_post` reads only the preferences' own path, and not a `//` one
+(`prefs.read_own_style_guide`): nothing the user did asked for what the file stores, and it
+could name a network share, where on Windows opening it can hand over credentials and a
+dead one blocks the UI. So that field says `Read at the next turn.` with a Read Now button.
+
+A save into another folder rewrites the `//` overrides. `save_pre` gets the target path while
+`bpy.data.filepath` is still the file being left (empty before a first save, so nothing to
+do), and Save As and Save Copy look the same there, so `props.rebase_style_paths` rewrites
+every local scene's `file_style_file` with `style.rebased_path`, straight into the store so the
+update callback's read does not run, and keeps the old text. Afterwards
+`props.settle_style_paths`, from `save_post` and `save_post_fail`, puts the old text back if
+`bpy.data.filepath` has not moved, which is both a Save Copy and a failed save; the file
+written keeps the new text. Both folders are the `.blend`'s with symlinks resolved, since a
+read's `realpath` walks a `..` up from a folder's real place; the guide's own path is never
+looked at. `rebased_path` falls back on the absolute path where a relative one would carry a
+backslash from a folder's name, which `portable_path` would read as a separator.
+
+The steps are ID property writes with no undo push, so undo steps are as they were and a step
+from before the Save As holds the old text, while the file stays in the new folder: counted
+from there it could name another file with no warning. So a real move also puts a session-only
+stamp beside each rewritten path (`props.STYLE_MOVE`, a key of `props._moves`, which says what
+folder that move reached; the property's setter stamps a path typed after one). From `undo_post`
+and `redo_post`, `props.follow_style_paths` takes each local `//` path stamped with anything but
+the latest move and rewrites it from its stamp's folder, or from the folder before the first
+move if it has none or one from another session, to the file's folder. Stamp and text travel
+together, so a scene an undo keeps in place, rewritten as it is, is left alone. `load_post`
+forgets the moves: a stamp saved in a file means nothing, and what a file holds counts from
+where it is. An unset override, and the preferences' path, are not touched.
+`TurnController.launch_settings` leaves `style_file` out, so only the guide's text decides a
+restart.
+
+`prefs.session_settings` is for sending: a path with no read yet is read then, since not read
+is not no guide. The controller keeps the name of the scene a run came from, so a session
+that starts from a timer once the agent is ready gets that scene's settings and guide.
+
+`style.guide_section` defuses any `style_guide` tag in the text, so a guide cannot close its
+own block and have what follows read as Whittle's prompt.
+
+`prefs.session_settings` adds `style_guide` (the text) and `style_incomplete` (whether there
+were problems) from the last read. `TurnController.launch_settings` compares session
+settings, so a changed text restarts the idle agent before that turn with no special case; a
+changed path with the same text does too, as any changed setting does. The agent gets only
+the boolean, not the problems, so local paths do not reach it that way.
+
+For the user, `prefs.draw_style_guide` draws the files and the problems under the field
+(ui.md §3.1), and `TurnController._warn_of_guide` says once in the conversation when part of
+the guide did not load, again only after it has loaded whole.
+
+The bundle records `style_file`, not the text, so a guide is not copied into every request
+and with them into the `.blend`. A run from disk uses the session's current guide, as it
+does for other settings.
 
 ### Recipe skills
 
@@ -402,7 +497,7 @@ Every message has `"v": 1` and `"type"`:
 
 | method | params | data on success |
 |---|---|---|
-| `start_session` | `session_dir`, `store_dir` (the chat's SDK transcript store or null, §14), `model`, `effort` (`low` \| `medium` \| `high`, default `high`, §15), `resume` (sdk session id or null), `fork` (bool), `resume_at` (message uuid or null: where a fork cuts the resumed conversation, §6), `settings` (`{self_check_rounds, poly_budget, style_notes, palette, bevel_style, render_size}`; the three style values must be strings, the rest integers; plus optional `max_turns`, `max_budget_usd` passed to the SDK) | `{}` — replaces any live SDK client; answered once the SDK client has connected |
+| `start_session` | `session_dir`, `store_dir` (the chat's SDK transcript store or null, §14), `model`, `effort` (`low` \| `medium` \| `high`, default `high`, §15), `resume` (sdk session id or null), `fork` (bool), `resume_at` (message uuid or null: where a fork cuts the resumed conversation, §6), `settings` (`{self_check_rounds, poly_budget, render_size, style_file, style_guide, style_incomplete}`; `style_file` and `style_guide` must be strings, `style_incomplete` a boolean, the rest integers; plus optional `max_turns`, `max_budget_usd` passed to the SDK) | `{}` — replaces any live SDK client; answered once the SDK client has connected |
 | `submit` | `turn_id` (node id), `bundle_dir` (absolute), `prompt` (str), `context` ([str], optional, default []: lines from Whittle put before the prompt), `model` (str or null: the chat's model; a live session on another one is switched to it before the query, §15), `effort` (`low` \| `medium` \| `high` or null: the chat's effort, switched likewise) | `{"accepted": true}` immediately; the turn then streams events |
 | `amend` | `turn_id`, `amend` (int, the amendment number; optional for older callers), `text` (may be ""), `bundle_dir` (absolute amend bundle or null) | `{"queued": true}`; `no_session` before `start_session`, `not_found` when `turn_id` is not the running turn (it already finished) |
 | `interrupt` | `turn_id` | `{}` |
@@ -647,7 +742,7 @@ Models API (`runner.list_api_models` in the real agent, §15, nothing in tests).
 
 ```python
 ClaudeAgentOptions(
-    system_prompt=prompt.build(settings),          # custom string, not the claude_code preset
+    system_prompt=prompt.build(settings),          # custom text, not the claude_code preset; then by file (below)
     model=params["model"],
     effort=params["effort"],                       # --effort; switched live later (below)
     tools=["Skill"],                               # every other built-in tool off
@@ -669,6 +764,13 @@ ClaudeAgentOptions(
     max_buffer_size=MAX_FRAME_BYTES,
 )
 ```
+
+**System prompt by file.** `SdkRunner.start_session` replaces that string with
+`{"type": "file", "path": runner.write_prompt(session_dir, text)}`, so the CLI gets
+`--system-prompt-file` and reads `.system_prompt.md` from the session folder. On the command
+line a full-size style guide would not fit: Linux allows 128 KiB in one argument, Windows
+32 KiB in all. The file is written at each session start, and the leading dot keeps it out of
+what a chat packs (`chats.py`).
 
 **Image limits.** Two limits bound what images do to a session, one per direction.
 `runner.MAX_FRAME_BYTES` (128 MiB, four times the API's 32 MiB) is the longest line the
@@ -1218,6 +1320,7 @@ id>/`, and the `.blend` stores it.
 ```
 <session folder>/
   session.json
+  .system_prompt.md       the agent's system prompt, written at each session start, never packed
   compare/live.blend      the scene as it was while a comparison runs (removed at the end)
   nodes/<node id>/
     target.blend          snapshot of the target after this node
@@ -1334,7 +1437,7 @@ after the first render's shader compile.
 | `views` | [int] — view ids with a folder under `views/` |
 | `refs` | [str] — relative paths inside the bundle (absolute paths and `..` are refused) |
 | `units` | `{"system": str, "scale_length": float}` from `scene.unit_settings` |
-| `settings` | `{self_check_rounds, poly_budget, style_notes, palette, bevel_style}` |
+| `settings` | `{self_check_rounds, poly_budget, style_file}`; other keys, such as an older bundle's `style_notes`, are ignored. `describe_bundle` shows the agent only `tools.SHOWN_SETTINGS`, the first two: the guide is in its system prompt, and the path means nothing to it |
 | `target_collection` | str \| null, optional — the collection new objects go in (`scene.whittle.target_collection`); a missing key reads as null, so older bundles stay valid |
 
 **strokes.json**: `{"format": "whittle.strokes", "version": 1, "strokes": [Stroke]}`
@@ -1577,7 +1680,7 @@ Details settled while building the agent and bridge, beyond the sections above.
   folder, since the agent runs in the session folder. A busy controller is always kept. An idle one with another
   fake script is closed and replaced. An idle one whose agent was started with other
   launch settings (`TurnController.launch_settings()`: the Python, fake script, a
-  digest of the API key and the session settings, recorded at
+  digest of the API key and the session settings with the style guide's text, recorded at
   `start()`; `launch_changed`) has its agent stopped, so the next run starts a new
   process with the new settings and resumes the conversation from the history.
 - **`whittle.view3d_override()`** raises in background Blender: the startup screen's
@@ -2542,6 +2645,10 @@ read from the installed `claude_agent_sdk` 0.2.167 (bundled CLI 2.1.300).
 - `save_pre` runs before the data is written, also for `save_as_mainfile(copy=True)`:
   properties set there are in the file, and deleting them in `save_post` leaves
   nothing in memory.
+- `save_pre`, `save_post` and `save_post_fail` get the target path, absolute and normalised,
+  and `None`. `bpy.data.filepath` is the old file in `save_pre`, the target in `save_post` after
+  a Save As, and the old file after a Save Copy and in `save_post_fail`, so only `save_post`
+  tells them apart. Nothing in them says whether Remap Relative was on.
 - Undo (GUI Blender, 20 pushes of a moved cube): with 50 MB of bytes properties in the
   data, `ed.undo_push` 5.9 ms (1.1 ms without), `ed.undo` 14.5 ms (3.4), resident memory
   about twice the payload, and undo rolled back a change to the properties with the
@@ -2587,7 +2694,7 @@ read from the installed `claude_agent_sdk` 0.2.167 (bundled CLI 2.1.300).
   `get_context_usage()`, `get_server_info()`, `disconnect()`; async context manager.
   The client must stay in the task group it connected in.
 - `ClaudeAgentOptions` fields used: `tools` (`[]` = no built-ins), `allowed_tools`,
-  `disallowed_tools`, `system_prompt` (str → `--system-prompt`; `None` → empty prompt),
+  `disallowed_tools`, `system_prompt` (str → `--system-prompt`; `{"type": "file", "path": …}` → `--system-prompt-file`; `None` → empty prompt),
   `mcp_servers`, `strict_mcp_config`, `permission_mode` (`default`, `acceptEdits`,
   `bypassPermissions`, `plan`, `dontAsk`, `auto`), `model`, `fallback_model`, `resume`,
   `fork_session`, `resume_session_at`, `session_id`, `cwd`, `cli_path` (default: the

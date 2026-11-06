@@ -20,9 +20,7 @@ DEFAULTS = {
     "self_check_rounds": 3,
     "render_size": 512,
     "poly_budget": 2000,
-    "style_notes": "",
-    "palette": "",
-    "bevel_style": "",
+    "style_file": "",
     "store_chats": True,
     "usage_data": False,
 }
@@ -32,20 +30,24 @@ MIN_POLY_BUDGET = 10
 LIMITS = {"poly_budget": (MIN_POLY_BUDGET, None), "self_check_rounds": (0, 10), "render_size": (64, 1024)}
 # The settings a session starts with (session_settings), in the order the
 # Defaults box and the popover's For This File show them.
-SESSION_SETTINGS = ("poly_budget", "self_check_rounds", "render_size", "palette", "bevel_style", "style_notes")
+SESSION_SETTINGS = ("poly_budget", "self_check_rounds", "render_size", "style_file")
 # Their names and tooltips, shared with the per-file fields.
 LABELS = {"poly_budget": "Triangle Budget", "self_check_rounds": "Self-check Rounds", "render_size": "Render Size",
-          "palette": "Palette", "bevel_style": "Bevel Style", "style_notes": "Style Notes"}
+          "style_file": "Style Notes"}
 DESCRIPTIONS = {
     "self_check_rounds": "How many fix rounds the agent may spend after its renders",
     "render_size": "Pixel size of the agent's self-check renders",
     "poly_budget": "Rough triangle budget for the whole target",
-    "palette": "The colours the agent builds materials from, as a short list, e.g. "
-               "'weathered oak, dark iron'. Empty: the agent picks",
-    "bevel_style": "How the agent bevels edges: none, subtle or chunky, or describe your own, "
-                   "e.g. 'rounded corners only'. Empty: the agent decides per shape",
-    "style_notes": "Extra style guidance for the agent, e.g. 'worn painted wood'",
+    "style_file": "A .md or .txt style guide for the agent, which can import others with @path lines, "
+                  "so many files can share it. // is relative to the .blend. Empty: the agent chooses",
 }
+# What the last reads of the Style Notes paths found (read_style_guide): a
+# few are enough, the file's and the preferences'.
+_guides: dict[tuple[str, str], style.Guide] = {}
+MAX_GUIDES_KEPT = 8
+# How many files, and how many problems, a Style Notes field lists: a bad
+# guide can name thousands, and the list has to stay readable.
+GUIDE_ROWS = 10
 LOG_LINES = 8
 # What the Preferences' main region keeps from its width for a line in one
 # of Whittle's boxes: the region's margins, the box's border and the icon.
@@ -67,13 +69,6 @@ def _model_search(_self, _context, edit_text):
     return [m for m in ids if text in m]
 
 
-def bevel_search(_self, _context, edit_text):
-    """The Bevel Style field suggests the named styles; any other text can
-    still be typed and reaches the agent as written."""
-    text = (edit_text or "").strip().lower()
-    return [name for name in style.BEVEL_STYLES if text in name]
-
-
 def _key_changed(_self, _context):
     """A key typed while the sidebar asks for one clears the ask."""
     from . import turn
@@ -81,6 +76,10 @@ def _key_changed(_self, _context):
     ctl = turn.current()
     if ctl is not None:
         ctl.process.clear_key()
+
+
+def _style_file_changed(p, _context):
+    read_style_guide(p.style_file)
 
 
 def _environment_changed(_self, _context):
@@ -122,11 +121,9 @@ class WhittlePreferences(bpy.types.AddonPreferences):
                              description=DESCRIPTIONS["render_size"])
     poly_budget: IntProperty(name="Triangle Budget", default=DEFAULTS["poly_budget"], min=MIN_POLY_BUDGET,
                              description=DESCRIPTIONS["poly_budget"])
-    palette: StringProperty(name="Palette", default=DEFAULTS["palette"], description=DESCRIPTIONS["palette"])
-    bevel_style: StringProperty(name="Bevel Style", default=DEFAULTS["bevel_style"], search=bevel_search,
-                                search_options={"SUGGESTION"}, description=DESCRIPTIONS["bevel_style"])
-    style_notes: StringProperty(name="Style Notes", default=DEFAULTS["style_notes"],
-                                description=DESCRIPTIONS["style_notes"])
+    style_file: StringProperty(name="Style Notes", subtype="FILE_PATH", default=DEFAULTS["style_file"],
+                               options={"PATH_SUPPORTS_BLEND_RELATIVE"}, update=_style_file_changed,
+                               description=DESCRIPTIONS["style_file"])
     store_chats: BoolProperty(
         name="Save Chats in the .blend", default=DEFAULTS["store_chats"],
         description="Store every chat inside the .blend when it is saved, so it travels with the file: "
@@ -176,9 +173,8 @@ class WhittlePreferences(bpy.types.AddonPreferences):
         row.prop(self, "poly_budget")
         row.prop(self, "self_check_rounds")
         row.prop(self, "render_size")
-        box.prop(self, "palette")
-        box.prop(self, "bevel_style")
-        box.prop(self, "style_notes")
+        box.prop(self, "style_file")
+        draw_style_guide(box, self.style_file, lambda text: wrap_status(text, *_line_room()))
 
         box = layout.box()
         box.label(text="Files", icon="FILE_BLEND")
@@ -211,6 +207,41 @@ def draw_environment(layout, p, setup) -> None:
         col = layout.column(align=True)
         for line in running.log_tail(LOG_LINES):
             col.label(text=line[:160])
+
+
+def draw_style_guide(layout, path: str, wrap) -> None:
+    """Under a Style Notes field, from the last read (style_guide): the files
+    being sent, then what went wrong, in lines of their own so a warning
+    needs no tooltip. wrap breaks a text into lines for the layout."""
+    if not path.strip():
+        return
+    guide = style_guide(path)
+    if guide is None:
+        col = layout.column(align=True)
+        col.active = False
+        col.label(text="Read at the next turn.", icon="BLANK1")
+        layout.operator("whittle.style_guide_read", icon="FILE_REFRESH").path = path
+        return
+    if guide.files:
+        col = layout.column(align=True)
+        heading = col.column(align=True)
+        heading.active = False
+        heading.label(text="Sent with each turn:", icon="BLANK1")
+        for name in guide.names()[:GUIDE_ROWS]:
+            for i, line in enumerate(wrap(name)):
+                col.label(text=line, icon="FILE_TEXT" if i == 0 else "BLANK1")
+        _draw_more(col, len(guide.files), "files")
+    if guide.problems:
+        col = layout.column(align=True)
+        for problem in guide.problems[:GUIDE_ROWS]:
+            for i, line in enumerate(wrap(problem)):
+                col.label(text=line, icon="ERROR" if i == 0 else "BLANK1")
+        _draw_more(col, len(guide.problems), "problems")
+
+
+def _draw_more(layout, count: int, what: str) -> None:
+    if count > GUIDE_ROWS:
+        layout.label(text=f"and {count - GUIDE_ROWS} more {what}", icon="BLANK1")
 
 
 def _line_room():
@@ -303,10 +334,60 @@ def api_key() -> tuple[str, str | None]:
     return "", None
 
 
-def session_settings(scene=None) -> dict:
-    """The settings a session starts with: the preferences, then the scene's
-    per-file overrides (props.file_settings). The scene defaults to the
-    context's, so the settings follow the open file."""
+def read_style_guide(path: str) -> style.Guide:
+    """Reads the style guide a Style Notes field names, for style_guide to
+    give out. // needs a saved file to be relative to."""
+    path = path.strip()
+    if not path:
+        guide = style.Guide()
+    elif path.startswith("//") and not bpy.data.filepath:
+        guide = style.Guide(problems=(f"{path} is relative to the .blend: save the file to use it.",))
+    else:
+        guide = style.load_guide(bpy.path.abspath(style.portable_path(path)))
+    key = _guide_key(path)
+    _guides.pop(key, None)
+    _guides[key] = guide
+    while len(_guides) > MAX_GUIDES_KEPT:
+        del _guides[next(iter(_guides))]
+    return guide
+
+
+def style_guide(path: str) -> style.Guide | None:
+    """What the last read of this path found, if there was one: never reads
+    the disk, so draw code can ask."""
+    return _guides.get(_guide_key(path.strip()))
+
+
+def _guide_key(path: str) -> tuple[str, str]:
+    # A // path means another file in another .blend's folder.
+    return path, bpy.data.filepath
+
+
+def refresh_style_guides(scene=None) -> None:
+    """Reads the guide the next session would send, and the preferences' own
+    for their Defaults box. Runs before each turn and when the path may have
+    changed, so an edited guide reaches the next turn; never from a redraw."""
+    wanted = {session_values(scene)["style_file"], get().style_file}
+    for path in wanted:
+        read_style_guide(path)
+
+
+def read_own_style_guide() -> None:
+    """The one read when a file opens: the preferences' path, which is the
+    user's own. Opening a file is no act of the user's on what it stores, and
+    that path could name a network share, so the file's own is read at the
+    first Send or Read Now. A // path counts as the file's: the file decides
+    where it leads."""
+    path = get().style_file
+    if not path.strip().startswith("//"):
+        read_style_guide(path)
+
+
+def session_values(scene=None) -> dict:
+    """The session settings as set, the style guide as a path: the
+    preferences, then the scene's per-file overrides (props.file_settings).
+    The scene defaults to the context's, so they follow the open file. Never
+    reads the disk."""
     from . import props
 
     p = get()
@@ -314,6 +395,20 @@ def session_settings(scene=None) -> dict:
     if scene is None:
         scene = getattr(bpy.context, "scene", None)
     settings.update(props.file_settings(scene))
+    return settings
+
+
+def session_settings(scene=None) -> dict:
+    """The settings a session starts with: session_values and the text of
+    the style guide they point at, as last read. The text is here, not only
+    the path, so a guide that changed on disk changes the settings and
+    restarts the agent like any other change. A path with no read yet is read
+    now: not read is not the same as no guide. So this is for sending, not
+    for drawing."""
+    settings = session_values(scene)
+    guide = style_guide(settings["style_file"]) or read_style_guide(settings["style_file"])
+    settings["style_guide"] = guide.text
+    settings["style_incomplete"] = bool(guide.problems)
     return settings
 
 

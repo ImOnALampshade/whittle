@@ -590,18 +590,37 @@ def turn_menu(stage: Stage):
     return Popup("operator", "whittle.turn_menu", {"node": first})
 
 
+def _style_guide(stage: Stage) -> None:
+    """A guide beside a saved file, importing a shared base and one file that
+    is missing. The // path keeps this machine's folders out of the image."""
+    bpy.ops.wm.save_as_mainfile(filepath=str(stage.work / "crate.blend"))
+    folder = stage.work / "style"
+    folder.mkdir(exist_ok=True)
+    (folder / "base.md").write_text("Worn painted wood, scuffed corners.\n")
+    (folder / "crates.md").write_text("@base.md\n@props.md\nIron bands, chunky bevels.\n")
+    stage.props.style_file = "//style/crates.md"
+
+
 @scenario
 def agent_popover(stage: Stage):
     """The agent popover from the header gear, with this file's self-check
-    rounds, palette, bevel style and style notes set and its triangle budget
-    and render size left at the preferences."""
+    rounds and style notes set and its triangle budget and render size left
+    at the preferences: a guide importing a shared base, and one import that
+    is missing."""
     stage.crate()
     stage.props.self_check_rounds = 2
-    stage.props.palette = "weathered oak, dark iron"
-    stage.props.bevel_style = "chunky"
-    stage.props.style_notes = "Worn painted wood, scuffed corners."
+    _style_guide(stage)
     yield 0.5
     return Popup("panel", "WHITTLE_PT_agent")
+
+
+@scenario
+def guide_warning(stage: Stage):
+    """A finished turn under a style guide with a missing import: the
+    conversation says so once, and the popover says what."""
+    stage.crate()
+    _style_guide(stage)
+    yield from stage.turns(["Add a lid to the crate."], FAKE / "stream.json")
 
 
 @scenario

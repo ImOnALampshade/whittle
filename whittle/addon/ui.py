@@ -488,19 +488,22 @@ def draw_indicator(layout, ctl) -> None:
     row.popover("WHITTLE_PT_agent", text="", icon=icon)
 
 
-# The per-file text fields go under their label: a label beside them would
-# leave a list of colours or notes little room, and the three style fields
-# then line up with each other and with the number fields above.
-OWN_LINE_SETTINGS = ("palette", "bevel_style", "style_notes")
-# The style settings start after a gap, apart from the cost settings above.
-FIRST_STYLE_SETTING = "palette"
+# The file field goes under its label: a label beside it would leave a path
+# little room, and it then lines up with the number fields above.
+OWN_LINE_SETTINGS = ("style_file",)
+# The style setting starts after a gap, apart from the cost settings above.
+FIRST_STYLE_SETTING = "style_file"
+
+
+# The width a line of text has in the agent popover, beside its icon.
+POPOVER_LINE = 240
 
 
 def draw_file_settings(layout, scene) -> None:
     """This file's settings (props.FILE_SETTINGS): the triangle budget, the
-    self-check rounds and render size, then the palette, bevel style and
-    style notes. An unset one shows the preference's value and says
-    "(default)"; a set one has its reset button enabled. The next turn's
+    self-check rounds and render size, then the style notes file with what
+    it loaded and any warnings. An unset one shows the preference's value and
+    says "(default)"; a set one has its reset button enabled. The next turn's
     session runs with them."""
     if getattr(scene, "whittle", None) is None:
         return
@@ -525,6 +528,8 @@ def draw_file_settings(layout, scene) -> None:
         reset = row.row(align=True)
         reset.enabled = key in overrides
         reset.operator("whittle.file_setting_reset", text="", icon="LOOP_BACK").key = key
+    wrap = Ctx(scene=None, hist=None, ctl=None, comparing=None, width=POPOVER_LINE).wrap
+    prefs.draw_style_guide(layout, scene.whittle.style_file, lambda text: wrap(text, POPOVER_LINE))
 
 
 def draw_agent(layout, ctl, scene=None) -> None:
@@ -540,7 +545,8 @@ def draw_agent(layout, ctl, scene=None) -> None:
         # The panel says only that Claude stopped; the details are here.
         col = layout.column(align=True)
         col.active = False
-        for line in Ctx(scene=None, hist=None, ctl=None, comparing=None, width=240).lines(reason, 240, 4):
+        ctx = Ctx(scene=None, hist=None, ctl=None, comparing=None, width=POPOVER_LINE)
+        for line in ctx.lines(reason, POPOVER_LINE, 4):
             col.label(text=line, icon="BLANK1")
     found = chats.get()
     model = current_model(ctl, found)

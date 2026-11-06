@@ -23,8 +23,7 @@ SKILLS = [
     "gn-scatter",
 ]
 
-DEFAULTS = {"self_check_rounds": 3, "poly_budget": 2000, "style_notes": "", "palette": "", "bevel_style": "",
-            "render_size": 512}
+DEFAULTS = {"self_check_rounds": 3, "poly_budget": 2000, "render_size": 512}
 
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 
@@ -60,9 +59,7 @@ def build(settings: dict | None = None, *, inline_skills: bool = False) -> str:
         self_check_rounds=values["self_check_rounds"],
         poly_budget=values["poly_budget"],
         render_size=values["render_size"],
-        palette=style.palette_text(values["palette"]),
-        bevel_style=style.bevel_text(values["bevel_style"]),
-        style_notes=style.notes_text(values["style_notes"]),
+        style_guide=style.guide_section(values.get("style_guide", ""), bool(values.get("style_incomplete"))),
     )
     if inline_skills:
         recipes = "\n\n".join(f"## Recipe: {name}\n\n{load_skill(name)}" for name in SKILLS)

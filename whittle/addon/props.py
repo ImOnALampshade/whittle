@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Per-scene state: scene.whittle."""
 
+import os
+import uuid
+
 import bpy
 from bpy.props import BoolProperty, CollectionProperty, IntProperty, PointerProperty, StringProperty
 
+from .. import style
 from . import enter, prefs, targets
 
 
@@ -34,6 +38,22 @@ class WhittleTarget(bpy.types.PropertyGroup):
 # session gets; editing it sets the override, and reset_file_setting clears it.
 # Every session setting can be overridden, in the preferences' order.
 FILE_SETTINGS = {key: f"file_{key}" for key in prefs.SESSION_SETTINGS}
+
+# The save under way: the file it started from, and each scene whose Style
+# Notes it rewrote with the text from before (rebase_style_paths).
+_rebased_from = ""
+_rebased: list[tuple[bpy.types.Scene, str]] = []
+
+# Where a // Style Notes counts from, for what an undo brings back. Undo leaves
+# the file where it is but puts back text written from an earlier folder, so
+# each text carries a stamp saying which: scene.whittle[STYLE_MOVE], a key of
+# _moves, this session's Save As moves to a new folder and where each went. No
+# stamp, or one from another session, means the folder before the first move.
+# A stamp means nothing outside this session: a file is read from where it is.
+STYLE_MOVE = "style_file_move"
+_start_folder = ""
+_moves: dict[str, str] = {}
+_latest_move = ""
 
 
 def _clean(key: str, value):
@@ -66,6 +86,81 @@ def reset_file_setting(scene, key: str) -> None:
         del props[FILE_SETTINGS[key]]
 
 
+def rebase_style_paths(target: str) -> None:
+    """Before a save (save_pre, where bpy.data.filepath is still the file
+    being left): if it goes to another folder, every scene's // Style Notes is
+    rewritten to name the same file from there, as Blender does for its own
+    paths. Save As and Save Copy look the same here, so both write the new
+    text and settle_style_paths takes it back for a copy. Written straight to
+    the store: the property's update reads the disk, which a save during a
+    turn must not add to, and a file's own path is read at a Send or Read Now.
+    A read walks a `..` up from a folder's real place, so the rewrite starts
+    from there too, not from the symlink a file was saved through."""
+    global _rebased_from
+    _rebased_from = bpy.data.filepath
+    _rebased.clear()
+    if not _rebased_from:
+        return
+    store = FILE_SETTINGS["style_file"]
+    old_folder, new_folder = _real_folder(_rebased_from), _real_folder(target)
+    for scene in bpy.data.scenes:
+        path = file_settings(scene).get("style_file", "").strip()
+        if scene.library is None and path.startswith("//"):
+            rebased = style.rebased_path(path, old_folder, new_folder)
+            if rebased != path:
+                _rebased.append((scene, scene.whittle[store]))
+                scene.whittle[store] = rebased
+
+
+def settle_style_paths() -> None:
+    """After a save or a failed one: if the open file stayed where it was,
+    a copy was saved or nothing was, and its // paths still start from here.
+    A failed Save As leaves bpy.data.filepath alone too. Otherwise the file
+    moved, and the text rewritten says so."""
+    global _rebased_from, _start_folder, _latest_move
+    left, _rebased_from = _rebased_from, ""
+    if bpy.data.filepath == left:
+        for scene, text in _rebased:
+            scene.whittle[FILE_SETTINGS["style_file"]] = text
+    elif left and _real_folder(left) != _real_folder(bpy.data.filepath):
+        if not _moves:
+            _start_folder = _real_folder(left)
+        _latest_move = uuid.uuid4().hex
+        _moves[_latest_move] = _real_folder(bpy.data.filepath)
+        for scene, _text in _rebased:
+            scene.whittle[STYLE_MOVE] = _latest_move
+    _rebased.clear()
+
+
+def follow_style_paths() -> None:
+    """After an undo or redo: a // path from before a Save As would be counted
+    from the new folder, where it can name another file with no warning, so
+    it is rewritten to name what it named when it was written. The steps
+    themselves cannot hold this, as the rewrite makes none. Linked scenes are
+    their own files' to rewrite."""
+    if not _latest_move:
+        return
+    store = FILE_SETTINGS["style_file"]
+    for scene in bpy.data.scenes:
+        stamp = str(scene.whittle.get(STYLE_MOVE, ""))
+        path = file_settings(scene).get("style_file", "").strip()
+        if scene.library is None and stamp != _latest_move and path.startswith("//"):
+            scene.whittle[store] = style.rebased_path(path, _moves.get(stamp, _start_folder), _moves[_latest_move])
+            scene.whittle[STYLE_MOVE] = _latest_move
+
+
+def forget_style_moves() -> None:
+    """A file was loaded: what it holds counts from where it is, and no undo
+    reaches back past this."""
+    global _latest_move
+    _latest_move = ""
+    _moves.clear()
+
+
+def _real_folder(filepath: str) -> str:
+    return os.path.realpath(os.path.dirname(filepath))
+
+
 def _file_setting(key: str) -> dict:
     """get and set for a per-file setting's property."""
     def getter(props):
@@ -74,8 +169,15 @@ def _file_setting(key: str) -> dict:
 
     def setter(props, value):
         props[FILE_SETTINGS[key]] = _clean(key, value)
+        if key == "style_file" and _latest_move:
+            props[STYLE_MOVE] = _latest_move
 
     return {"get": getter, "set": setter}
+
+
+def _style_file_changed(props, _context) -> None:
+    # The popover redraws from what was read: it never reads the disk itself.
+    prefs.read_style_guide(props.style_file)
 
 
 def _file_description(key: str) -> str:
@@ -119,14 +221,10 @@ class WhittleSceneProps(bpy.types.PropertyGroup):
     render_size: IntProperty(
         name="Render Size", min=prefs.LIMITS["render_size"][0], max=prefs.LIMITS["render_size"][1],
         **_file_setting("render_size"), description=_file_description("render_size"))
-    palette: StringProperty(
-        name="Palette", **_file_setting("palette"), description=_file_description("palette"))
-    bevel_style: StringProperty(
-        name="Bevel Style", search=prefs.bevel_search, search_options={"SUGGESTION"},
-        **_file_setting("bevel_style"), description=_file_description("bevel_style"))
-    style_notes: StringProperty(
-        name="Style Notes", **_file_setting("style_notes"),
-        description=_file_description("style_notes"))
+    style_file: StringProperty(
+        name="Style Notes", subtype="FILE_PATH", options={"PATH_SUPPORTS_BLEND_RELATIVE"},
+        update=_style_file_changed, **_file_setting("style_file"),
+        description=_file_description("style_file"))
 
 
 CLASSES = (WhittleRef, WhittleTarget, WhittleSceneProps)

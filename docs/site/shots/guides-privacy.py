@@ -37,7 +37,7 @@ def tool_code(stage):
 SHOTS = [
     Shot("usage-data", "The Claude box of the Preferences, usage data off.", preferences(crop=(170, 272, 665, 205))),
     Shot("save-chats", "The Files box of the Preferences, with Save Chats in the .blend on.",
-         preferences(full=True, crop=(8, 752, 664, 68))),
+         preferences(full=True, crop=(8, 696, 664, 68))),
     Shot("tool-code", "A finished turn with a tool call open on the code Claude ran.", sidebar(), setup=tool_code),
     Shot("continue-chat", "A chat made on another machine, asking to be continued.", sidebar(),
          scenario="continue_chat"),

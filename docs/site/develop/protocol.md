@@ -125,7 +125,8 @@ it to `high`. A `submit` whose `model` or `effort` differs from the session's sw
 live session first. See [Models and effort](../guides/models.md).
 
 `settings` is `prefs.session_settings()`: integers `poly_budget`, `self_check_rounds` and
-`render_size`, strings `palette`, `bevel_style` and `style_notes`, and optionally
+`render_size`, strings `style_file` and `style_guide` (the path and the guide's text as last
+read), the boolean `style_incomplete` (part of the guide did not load), and optionally
 `max_turns` and `max_budget_usd`, which go to the SDK. `resume`, `fork` and `resume_at`
 come from `tree.session_plan`; see [Node](#node) below.
 
@@ -287,7 +288,7 @@ with no strokes, so `views` holds the current view only, here also the latest.
  ],
  "views": [2],
  "units": {"system": "METRIC", "scale_length": 1.0},
- "settings": {"self_check_rounds": 3, "poly_budget": 2000, "style_notes": "", "palette": "", "bevel_style": ""},
+ "settings": {"self_check_rounds": 3, "poly_budget": 2000, "style_file": ""},
  "refs": [],
  "amend": null,
  "target_collection": null
@@ -303,7 +304,7 @@ with no strokes, so `views` holds the current view only, here also the latest.
 | `views` | View ids, each with a folder under `views/`. |
 | `refs` | Paths inside the bundle. An absolute path, a drive or `..` is refused. |
 | `units` | From `scene.unit_settings`. |
-| `settings` | Five of the session settings (`bundle.SETTINGS_KEYS`); `render_size` is not one. |
+| `settings` | Three of the session settings (`bundle.SETTINGS_KEYS`); `render_size` is not one. `style_file` is the path, not the guide's text. An older bundle's other keys are ignored. |
 | `target_collection` | The collection new objects go in, when the target is one. Optional when reading. |
 
 ### strokes.json
@@ -358,6 +359,7 @@ them by hand.
 ```text
 <session folder>/
   session.json                the history tree
+  .system_prompt.md           the agent's system prompt, never packed
   compare/live.blend          the live scene while a comparison runs
   nodes/<node id>/
     target.blend              the target after this node

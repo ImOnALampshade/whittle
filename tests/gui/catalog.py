@@ -134,6 +134,13 @@ CHECKS = {
     "references_turn": Check(
         "Two references added with the paperclip through the real file browser, one pinned; after a "
         "turn that succeeded only the pinned one stays."),
+    "style_notes_picker": Check(
+        "The Style Notes field's file icon, clicked in the agent popover, opens the real file browser, "
+        "and the file picked there reaches the field as a // path. The popover then lists the guide and "
+        "its import and warns of the import that is missing, and a turn runs with what did load, the "
+        "conversation saying part of the guide is missing. Reopened in a fresh Blender, the file's path "
+        "is not read: the popover says so, and its Read Now button lists the files.",
+        (Phase(deadline=180.0), Phase(open="scene.blend"))),
     "preferences_key": Check(
         "With no API key, Send asks for one: the sidebar's box has Get a Key (the Console's keys "
         "page) and Preferences…, which opens the Preferences on Whittle. There the API Key field "
@@ -153,9 +160,9 @@ CHECKS = {
         "The Preferences' Model for New Chats starts the next new chat on that model and leaves "
         "older chats on theirs. Send Claude CLI usage data restarts an idle agent, whose "
         "environment holds CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC only while it is off. The "
-        "Defaults box has all six session settings; Triangle Budget, Palette, Bevel Style and Style "
-        "Notes show in the agent popover's For This File as (default) and reach the session and "
-        "the request; changing them restarts the agent. A file's own budget "
+        "Defaults box has all four session settings; Triangle Budget and Style Notes show in the "
+        "agent popover's For This File as (default) and reach the session and the request; "
+        "changing them restarts the agent. A file's own budget "
         "wins, survives a save and reopen in a fresh Blender, another file shows the default, "
         "and its reset button gives the preference back.",
         (Phase(), Phase(open="scene.blend"))),

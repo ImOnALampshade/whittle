@@ -9,6 +9,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -35,6 +36,8 @@ log = logging.getLogger("whittle.agent")
 
 INTERRUPTED_REASONS = {"aborted_streaming", "aborted_tools"}
 STOP_TIMEOUT = 10.0
+# In the session folder, where the CLI reads the system prompt from.
+PROMPT_FILE = ".system_prompt.md"
 # ask waits on a person, so the CLI must not time the tool call out.
 MCP_TOOL_TIMEOUT_MS = "86400000"
 API_URL = "https://api.anthropic.com"
@@ -62,6 +65,17 @@ SIZE_REFUSALS = ("Request too large", "Image was too large")
 def inline_skills_from_env() -> bool:
     """WHITTLE_INLINE_SKILLS is set, to anything but 0."""
     return os.environ.get("WHITTLE_INLINE_SKILLS", "") not in ("", "0")
+
+
+def write_prompt(session_dir: str, text: str) -> str:
+    """Puts the system prompt in the session folder for the CLI to read. On
+    the command line a long style guide would not fit: Linux allows 128 KiB
+    in one argument, Windows 32 KiB in all. The dot keeps it out of what the
+    chat packs into the .blend."""
+    path = Path(session_dir) / PROMPT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="")
+    return str(path)
 
 
 def build_options(params: dict, servers: dict, *, inline_skills: bool) -> ClaudeAgentOptions:
@@ -367,6 +381,7 @@ class SdkRunner:
         connected. A failed connect sends an error event and raises BridgeCallError."""
         await self._stop_session("session restarted")
         options = build_options(params, build_servers(self.ctx), inline_skills=self.inline_skills)
+        options.system_prompt = {"type": "file", "path": write_prompt(params["session_dir"], options.system_prompt)}
         self.session_id = params.get("resume")
         self.model = params.get("model")
         self.effort = params.get("effort")

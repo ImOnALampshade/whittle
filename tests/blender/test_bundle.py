@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+import json
 import math
 import shutil
 import tempfile
@@ -14,8 +15,8 @@ from tests.fixtures.crate.scene import build_scene
 from whittle import formats
 from whittle.addon import bundle, render, sketch, views
 
-SETTINGS = {"self_check_rounds": 2, "poly_budget": 800, "style_notes": "chunky", "palette": "oak, iron",
-            "bevel_style": "subtle", "render_size": 512}
+SETTINGS = {"self_check_rounds": 2, "poly_budget": 800, "style_file": "//style.md", "style_guide": "Worn edges.",
+            "style_incomplete": False, "render_size": 512}
 A_POINTS = [(-0.15 + 0.3 * i / 7, -0.25, 0.25 + 0.02 * math.sin(i)) for i in range(8)]
 A_RADIUS = [0.012 + 0.001 * i for i in range(8)]
 B_POINTS = [(0.2 * math.cos(2 * math.pi * i / 12), 0.2 * math.sin(2 * math.pi * i / 12), 0.7)
@@ -93,12 +94,22 @@ class BundleTest(unittest.TestCase):
         self.assertEqual(req.refs, ["refs/my_ref.png"])
         self.assertEqual((dest / "refs" / "my_ref.png").read_bytes(), self.ref.read_bytes())
         self.assertEqual(req.units, {"system": "METRIC", "scale_length": 0.01})
-        self.assertEqual(req.settings, {"self_check_rounds": 2, "poly_budget": 800, "style_notes": "chunky",
-                                        "palette": "oak, iron", "bevel_style": "subtle"})
+        self.assertEqual(req.settings, {"self_check_rounds": 2, "poly_budget": 800, "style_file": "//style.md"},
+                         "the path says which guide; its text is in the session, not in every request")
         self.assertEqual(written.request, req)
 
         self.write("second")
         self.assertEqual(formats.read_bundle(self.tmp / "second").request.target[0]["uid"], uid)
+
+    def test_a_bundle_with_the_old_style_keys_loads(self):
+        dest = self.tmp / "old"
+        self.write("old")
+        path = dest / "request.json"
+        request = json.loads(path.read_text())
+        request["settings"] = {"self_check_rounds": 2, "poly_budget": 800, "style_notes": "chunky",
+                               "palette": "oak, iron", "bevel_style": "subtle"}
+        path.write_text(json.dumps(request))
+        self.assertEqual(formats.read_bundle(dest).request.settings["palette"], "oak, iron")
 
     def test_strokes(self):
         strokes = self.write().strokes

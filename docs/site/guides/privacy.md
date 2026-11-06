@@ -21,9 +21,11 @@ sends:
 - what Claude looks at while it works: scene information it asks for (object names,
   transforms, mesh statistics, materials, modifiers, node groups), the output and errors
   of the Python it runs, and the renders it makes to check its own work;
-- details of the request: the target's object names, this file's settings (including
-  **Style Notes**, **Palette** and **Bevel Style**), the file names of your references,
-  and folder paths on your computer, which can include your user name;
+- details of the request: the target's object names, this file's triangle budget and
+  self-check rounds, the file names of your references, and folder paths on your computer,
+  which can include your user name;
+- the text of the [style guide](settings.md#style-guides), if the file has one: every file
+  listed under **Style Notes** in the agent popover;
 - Whittle's instructions to Claude, and the conversation so far.
 
 The target is the objects you pick for Claude to change: see
@@ -131,7 +133,7 @@ Four things to watch:
   next save with Whittle enabled.
 - Some of Whittle's state is part of the scene and stays in the file either way: the
   text in the prompt box, any strokes still in the sketch, the list of references with
-  their file paths, and this file's settings such as **Style Notes**. A stopped or failed
+  their file paths, and this file's settings such as the path in **Style Notes**. A stopped or failed
   turn leaves the strokes you sent in the sketch.
 
 ## Remove what Whittle keeps on this computer
@@ -184,9 +186,9 @@ scripts stored in a file. Nothing Whittle stores in a file runs code by itself.
 
 ## Be careful with files you did not make
 
-Claude reads the scene (object, material and collection names), your reference images
-and, when you continue a chat, that chat's whole conversation. Text planted in any of
-these could try to steer Claude, and Claude can run Python.
+Claude reads the scene (object, material and collection names), your reference images,
+the style guide and, when you continue a chat, that chat's whole conversation. Text planted
+in any of these could try to steer Claude, and Claude can run Python.
 
 So a chat made on another machine opens with Send disabled, and asks
 **Continue this chat?** You are asked once per chat. Chats from files saved before Whittle
@@ -202,6 +204,10 @@ With a file from someone else:
 
 - Start a **New Chat** rather than pressing **Continue**. See [Chats](chats.md).
 - A new chat still reads the scene, so don't run Whittle at all on a file you don't trust.
+- Check **Style Notes** in the agent popover before you send, pressing **Read Now** to list
+  the files. The `.blend` stores that path, and the files listed under it are sent with your
+  turns. Only `.md` and `.txt` files load, but a private note of that kind could. See
+  [Style guides](settings.md#style-guides).
 
 Links in Claude's replies open only `http`, `https` and `mailto` addresses. Any other link
 is plain text.

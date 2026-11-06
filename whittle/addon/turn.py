@@ -60,6 +60,9 @@ def next_node_number(session: formats.SessionDir) -> int:
     return latest_node_number(session) + 1
 
 
+GUIDE_WARNING = "Part of the style guide did not load. The agent popover says what is missing."
+
+
 class TurnController:
     """Runs one session folder's turns: owns its agent process, stream and history,
     and carries each run from Send to turn_finished."""
@@ -144,6 +147,12 @@ class TurnController:
         self._scene_name = ""
         # What the running agent process was started with (launch_settings()).
         self._launched: dict | None = None
+        # The scene the last run was sent from, by name: a run can wait for
+        # the agent, and then its session starts from a timer, whose context
+        # may be another window's scene.
+        self._sent_from = ""
+        # The conversation already says the style guide did not all load.
+        self._guide_warned = False
         # Session uids of the objects that existed when the running turn began.
         self._preexisting: set[int] = set()
         self.commands = commands.CommandContext(
@@ -243,14 +252,18 @@ class TurnController:
         fake script, API key and usage-data choice, and the settings its
         sessions get. The key
         is kept only as a digest. The model is not among them: each submit
-        names the chat's, and the agent switches its session to it."""
+        names the chat's, and the agent switches its session to it. Nor is the
+        style guide's path: the agent gets the text, and a Save As rewrites
+        the path of a guide that has not changed."""
         key, _source = prefs.api_key()
         python = self.process.python or paths.agent_python()
+        settings = {**prefs.session_settings(), **self.settings_overrides}
+        del settings["style_file"]
         return {"python": str(python) if python else None,
                 "fake_script": str(self.process.fake_script) if self.process.fake_script else None,
                 "api_key": hashlib.sha256(key.encode()).hexdigest() if key else None,
                 "usage_data": bool(prefs.get().usage_data),
-                "settings": {**prefs.session_settings(), **self.settings_overrides}}
+                "settings": settings}
 
     def chat_model(self) -> str:
         """The model this chat's next turn runs on: the controller's own,
@@ -288,6 +301,7 @@ class TurnController:
         missing = [t["name"] for t in bundle.request.target if t["name"] not in bpy.data.objects]
         if missing:
             raise ValueError(f"target objects not in this file: {', '.join(missing)}")
+        self._sent_from = bpy.context.scene.name
         self._ensure_started()
         compare.clear_ghost()
         self.history.ensure_root([bpy.data.objects[t["name"]] for t in bundle.request.target],
@@ -314,6 +328,7 @@ class TurnController:
         self._resume_failed = None
         self.last_folded = None
         scene = scene or bpy.context.scene
+        self._sent_from = scene.name
         self._ensure_started()
         compare.clear_ghost()
         number = self._next_node
@@ -350,6 +365,20 @@ class TurnController:
         self._advance()
         return node
 
+    def _sending_scene(self):
+        """The scene the run came from, if it is still there; else None, the
+        context's."""
+        return bpy.data.scenes.get(self._sent_from)
+
+    def _warn_of_guide(self, node: str) -> None:
+        """Says once in the conversation that the style guide did not all
+        load; the agent popover says what, for as long as it stays so."""
+        incomplete = prefs.session_settings(self._sending_scene())["style_incomplete"]
+        if incomplete and not self._guide_warned:
+            self._local("warning", {"text": GUIDE_WARNING})
+            self.stream.note(GUIDE_WARNING, kind="warning", turn_id=node)
+        self._guide_warned = incomplete
+
     def _ensure_started(self) -> None:
         if not self.process.alive:
             self.start()
@@ -361,7 +390,7 @@ class TurnController:
         """Starts an SDK session: fresh, or resuming (and maybe forking) the
         conversation the plan names."""
         plan = plan or SessionPlan(restart=True)
-        settings = {**prefs.session_settings(), **self.settings_overrides}
+        settings = {**prefs.session_settings(self._sending_scene()), **self.settings_overrides}
         self.commands.settings = settings
         # The chat's SDK transcripts live in its folder (agent/store.py).
         params = {"session_dir": str(self.session.root), "store_dir": str(self.session.root / "sdk"),
@@ -443,6 +472,7 @@ class TurnController:
             warning.turn_id = node
             self._local("warning", {"text": warning.text})
         self.stream.note(f"Turn {node}: {text or '(sketch only)'}", kind="submit", turn_id=node)
+        self._warn_of_guide(node)
         self.bridge.call(Method.SUBMIT, {"turn_id": node, "bundle_dir": str(dest), "prompt": text,
                                          "context": context, "model": model, "effort": self.chat_effort()},
                          self._on_submit_result)
@@ -607,7 +637,8 @@ class TurnController:
                  "returned": False, "scene": scene}
         if pending:
             dest = self.session.amend_dir(node, number)
-            settings = {**prefs.session_settings(scene), **self.settings_overrides}
+            # An amend keeps the turn's guide: the path is all a bundle holds.
+            settings = {**prefs.session_values(scene), **self.settings_overrides}
             written = bundle.write_bundle(
                 dest, scene=scene, sketch_obj=obj, node=node, parent=self.bundle.request.parent,
                 prompt=text, targets=self.commands.targets(), settings=settings,

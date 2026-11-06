@@ -51,6 +51,6 @@ SHOTS = [
     Shot("sketching", "A sidebar state: Sketch pressed, Capture View beside it.",
          scenario="sketching"),
     Shot("preferences-defaults", "The Defaults box of Whittle's preferences.",
-         preferences(scroll=6, crop=(176, 364, 652, 152))),
+         preferences(scroll=6, crop=(176, 364, 652, 94))),
     Shot("agent-popover", "The agent popover's For This File.", scenario="agent_popover"),
 ]
