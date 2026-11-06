@@ -44,8 +44,18 @@ def controller(fake_script: str = "") -> turn.TurnController:
     return current
 
 
+def refuse_send(context) -> None:
+    """Raises if a turn may not go out yet: every route that sends one comes
+    through here, before it changes anything."""
+    if chats.current_foreign():
+        raise RuntimeError(CHAT_FOREIGN)
+    if prefs.held_guide(context.scene):
+        raise RuntimeError(GUIDE_HELD)
+
+
 def run_bundle(context, fake_script: str = "") -> turn.TurnController:
     """Body of the Run Bundle operator, callable from tests."""
+    refuse_send(context)
     props = context.scene.whittle
     wm = context.window_manager
     bundle_dir = Path(bpy.path.abspath(wm.whittle_bundle_path))
@@ -70,8 +80,7 @@ def submit_sketch(context, fake_script: str = "") -> tuple[turn.TurnController, 
     controller puts it back if the run never starts. A folded turn's prompt
     is out of the box while its strokes wait there, so a blank box sends it
     again with them, as Retry does."""
-    if chats.current_foreign():
-        raise RuntimeError(CHAT_FOREIGN)
+    refuse_send(context)
     props = context.scene.whittle
     refs = [Path(bpy.path.abspath(r.path)) for r in props.refs if r.path]
     ctl = controller(fake_script or context.window_manager.whittle_fake_script)
@@ -320,6 +329,8 @@ def can_retry(hist, ctl, node: str) -> bool:
     Not one whose images were too big: they would fail the same way."""
     if hist is None or hist.tree is None or node not in hist.tree.nodes or not history_idle(ctl):
         return False
+    if prefs.held_guide():
+        return False
     found = hist.tree.node(node)
     if found.status != "failed" or found.too_large:
         return False
@@ -382,6 +393,7 @@ def retry(context, node: str, fake_script: str = "") -> tuple[turn.TurnControlle
     started at. A recorded failure is branched first, which brings its
     prompt, strokes and references back; a folded one never left its
     parent, and its strokes and references are still pending."""
+    refuse_send(context)
     hist = _history_for(context)
     found = hist.tree.node(node)
     if found.status != "failed":
@@ -432,6 +444,8 @@ CHAT_NEW_ALREADY = "This chat is new already"
 CHAT_GONE = "This chat is no longer in the file"
 # Send's tooltip in a chat made by another install, until it is continued.
 CHAT_FOREIGN = "This chat was made on another machine: Continue it to send, or start a New Chat"
+# Send's tooltip while the box over the prompt asks about a style guide.
+GUIDE_HELD = "This file's style guide needs your answer first: see the box over the prompt"
 SETUP_FIRST = "Set up Claude to send"
 
 
@@ -648,7 +662,8 @@ class WHITTLE_OT_capture_view(bpy.types.Operator):
 
 class WHITTLE_OT_submit(bpy.types.Operator):
     """The Send button: disabled during a comparison, in a chat from another
-    install, before setup and while a turn runs."""
+    install, with a style guide this install has not approved, before setup
+    and while a turn runs."""
     bl_idname = "whittle.submit"
     bl_label = "Send"
     bl_description = "Send the prompt, the sketch and the references to Claude"
@@ -664,6 +679,9 @@ class WHITTLE_OT_submit(bpy.types.Operator):
             return False
         if chats.current_foreign():
             cls.poll_message_set(CHAT_FOREIGN)
+            return False
+        if prefs.held_guide(context.scene):
+            cls.poll_message_set(GUIDE_HELD)
             return False
         ctl = turn.current()
         if needs_setup(ctl):
@@ -1022,7 +1040,8 @@ class WHITTLE_OT_file_setting_reset(bpy.types.Operator):
 
 class WHITTLE_OT_style_guide_read(bpy.types.Operator):
     """Reads a style guide now, so its files are listed before anything is
-    sent. Opening a file does not read the path it stores."""
+    sent: the one read of a guide not yet approved, as the user asked for it.
+    Opening a file does not read the path it stores."""
     bl_idname = "whittle.style_guide_read"
     bl_label = "Read Now"
     bl_description = "Read this style guide now, to see which files it would send"
@@ -1033,6 +1052,45 @@ class WHITTLE_OT_style_guide_read(bpy.types.Operator):
         prefs.read_style_guide(self.path)
         if context.area is not None:
             context.area.tag_redraw()
+        return {"FINISHED"}
+
+
+class WHITTLE_OT_style_guide_approve(bpy.types.Operator):
+    """Use This Guide: this install may read and send the guide the file
+    names. No undo step: an approval belongs to the install, not the scene."""
+    bl_idname = "whittle.style_guide_approve"
+    bl_label = "Use This Guide"
+    bl_description = ("Send this style guide and the files it imports with each turn. This computer won't "
+                      "ask again about this guide, from any file")
+
+    @classmethod
+    def poll(cls, context):
+        return bool(prefs.held_guide(context.scene))
+
+    def execute(self, context):
+        if not prefs.approve_guide(prefs.held_guide(context.scene)):
+            self.report({"WARNING"}, "Whittle could not record this, so it will ask again after Blender closes")
+        prefs.refresh_style_guides(context.scene)
+        if context.area is not None:
+            context.area.tag_redraw()
+        return {"FINISHED"}
+
+
+class WHITTLE_OT_style_guide_skip(bpy.types.Operator):
+    """Go Without It: empties this file's Style Notes, the value that means
+    no guide here. Changes the scene, so it is an undo step, and an undo asks
+    again."""
+    bl_idname = "whittle.style_guide_skip"
+    bl_label = "Go Without It"
+    bl_description = "Send no style guide from this file: this empties its Style Notes"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(prefs.held_guide(context.scene))
+
+    def execute(self, context):
+        context.scene.whittle.style_file = ""
         return {"FINISHED"}
 
 
@@ -1406,7 +1464,8 @@ CLASSES = (WHITTLE_OT_sketch, WHITTLE_OT_sketch_toggle, WHITTLE_OT_sketch_stop,
            WHITTLE_OT_interrupt, WHITTLE_OT_amend, WHITTLE_OT_answer, WHITTLE_OT_open_image,
            WHITTLE_OT_open_transcript, WHITTLE_OT_target_from_selection, WHITTLE_OT_target_add,
            WHITTLE_OT_target_remove, WHITTLE_OT_target_clear, WHITTLE_OT_view_remove, WHITTLE_OT_view_snap,
-           WHITTLE_OT_file_setting_reset, WHITTLE_OT_style_guide_read, WHITTLE_OT_history_restore, WHITTLE_OT_history_branch,
+           WHITTLE_OT_file_setting_reset, WHITTLE_OT_style_guide_read, WHITTLE_OT_style_guide_approve,
+           WHITTLE_OT_style_guide_skip, WHITTLE_OT_history_restore, WHITTLE_OT_history_branch,
            WHITTLE_OT_history_compare,
            WHITTLE_OT_branch_switch, WHITTLE_OT_retry, WHITTLE_OT_compare_toggle, WHITTLE_OT_compare_end, WHITTLE_OT_ghost_toggle,
            WHITTLE_OT_chat_new, WHITTLE_OT_chat_switch, WHITTLE_OT_chat_continue, WHITTLE_OT_chat_rename, WHITTLE_OT_chat_delete,

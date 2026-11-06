@@ -2081,6 +2081,103 @@ def style_notes_picker_reopen(stage: GuiStage):
         expect(name in labels, f"{name} is not listed after Read Now: {labels}")
 
 
+GUIDE_PATH = "//guides/style.md"
+GUIDE_TEXT = "Worn painted wood.\n\nIron bands."
+
+
+def sidebar_button(stage: GuiStage, name: str):
+    """Where the sidebar has an operator's button: down its middle, as
+    gear_button looks for the gear."""
+    _area, region = sidebar(stage)
+    x, top = region.x + region.width // 2, region.y + region.height
+    for y in range(top - 40, region.y, -8):
+        if name in (yield from hovered_copy(stage, x - 40, y)):
+            return x - 40, y
+    raise AssertionError(f"no {name} button in the sidebar")
+
+
+def guide_turn(stage: GuiStage, name: str, prompt: str):
+    """A turn, and the guide text its session got."""
+    node = stage.submit(prompt, stage.script(name, [{"steps": [say("Looked.")], "finish": done("Looked.")}]))
+    yield stage.finished(node)
+    return stage.ctl.session_starts[-1]["settings"]["style_guide"]
+
+
+@phase("guide_gate")
+def guide_gate_arrives(stage: GuiStage):
+    from whittle.addon import props
+
+    stage.crate()
+    folder = stage.work / "guides"
+    folder.mkdir()
+    (folder / "base.md").write_text("Worn painted wood.\n")
+    (folder / "style.md").write_text("@base.md\nIron bands.\n")
+    stage.save_as(stage.work / "scene.blend")
+    yield from stage.settle()
+    expect_equal((yield from guide_turn(stage, "made", "Look at it.")), "", "the guide of a file with none yet")
+    # What another install's file holds, written past the setter: to this
+    # install it only ever arrives in the file.
+    bpy.context.scene.whittle[props.FILE_SETTINGS["style_file"]] = GUIDE_PATH
+    store = chats.get()
+    store.entry(store.current).origin = "i00000000000000ff"
+    store.save()
+    stage.save_as(stage.work / "scene.blend")
+    yield from stage.settle()
+
+
+@phase("guide_gate")
+def guide_gate_asks(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle.addon import prefs, ui
+
+    expect_equal(prefs.held_guide(), GUIDE_PATH, "the guide waiting after a real load")
+    expect_equal(prefs.style_guide(GUIDE_PATH), None, "the last read just after opening the file")
+    yield from show_sidebar(stage)
+    panel = Spy(ui.WHITTLE_PT_main)
+    stage.props.prompt = "Add a lid."
+    side = yield from drawn(panel, "the guide's box", lambda d: ui.GUIDE_TITLE in d.labels())
+    expect(str(stage.work / "guides") in "".join(side.labels()), f"the box has no absolute path: {side.labels()}")
+    (send,) = side.operators("whittle.submit")
+    expect(not side.is_enabled(send), "Send is enabled under the box")
+
+    # The chat's question and the guide's are separate: answering one leaves the other.
+    expect_equal(stage.button("whittle.chat_continue"), {"FINISHED"}, "Continue")
+    expect(not bpy.ops.whittle.submit.poll(), "Send can run with the guide unanswered")
+    yield from stage.move(*stage.viewport_centre())
+    yield from stage.key("RET", shift=True, alt=True)
+    yield 0.3
+    expect_equal(stage.props.prompt, "Add a lid.", "the prompt after Shift+Alt+Enter")
+    expect(not turn.busy(stage.ctl), "Shift+Alt+Enter started a turn")
+    expect_equal(prefs.style_guide(GUIDE_PATH), None, "the last read after Shift+Alt+Enter")
+
+    yield from stage.click(*(yield from sidebar_button(stage, "style_guide_read")))
+    yield Until(lambda: prefs.style_guide(GUIDE_PATH) is not None, "Read Now to read the guide")
+    side = yield from drawn(panel, "the guide's files", lambda d: "base.md" in d.labels())
+    expect_equal(prefs.held_guide(), GUIDE_PATH, "the guide waiting after Read Now")
+
+    yield from stage.click(*(yield from sidebar_button(stage, "style_guide_approve")))
+    yield Until(lambda: not prefs.held_guide(), "Use This Guide to approve the guide")
+    yield from drawn(panel, "the sidebar without the box", lambda d: ui.GUIDE_TITLE not in d.labels())
+    expect_equal((yield from guide_turn(stage, "approved", "Add a lid.")), GUIDE_TEXT, "what the session got")
+    stage.save_as(stage.work / "scene.blend")
+    yield from stage.settle()
+
+
+@phase("guide_gate")
+def guide_gate_remembers(stage: GuiStage):
+    from tests.gui.spy import Spy
+    from whittle.addon import prefs, ui
+
+    expect_equal(prefs.held_guide(), "", "the guide waiting in a fresh Blender")
+    expect_equal(prefs.style_guide(GUIDE_PATH), None, "the last read just after opening the file")
+    yield from show_sidebar(stage)
+    panel = Spy(ui.WHITTLE_PT_main)
+    stage.props.prompt = "Add handles."
+    yield from drawn(panel, "the sidebar", lambda d: ui.GUIDE_TITLE not in d.labels())
+    expect(bpy.ops.whittle.submit.poll(), "Send is disabled in a fresh Blender")
+    expect_equal((yield from guide_turn(stage, "reopened", "Add handles.")), GUIDE_TEXT, "what the session got")
+
+
 @phase("preferences_defaults")
 def preferences_defaults(stage: GuiStage):
     from tests.gui.spy import Spy

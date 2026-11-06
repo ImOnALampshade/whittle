@@ -20,6 +20,7 @@ Find what the sidebar says:
 | A red line at the end of a turn | [A turn failed](#a-turn-failed) |
 | **Could not resume the agent's earlier conversation** | [Claude lost the earlier conversation](#claude-lost-the-earlier-conversation) |
 | **Part of the style guide did not load** | [Part of the style guide did not load](#part-of-the-style-guide-did-not-load) |
+| **Use this style guide?** | [Whittle asks about a style guide](#whittle-asks-about-a-style-guide) |
 | No box at the top, but **Send** is dim | [Send is dim](#send-is-dim) |
 
 If Blender itself crashed, see [Blender crashed](#blender-crashed).
@@ -271,6 +272,18 @@ did not load has a warning under **Style Notes**:
 The warnings are from the last read, so one you have fixed stays until the next turn or save,
 or until you pick the file again.
 
+## Whittle asks about a style guide
+
+The box **Use this style guide?** over the prompt means this file names a guide this computer
+has not approved, and **Send** stays disabled until you answer. You will see it once for each guide on each
+computer: after a clone, in a file from someone else, or in a second clone in another folder,
+which is another path. It also appears when a guide or the `.blend` moves, since the path is what was approved.
+[Approving a guide](settings.md#approving-a-guide) says what each button does.
+
+If it asks again for a guide you approved, on the same computer and at the same path, Whittle could not keep the
+approval: check that it can write to its [user folder](privacy.md). **Enter** and **Shift+Alt+Enter** do nothing while the
+box is open, and your draft stays where it is.
+
 ## Send is dim
 
 With no box at the top of the sidebar, Send is dim for one of these reasons:
@@ -279,6 +292,8 @@ With no box at the top of the sidebar, Send is dim for one of these reasons:
 - **You are comparing two turns.** End the comparison: see {doc}`History and branches <history>`.
 - **The chat came from another machine.** Press **Continue** in the **Continue this chat?**
   box, or start a new chat: see {doc}`Chats <chats>`.
+- **A style guide needs your answer.** Answer the **Use this style guide?** box: see
+  [Whittle asks about a style guide](#whittle-asks-about-a-style-guide).
 
 While a turn runs there is no Send: **Stop** takes its place. See {doc}`The sidebar <sidebar>`.
 

@@ -34,6 +34,7 @@ def _after_load(*_args):
     # in; a saved ghost is cleaned out of the file just loaded.
     compare.reset()
     props.forget_style_moves()
+    prefs.forget_approvals()
     try:
         compare.clear_ghost()
     except Exception:
@@ -134,7 +135,7 @@ def _after_save(*args):
 @bpy.app.handlers.persistent
 def _save_failed(*_args):
     try:
-        props.settle_style_paths()
+        props.settle_style_paths(saved=False)
     except Exception:
         log.exception("could not put the style guide's path back")
     # No save_post comes: the chats must not stay in the open file's data.

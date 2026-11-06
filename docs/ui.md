@@ -176,6 +176,9 @@ redraw never touches the disk (architecture §1, Style guides):
 - `Read at the next turn.` (dim) and a **Read Now** button (`whittle.style_guide_read`) when
   the path has no read yet: after opening a file, which never reads the path the file
   stores (architecture §1, Style guides), and after an undo or a scene switch.
+- `Not sent until you approve it in the sidebar.` (dim, `prefs.HELD_NOTE`) in place of that
+  line while the guide waits for this install's approval (§4.13). Read Now stays, and what
+  it finds is headed `Would be sent:` rather than `Sent with each turn:`.
 
 The Defaults box in the preferences draws the same lines under its own field. A problem does
 not stop a turn. The conversation also says `Part of the style guide did not load. The agent
@@ -1233,6 +1236,50 @@ Switched to an older chat (the scene was left as the last chat had it):
  [       ▶ Send       ][Opus 5.5 ▾][🕘]
 ```
 
+### 4.13 A style guide to approve
+
+A file naming a style guide this install has not approved (`prefs.held_guide`), over the
+composer, below the Continue box if there is one. `ui.draw_guide_gate` draws it in any state but a running turn. The first
+line is dim. The path is `prefs.guide_location`, absolute and normalised whatever the field holds, so
+a `//` path shows where it leads. Send is disabled; its tooltip says why
+(`operators.GUIDE_HELD`), and so does the error of anything else that tries.
+
+```
+ ┌──────────────────────────────────┐
+ │ ? Use this style guide?          │
+ │ ·This file names it. Its text and·
+ │ ·everything it imports go to     ·
+ │ ·Claude with each turn, so use it·
+ │ ·only if you trust the file.     ·
+ │ ▤ /shared/art/style/crates.md    │
+ │ [      ✓ Use This Guide        ] │
+ │ [⟳ Read Now ][✕ Go Without It  ] │
+ └──────────────────────────────────┘
+ [✎ Sketch]
+ [Add a lid and rope handles.    ][📎]
+ [·····▶ Send·····][Opus 5.5 ▾][🕘]
+```
+
+After **Read Now** the box lists what the last read found under `It would send:`, as §3.1
+lists it, and the question stands; a read approves nothing.
+
+```
+ │ ▤ /shared/art/style/crates.md    │
+ │ ·It would send:·                 │
+ │ ▤ /home/artist/notes/palette.md  │
+ │ ▤ crates.md                      │
+ │ ▤ base.md                        │
+ │ ⚠ @props.md in crates.md was not │
+ │   found.                         │
+ │ [      ✓ Use This Guide        ] │
+```
+
+- **Use This Guide** (`whittle.style_guide_approve`) approves the path for this install and reads it. The box
+  goes, and it does not come back for this guide in any file on this machine.
+- **Read Now** is §3.1's button, with the box's path.
+- **Go Without It** (`whittle.style_guide_skip`) empties this file's Style Notes, the value
+  meaning no guide here. It is an undo step, and an undo asks again.
+
 ## 5. Menus
 
 `whittle.turn_menu` (node from its property), items disabled per `operators.can_*`:
@@ -1342,7 +1389,9 @@ Added for per-file settings (§3.1):
 | Id | Label | Does |
 |---|---|---|
 | `whittle.file_setting_reset` | Use Default | `key` (`poly_budget`, `self_check_rounds`, `render_size`, `style_file`): the file uses the preference again; undo step |
-| `whittle.style_guide_read` | Read Now | `path`: reads the guide, so its files are listed before anything is sent; no undo step |
+| `whittle.style_guide_read` | Read Now | `path`: reads the guide, so its files are listed before anything is sent; approves nothing; no undo step |
+| `whittle.style_guide_approve` | Use This Guide | Approves the guide waiting (§4.13) for this install and reads it; no undo step, as the approval is the install's, not the scene's |
+| `whittle.style_guide_skip` | Go Without It | Empties this file's Style Notes (§4.13); undo step |
 
 `scene.whittle.poly_budget` (IntProperty, min 10), `self_check_rounds` (IntProperty,
 0 to 10), `render_size` (IntProperty, 64 to 1024) and `style_file` (StringProperty,
@@ -1399,6 +1448,9 @@ sketch out of Draw Mode ends the sketch session.
 A folded turn pushes no step of its own, and its turn-start step still holds the turn's
 stamp on the strokes. After an undo or redo onto it they are pending again, also after a
 chat change: the folded turns of the chat the step belongs to count.
+
+Approving a style guide is not undone either: the approval is the install's. Go Without It
+is an undo step like a reset, so Ctrl+Z brings the path back and the box with it (§4.13).
 
 Chats are not undone: New Chat, a switch, a rename and a delete push no undo step, and
 Ctrl+Z never changes the current chat. An undo step that holds another chat's node
@@ -1486,6 +1538,7 @@ Every feature of the old panels, and where it lives now.
 | Continue a chat made on another machine | — (new) | The box above the sketch row → Continue (§3.11) |
 | Same file open in another Blender | — (new) | A dim line at the top of the panel (§3.11) |
 | Triangle budget, self-check rounds, render size and style notes for one file | — (new; the preferences only) | Agent popover → For This File (§3.1) |
+| Approve a file's style guide, or go without it | — (new) | The box above the sketch row (§4.13) |
 
 ## 10. Screenshot gate
 
@@ -1525,6 +1578,8 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `turn_menu` | the ⋯ menu opened on a turn, Edit & Resend first, then Go Back to This Turn; no item hovered |
 | `agent_popover` | §3.1; Agent, Model and Effort lines and For This File starting in one column (no agent yet, so no Chats line); For This File with `Triangle Budget (default)` and `Render Size (default)`, their resets greyed; `Self-check Rounds` and `Style Notes` without "(default)", their resets enabled; after a small gap, the Style Notes field on its own line under its label, the label at the field's left edge, with its file icon; under it the dim `Sent with each turn:`, `crates.md` and `base.md`, then the warning that `@props.md` was not found, whole on `ERROR` lines; every reset on its field's line, all in one column; Start Agent and Preferences… |
 | `guide_warning` | a finished turn whose style guide has a missing import: the conversation shows `Part of the style guide did not load` once, not in red |
+| `guide_gate` | 4.13; the `Use this style guide?` box above the sketch row, its note dim and wrapped, the absolute path whole with its `FILE_TEXT` icon; Use This Guide alone on its row, Read Now and Go Without It sharing one, neither cut; Send disabled; the draft kept; nothing red |
+| `guide_gate_read` | 4.13 after Read Now: `It would send:` dim, the file from elsewhere first and in full, the rest by name, the missing import on an `ERROR` line, wrapped, and the buttons still there |
 | `developer` | Developer Extras on: Development panel shown; off (every other scenario): absent |
 | `chat_menu` | three chats, the second-newest current: New Chat first; Conversations; each entry's title whole, its dim `N turns · <age> · <size>` line; ✓ on the current entry (marked by its check mark only, not highlighted), 🗑 on the others; the footer total and three items; nothing red |
 | `chat_menu_many` | 25 chats of varied age and size: 20 entries then `Show 5 More`; long titles shortened with `…` at a word's end, the ✓/🗑 column aligned on every row; ages from `just now` to `over a year ago` |

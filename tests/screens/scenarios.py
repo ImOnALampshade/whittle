@@ -24,7 +24,8 @@ from tests.screens.steps import (BEVEL_AND_LID, DARKEN, DARKER_WOOD_LIGHTER_LID,
 from whittle import chats as chat_store
 from whittle import formats
 from whittle import models as model_store
-from whittle.addon import chats, models, operators, sketch, targets, turn, views
+from whittle import style
+from whittle.addon import chats, models, operators, prefs, props, sketch, targets, turn, views
 
 REPO = Path(__file__).resolve().parents[2]
 FAKE = REPO / "tests" / "fixtures" / "fake"
@@ -621,6 +622,39 @@ def guide_warning(stage: Stage):
     stage.crate()
     _style_guide(stage)
     yield from stage.turns(["Add a lid to the crate."], FAKE / "stream.json")
+
+
+# An absolute path for the images, since the box shows the path in full: where
+# the run's own folder is must not reach them.
+SHARED_GUIDE = "/shared/art/style/crates.md"
+
+
+def _held_guide(stage: Stage) -> None:
+    """A saved file naming a guide nothing here approved, written past the
+    setter, as a file brings it."""
+    stage.crate()
+    bpy.ops.wm.save_as_mainfile(filepath=str(stage.work / "crate.blend"))
+    bpy.context.scene.whittle[props.FILE_SETTINGS["style_file"]] = SHARED_GUIDE
+    stage.props.prompt = "Add a lid and rope handles."
+
+
+@scenario
+def guide_gate(stage: Stage):
+    """A file naming a style guide this install has not approved: the box
+    over the composer, and Send disabled."""
+    _held_guide(stage)
+    yield 0.5
+
+
+@scenario
+def guide_gate_read(stage: Stage):
+    """After Read Now: the box lists the files, and the question stands. The
+    last read is filled in, as the path is not on this machine."""
+    _held_guide(stage)
+    prefs._guides[prefs._guide_key(SHARED_GUIDE)] = style.Guide(
+        files=(SHARED_GUIDE, "/shared/art/style/base.md", "/home/artist/notes/palette.md"),
+        problems=("@props.md in crates.md was not found.",))
+    yield 0.5
 
 
 @scenario

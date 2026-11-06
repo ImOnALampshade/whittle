@@ -80,6 +80,10 @@ SWITCHED_NOTE = "The scene is as you left it; Claude will look at it before edit
 ELSEWHERE_NOTE = "This file is open in another Blender; chats here won't merge with it."
 FOREIGN_TITLE = "Continue this chat?"
 FOREIGN_NOTE = "It was made on another machine."
+GUIDE_TITLE = "Use this style guide?"
+GUIDE_NOTE = ("This file names it. Its text and everything it imports go to Claude with each turn, "
+              "so use it only if you trust the file.")
+GUIDE_FILES = "It would send:"
 ASSET_HINT = "Or right-click an asset in the Asset Browser"
 WRAP_CACHE = 1024
 
@@ -529,7 +533,8 @@ def draw_file_settings(layout, scene) -> None:
         reset.enabled = key in overrides
         reset.operator("whittle.file_setting_reset", text="", icon="LOOP_BACK").key = key
     wrap = Ctx(scene=None, hist=None, ctl=None, comparing=None, width=POPOVER_LINE).wrap
-    prefs.draw_style_guide(layout, scene.whittle.style_file, lambda text: wrap(text, POPOVER_LINE))
+    prefs.draw_style_guide(layout, scene.whittle.style_file, lambda text: wrap(text, POPOVER_LINE),
+                           held=bool(prefs.held_guide(scene)))
 
 
 def draw_agent(layout, ctl, scene=None) -> None:
@@ -1305,12 +1310,12 @@ def draw_references(layout, ctx: Ctx) -> None:
 
 def can_send(ctx: Ctx) -> bool:
     """Whether Send is enabled: nothing stands in the way (a comparison, a running
-    or waiting turn, setup, a chat not yet continued here) and there is a prompt,
-    a reference or a pending stroke to send."""
+    or waiting turn, setup, a chat not yet continued here, a style guide not yet
+    approved here) and there is a prompt, a reference or a pending stroke to send."""
     props = ctx.props
     if ctx.comparing is not None or ctx.busy or operators.needs_setup(ctx.ctl):
         return False
-    if foreign(ctx):
+    if foreign(ctx) or prefs.held_guide(ctx.scene):
         return False
     return bool(props.prompt.strip() or len(props.refs)
                 or sketch.pending_count(sketch.find_sketch_object()))
@@ -1384,6 +1389,7 @@ def draw_main(layout, ctx: Ctx) -> None:
     draw_switched(layout, ctx)
     layout.separator()
     draw_foreign(layout, ctx)
+    draw_guide_gate(layout, ctx)
     draw_sketch(layout, ctx)
     draw_composer(layout, ctx)
 
@@ -1446,6 +1452,30 @@ def draw_foreign(layout, ctx: Ctx) -> None:
     col.active = False
     _wrapped(col, FOREIGN_NOTE, ctx, ctx.width - BOX_PAD, icon="BLANK1")
     box.operator("whittle.chat_continue", text="Continue", icon="CHECKMARK")
+
+
+def draw_guide_gate(layout, ctx: Ctx) -> None:
+    """A box over the composer while the file's style guide waits for this
+    install's approval: where it leads, what approving means, and after Read
+    Now what it would send. Until it is answered Send is disabled and nothing
+    reads the guide. A running turn has its guide already."""
+    path = "" if ctx.busy else prefs.held_guide(ctx.scene)
+    if not path:
+        return
+    width = ctx.width - BOX_PAD
+    box = layout.box()
+    box.label(text=GUIDE_TITLE, icon="QUESTION")
+    col = box.column()
+    col.active = False
+    _wrapped(col, GUIDE_NOTE, ctx, width, icon="BLANK1")
+    _wrapped(box, prefs.guide_location(path), ctx, width, icon="FILE_TEXT")
+    guide = prefs.style_guide(path)
+    if guide is not None:
+        prefs.draw_guide_read(box, guide, lambda text: ctx.lines(text, width - ICON_PX * ctx.scale, 0), GUIDE_FILES)
+    box.operator("whittle.style_guide_approve", icon="CHECKMARK")
+    row = box.row(align=True)
+    row.operator("whittle.style_guide_read", icon="FILE_REFRESH").path = path
+    row.operator("whittle.style_guide_skip", icon="X")
 
 
 def chat_line(entry, now: float) -> str:

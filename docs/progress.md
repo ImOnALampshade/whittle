@@ -304,7 +304,11 @@ session can start from the scene, from nothing, from a primitive or from an asse
   amends do not reread. The agent popover and the Defaults box list the files being sent,
   the first ten and how many more, any from outside the top guide's folder first. Opening a file reads only the preferences' own path; the
   file's waits for a Send, a save or **Read Now** (`whittle.style_guide_read`), so a `.blend`
-  cannot reach a network share just by being opened. Backslashes in a relative path read as
+  cannot reach a network share just by being opened. A guide this install has not approved
+  is not read at all, Read Now aside, and Send stays disabled under a box
+  with **Use This Guide**, **Read Now** and **Go Without It** (ui.md §4.13): approvals are per guide and per install, in
+  the user folder's `guides.json`, by normalised absolute path with no disk access, and nothing goes in the `.blend`.
+  Setting the field approves too; a Save As carries it to the rewritten text. Backslashes in a relative path read as
   slashes on every platform, in the field and in imports, and a Save As or Save Copy into
   another folder rewrites each scene's `//` override (`props.rebase_style_paths`), with no
   read and no restart of the agent, and an undo or redo across it rewrites what it brings back
@@ -312,7 +316,8 @@ session can start from the scene, from nothing, from a primitive or from an asse
   Old `palette`, `bevel_style` and `style_notes` values are ignored, in preferences, scenes
   and bundles alike. Tests: `tests/agent/test_style.py`, `test_file_settings.StyleFileTest`,
   `test_file_settings.StylePathSaveTest` (real saves, `tests/blender/style_path_file.py`),
-  `test_runner.py` (`.system_prompt.md`), the GUI check `style_notes_picker`.
+  `test_guide_gate.py` (which paths ask, what approves, no read, the box, every route that sends),
+  `test_runner.py` (`.system_prompt.md`), the GUI checks `style_notes_picker` and `guide_gate`.
 - **Style in the system prompt**: the prompt ends with "Style for this file", the guide in
   `<style_guide>` tags as the user's for the file, applied with judgement and speaking to
   the look only (`style.guide_section` words it; with no guide, the look is left to the
@@ -479,12 +484,12 @@ timer).
 - `tests/gui/checks.py`: `GuiStage` (the screenshot stage plus simulated keys, clicks,
   drags and typing, `button()` running an operator as a sidebar button does, in the
   sidebar region with an undo step, File-menu saves and opens, and the fake agent's log)
-  and 31 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
+  and 32 checks: `restart_resume`, `blank_sketch`, `primitive_sketch`, `sketch_undo`,
   `asset_browser`, `references_view`, `references_turn`, `undo_turn`, `fold_undo`,
   `fold_undo_object`, `fold_undo_chat`, `undo_compare`,
   `modal_wait`, `save_as`, `recover_autosave`, `recover_last_session`,
   `crash_keeps_chats`, `dirty_flag`, `send_key`, `send_key_errors`, `shortcut`, `auto_targets`, `branch_undo`,
-  `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`, `style_notes_picker`, `preferences_key`,
+  `agent_crash`, `chats`, `file_carries_chats`, `compare_targets`, `style_notes_picker`, `guide_gate`, `preferences_key`,
   `preferences_environment`, `preferences_defaults`. Each says what it confirms in the
   catalog. The preference checks open the Preferences through Preferences… as the
   sidebar runs it, use fake API keys only (Blender has no online access, and the
@@ -782,7 +787,13 @@ them at each save. Nothing is written beside the `.blend`.
   that would pass the 128 KiB cap ends the guide there, the rest of the files still open
   included, so a single guide over it sends nothing,
   and a non-UTF-8 file is refused, so a Latin-1 file with one accented letter gives a
-  warning: both are as built, for the maintainer to confirm.
+  warning: both are as built, for the maintainer to confirm. Sending a guide unasked is closed
+  by the question before it goes (ui.md §4.13). What remains: an approval is of a path, so a file
+  that later changes, or a new `@` import in it, is not asked about again, and neither is a
+  different file that a change of symlink puts at that path; the key is a string, so a `..` after a
+  symlink in a `//` path can approve one path and read another. A user who approves a guide
+  without reading what Read Now lists has approved it. The Ask Claude popup still says Enter sends while a guide
+  waits: Enter does nothing, and the sidebar it opened shows the box.
 - **Found while writing the documentation site**. The site describes what happens today, so
   a fix here also changes its page:
   - **A system-wide pip config** still reaches setup through `extra-index-url`, `find-links`
@@ -1087,3 +1098,5 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     `.system_prompt.md` then says no guide is set. In an unsaved file, a `//` path warns and a turn still runs.
     Save As into another folder through the file browser: the field shows the rewritten path
     and the guide stays listed, and Ctrl+Z and Ctrl+Shift+Z across it leave the guide listed. A `.blend` and guides shared with a Windows machine read there too.
+    On a second machine with a clone of the repository (`guide_gate` covers one machine): open one `.blend`, approve the guide,
+    open another naming it, and nothing asks; `git status` shows no `.blend` changed.

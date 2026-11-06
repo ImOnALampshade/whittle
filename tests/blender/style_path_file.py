@@ -10,7 +10,8 @@ Copy, a failed Save As, a Save As into another folder and an undo; a file linkin
 a scene from it through a Save As of its own; then each file saved is opened to
 see what it carries. Then undo and redo across two moves, where a guide of the
 same name waits in the new folder, and saves through a symlink and out of a folder
-with a backslash in its name. Prints one RESULT line of JSON."""
+with a backslash in its name. Then what happens to approvals on the way. Prints
+one RESULT line of JSON."""
 
 import json
 import os
@@ -170,6 +171,70 @@ def out_of_a_backslash_folder() -> dict | None:
     return state()
 
 
+def stored_path() -> str:
+    return bpy.data.scenes["Scene"].whittle.get(STORE)
+
+
+def held() -> str:
+    return prefs.held_guide(bpy.data.scenes["Scene"])
+
+
+def relative_before_a_save() -> dict:
+    """A // path set before there was a folder to count from was still set here."""
+    root = ROOT / "first"
+    write(root / "props" / "beside.md", "Beside.")
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    scene = bpy.data.scenes.new("Scene") if not bpy.data.scenes else bpy.data.scenes[0]
+    scene.name = "Scene"
+    scene.whittle.style_file = "//beside.md"
+    before = held()
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / "props" / "c.blend"))
+    return {"before": before, "after": {"path": stored_path(), "held": held()}}
+
+
+def approvals() -> dict:
+    result = {}
+    save_as = bpy.ops.wm.save_as_mainfile
+    root = ROOT / "approvals"
+    guide = root / "style" / "g.md"
+    write(guide, "Approved.")
+    (root / "props").mkdir()
+    (root / "chars" / "orc").mkdir(parents=True)
+
+    # Through Save As, Save Copy and undo, set once.
+    fresh_file(root / "props" / "a.blend", "//../style/g.md")
+    step_back_and_forth()
+    save_as(filepath=str(root / "chars" / "orc" / "a.blend"))
+    result["save_as"] = {"path": stored_path(), "held": held()}
+    bpy.ops.ed.undo()
+    result["undo"] = {"path": stored_path(), "held": held()}
+    save_as(filepath=str(root / "props" / "b.blend"), copy=True)
+    bpy.ops.wm.open_mainfile(filepath=str(root / "props" / "b.blend"))
+    result["copy"] = {"path": stored_path(), "held": held()}
+
+    # What was never approved is not approved by moving it.
+    other = root / "style" / "other.md"
+    write(other, "Unasked.")
+    bpy.ops.wm.open_mainfile(filepath=str(root / "props" / "a.blend"))
+    bpy.data.scenes["Scene"].whittle[STORE] = "//../style/other.md"
+    reads.clear()
+    save_as(filepath=str(root / "chars" / "orc" / "c.blend"))
+    result["unapproved"] = {"path": stored_path(), "held": held(), "reads": len(reads)}
+
+    # Text a symlinked folder makes lead somewhere else as a string: the
+    # approval goes with what the path names, not with the old text.
+    (root / "nas" / "deep" / "shots").mkdir(parents=True)
+    try:
+        (root / "work").mkdir()
+        (root / "work" / "shots").symlink_to(root / "nas" / "deep" / "shots", target_is_directory=True)
+    except OSError:
+        return result  # Windows without the right to make one.
+    fresh_file(root / "props" / "d.blend", "//../style/g.md")
+    save_as(filepath=str(root / "work" / "shots" / "d.blend"))
+    result["symlink_save_as"] = {"path": stored_path(), "held": held(), "guide": state()["guide"]}
+    return result
+
+
 def main() -> dict:
     result = {}
     (ROOT / "props").mkdir(parents=True)
@@ -221,7 +286,7 @@ def main() -> dict:
     result["after_undo"] = {"frame": bpy.context.scene.frame_current, "values": values()}
     bpy.ops.ed.redo()
     result["after_redo"] = {"frame": bpy.context.scene.frame_current, "values": values()}
-    result["reads_during_saves"] = list(during_saves)
+    result["reads_during_saves"] = list(during_saves[:5])
 
     # A scene linked from another file is that file's to rewrite.
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -242,6 +307,8 @@ def main() -> dict:
     result["undo_across_moves"] = undo_across_moves()
     result["symlink"] = through_a_symlink()
     result["backslash_folder"] = out_of_a_backslash_folder()
+    result["relative_before_a_save"] = relative_before_a_save()
+    result["approvals"] = approvals()
     return result
 
 

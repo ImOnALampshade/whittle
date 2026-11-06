@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Resolving a style guide from disk: imports, what is refused, the cap."""
 
+import json
 import ntpath
 import os
 import posixpath
@@ -9,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from whittle import style
+from whittle import platforms, style
 
 
 class GuideTest(unittest.TestCase):
@@ -442,3 +443,63 @@ class RebasedPathTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuideKeyTest(unittest.TestCase):
+    def test_a_path_is_normalised(self):
+        self.assertEqual(style.guide_key("/repo/props/../style/./a.md", posixpath), "/repo/style/a.md")
+        self.assertEqual(style.absolute_path("/repo/props/../style/a.md", posixpath), "/repo/style/a.md")
+
+    def test_windows_ignores_case_in_the_key_only(self):
+        self.assertEqual(style.guide_key("C:\\Repo\\Style\\A.md", ntpath), "c:\\repo\\style\\a.md")
+        self.assertEqual(style.absolute_path("C:\\Repo\\Style\\A.md", ntpath), "C:\\Repo\\Style\\A.md")
+        self.assertEqual(style.guide_key("C:/Repo/a.md", ntpath), style.guide_key("c:\\repo\\A.MD", ntpath))
+
+    def test_a_network_path_stays_a_string(self):
+        with mock.patch("os.stat", side_effect=AssertionError("touched the disk")), \
+                mock.patch("os.lstat", side_effect=AssertionError("touched the disk")), \
+                mock.patch("os.path.realpath", side_effect=AssertionError("touched the disk")), \
+                mock.patch("ntpath.realpath", side_effect=AssertionError("touched the disk")):
+            self.assertEqual(style.guide_key("\\\\nas\\art\\Style.md", ntpath), "\\\\nas\\art\\style.md")
+
+    def test_under_home(self):
+        with mock.patch.dict(os.environ, {"HOME": "/home/someone"}):
+            self.assertEqual(style.guide_key("~/style.md", posixpath), "/home/someone/style.md")
+
+    def test_what_load_guide_refuses_has_no_key(self):
+        for path in ("", "style.md", "x/style.md"):
+            self.assertEqual(style.guide_key(path, posixpath), "", path)
+        self.assertEqual(style.guide_key("C:style.md", ntpath), "", "against the drive's current folder")
+
+
+class ApprovedTest(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.dir = Path(folder.name)
+        self.record = self.dir / style.APPROVALS_NAME
+
+    def test_kept_in_a_versioned_file(self):
+        style.write_approved(self.dir, {"/b.md", "/a.md"})
+        self.assertEqual(json.loads(self.record.read_text()),
+                         {"format": "whittle.guides", "version": 1, "guides": ["/a.md", "/b.md"]})
+        self.assertEqual(style.read_approved(self.dir), {"/a.md", "/b.md"})
+
+    def test_written_through_the_platform(self):
+        with mock.patch("whittle.platforms.replace", wraps=platforms.replace) as replace:
+            style.write_approved(self.dir, {"/a.md"})
+        replace.assert_called_once()
+
+    def test_no_record_approves_nothing(self):
+        self.assertEqual(style.read_approved(self.dir), set())
+
+    def test_a_record_not_understood_approves_nothing(self):
+        for text in ("not json", "[]", '{"format": "other", "version": 1, "guides": ["/a.md"]}',
+                     '{"format": "whittle.guides", "version": 2, "guides": ["/a.md"]}',
+                     '{"format": "whittle.guides", "version": 1, "guides": "/a.md"}'):
+            self.record.write_text(text)
+            self.assertEqual(style.read_approved(self.dir), set(), text)
+
+    def test_odd_entries_are_left_out(self):
+        self.record.write_text('{"format": "whittle.guides", "version": 1, "guides": ["/a.md", 7, "", null]}')
+        self.assertEqual(style.read_approved(self.dir), {"/a.md"})

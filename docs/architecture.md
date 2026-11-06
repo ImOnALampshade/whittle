@@ -24,14 +24,14 @@ whittle/                          repo root
 │   ├── caches.py                 stdlib only: each file's hidden chats cache, its id and cleanup (§14)
 │   ├── markdown.py               stdlib only: Claude's Markdown (and its TeX, HTML) as Lines for the sidebar
 │   ├── models.py                 stdlib only: model ids by family and version, the model list's cache (§15)
-│   ├── style.py                  stdlib only: reading a style guide with its @ imports, its portable paths, and how the prompt words it
+│   ├── style.py                  stdlib only: reading a style guide with its @ imports, its portable paths, the record of approved guides, and how the prompt words it
 │   ├── venv.py                   stdlib only: venv status, setup commands, the VenvSetup state machine
 │   ├── platforms.py              stdlib only: what differs on Windows and macOS (spawn flags, process trees, pid probe, replace, stale resume folders, lock markers)
 │   ├── requirements.lock         byte-identical copy of agent_env/requirements.lock (packaging step)
 │   ├── addon/                    Blender side; may import bpy everywhere
 │   │   ├── __init__.py           register()/unregister() for every class, handler and timer
 │   │   ├── paths.py              user dir, the open file, the cache and CLI config folders, agent python resolution
-│   │   ├── prefs.py              AddonPreferences, session_settings, the last read of each style guide
+│   │   ├── prefs.py              AddonPreferences, session_settings, the last read of each style guide, which guides may be read
 │   │   ├── setup.py              the venv on the Blender side: checks, timer, install/cancel operators
 │   │   ├── start.py              start points (existing, blank, primitive, asset) and their helpers
 │   │   ├── refs.py               reference images: clearing sent ones, pinning, image empties
@@ -220,6 +220,46 @@ never reads. `load_post` reads only the preferences' own path, and not a `//` on
 could name a network share, where on Windows opening it can hand over credentials and a
 dead one blocks the UI. So that field says `Read at the next turn.` with a Read Now button.
 
+**Approval.** A `.blend` from someone else can name any `.md` or `.txt` here, and a file with
+no chats meets no Continue box, so a turn does not read or send a guide this install has not
+approved. The record is per guide and per install, in the user folder's `guides.json`:
+`{"format": "whittle.guides", "version": 1, "guides": [key, ...]}`, read by
+`style.read_approved` and written by `style.write_approved` through
+`formats.write_json_atomic`, so through `platforms.replace`. One that cannot be read approves nothing. Nothing goes in the
+`.blend`, so a repository of files sharing guides asks once per guide per machine, with no
+binary churn. `prefs._approved` keeps the record in memory, since poll and draw code ask: it is read at
+the first question and again after a load, and `prefs.approve_keys` merges what is on disk
+before it writes, so two Blenders keep each other's approvals. If it cannot write, the approval
+lasts until Blender closes.
+
+The key is `style.guide_key`: `~` expanded, normalised and in the platform's case, with `//`
+resolved from the open file by `prefs.guide_key`. It is string work only. `realpath` would touch
+the disk, and on Windows a UNC path would reach the network, which is what the question holds
+back. A path `load_guide` would refuse unread (not absolute, or `//` in an unsaved file) has no
+key and nothing to approve.
+
+`prefs.guide_held(path, per_file=)` says whether a path waits: a file's own path, and a `//`
+preference since the open file decides where that leads, unless its key is approved. A
+preference that is absolute or under `~` is the user's own and never asks, and neither does a
+file's path to the same guide. `prefs.held_guide(scene)` answers for a scene's next session.
+Before any read: `refresh_style_guides` skips a held path, so a save, a Send and a reset
+read nothing of it, and `session_settings` gives no text for one, even with a Read Now's in
+`_guides`, so no route can send it. Read Now is the one read of a held guide, as the user asked for it.
+
+What approves is the user: **Use This Guide**, and setting a Style Notes field, in this install. The
+scene property's setter and the preference's update run on a set and not on a load, so what a
+file brings stays held. A script's set counts too, the agent's `exec` included: it could read
+the file itself. A `//` path set in an unsaved file has no key yet, so
+`prefs.approve_guide` keeps its text and `save_post` approves it with the file's folder. A
+file a guide imports is covered by approving the guide: Read Now lists them all.
+
+`operators.refuse_send` is the gate, for Send, the keys, the Ask Claude prompt (which sends
+through Enter), Retry (before it branches) and Run Bundle; `WHITTLE_OT_submit.poll` and
+`can_retry` hold the buttons and keys back, and `ui.draw_guide_gate` is the box (ui.md §4.13). Amend and Answer belong to
+a turn that has its guide, and read nothing. `TurnController` can still be made for Start
+Agent or a start point, with no guide, and approving then changes the text, so the idle agent
+restarts before the next turn as for any changed setting.
+
 A save into another folder rewrites the `//` overrides. `save_pre` gets the target path while
 `bpy.data.filepath` is still the file being left (empty before a first save, so nothing to
 do), and Save As and Save Copy look the same there, so `props.rebase_style_paths` rewrites
@@ -227,7 +267,11 @@ every local scene's `file_style_file` with `style.rebased_path`, straight into t
 update callback's read does not run, and keeps the old text. Afterwards
 `props.settle_style_paths`, from `save_post` and `save_post_fail`, puts the old text back if
 `bpy.data.filepath` has not moved, which is both a Save Copy and a failed save; the file
-written keeps the new text. Both folders are the `.blend`'s with symlinks resolved, since a
+written keeps the new text. Writing the store passes the setter, so `rebase_style_paths` notes the key of
+each new text whose old text was approved, and `settle_style_paths` approves them unless
+the save failed: through a symlinked folder the new text can have another key as a string, and a Save As must
+not ask. An unapproved path stays so. An undo that rewrites a text arrives at the text the
+save left, whose key is in the record already. Both folders are the `.blend`'s with symlinks resolved, since a
 read's `realpath` walks a `..` up from a folder's real place; the guide's own path is never
 looked at. `rebased_path` falls back on the absolute path where a relative one would carry a
 backslash from a folder's name, which `portable_path` would read as a separator.

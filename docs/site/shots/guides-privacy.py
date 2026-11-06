@@ -41,4 +41,5 @@ SHOTS = [
     Shot("tool-code", "A finished turn with a tool call open on the code Claude ran.", sidebar(), setup=tool_code),
     Shot("continue-chat", "A chat made on another machine, asking to be continued.", sidebar(),
          scenario="continue_chat"),
+    Shot("guide-gate", "A file naming a guide this computer has not approved, asking first.", sidebar(), scenario="guide_gate"),
 ]

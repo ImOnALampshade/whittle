@@ -24,8 +24,9 @@ sends:
 - details of the request: the target's object names, this file's triangle budget and
   self-check rounds, the file names of your references, and folder paths on your computer,
   which can include your user name;
-- the text of the [style guide](settings.md#style-guides), if the file has one: every file
-  it loads. **Style Notes** in the agent popover names the first ten and counts the rest;
+- the text of the [style guide](settings.md#style-guides), if the file has one and you have
+  approved it: every file it loads. **Style Notes** in the agent popover names the first ten
+  and counts the rest;
 - Whittle's instructions to Claude, and the conversation so far.
 
 The target is the objects you pick for Claude to change: see
@@ -100,6 +101,7 @@ If you installed Whittle into another extension repository, that repository's na
 | `venv/` | The agent's private Python, unless **Environment Folder** points elsewhere | Until you remove it |
 | `models.json` | The list of models | Replaced as it updates |
 | `install.json` | A random id for this install, which marks the chats made here. It names no person or machine | Until you remove it |
+| `guides.json` | The paths of the [style guides you approved](settings.md#approving-a-guide), which can include your user name. It stays on this computer | Until you remove it, and Whittle then asks again |
 
 On Windows, an agent that was killed can also leave a `claude-resume-*` folder in the
 temporary folder. A later agent start removes it once it is a day old.
@@ -202,16 +204,26 @@ recorded where a chat was made never ask.
 A chat from another machine. Continuing replays its whole conversation to Claude.
 ```
 
+A file also stores the path of its style guide, which could name something private of yours.
+So Whittle reads nothing at that path and Send stays disabled until you approve it, once per
+guide on each computer. A file with no chats asks too.
+
+```{figure} ../images/guides-privacy/guide-gate.png
+:alt: Whittle's sidebar showing a box that asks Use this style guide? above a disabled Send button, with the path it would read and the buttons Use This Guide, Read Now and Go Without It.
+
+A guide this computer has not approved. See [Approving a guide](settings.md#approving-a-guide).
+```
+
 With a file from someone else:
 
 - Start a **New Chat** rather than pressing **Continue**. See [Chats](chats.md).
 - A new chat still reads the scene, so don't run Whittle at all on a file you don't trust.
-- Check **Style Notes** in the agent popover before you send, pressing **Read Now** to list
-  the files. The `.blend` stores that path, and what it loads is sent with your turns. Only
-  `.md` and `.txt` files load, but a private note of that kind could. The list names only the
-  first ten files: **and N more files** means more is sent than you can see, so in a file you
-  don't trust, clear **Style Notes** rather than send. See
+- Press **Read Now** before **Use This Guide**, to list the files. What loads is sent with your
+  turns, and though only `.md` and `.txt` files load, a private note of that kind could. The
+  list names only the first ten files: **and N more files** means more is sent than you can
+  see, so in a file you don't trust, press **Go Without It**. See
   [Style guides](settings.md#style-guides).
+- A guide you approved stays approved, from any file, even if it changes.
 
 Links in Claude's replies open only `http`, `https` and `mailto` addresses. Any other link
 is plain text.

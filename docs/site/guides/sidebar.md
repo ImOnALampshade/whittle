@@ -420,6 +420,10 @@ with your next turn.
 A chat from another machine. **New Chat** in the chat menu is the other way forward.
 ```
 
+A file naming a style guide this computer has not approved shows a box there too, **Use this
+style guide?**, and Send stays disabled until you answer it: see
+[Approving a guide](settings.md#approving-a-guide).
+
 If the same file is open in another Blender, a dim line at the top of the panel says so,
 because each Blender keeps its own copy of the chats and they will not merge.
 

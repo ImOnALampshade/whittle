@@ -34,6 +34,9 @@ SCENARIOS = {
     "agent_popover": "The agent popover: this file's self-check rounds and style notes set, "
                      "its triangle budget and render size the defaults.",
     "guide_warning": "A finished turn whose style guide has a missing import: the conversation's one warning.",
+    "guide_gate": "A file naming a style guide this install has not approved: the box over the prompt, "
+                  "Send disabled.",
+    "guide_gate_read": "The same after Read Now: the box lists the guide's files, and a missing import.",
     "references": "Two reference images attached, one of them pinned.",
     "developer": "Developer Extras on, with the development tools shown after a turn.",
     "chat_menu": "The chat menu over three chats, the second-newest current.",

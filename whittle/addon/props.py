@@ -41,9 +41,11 @@ class WhittleTarget(bpy.types.PropertyGroup):
 FILE_SETTINGS = {key: f"file_{key}" for key in prefs.SESSION_SETTINGS}
 
 # The save under way: the file it started from, and each scene whose Style
-# Notes it rewrote with the text from before (rebase_style_paths).
+# Notes it rewrote with the text from before (rebase_style_paths), and the
+# approvals the new texts inherit once it is saved.
 _rebased_from = ""
 _rebased: list[tuple[bpy.types.Scene, str]] = []
+_carried: set[str] = set()
 
 # Where a // Style Notes counts from, for what an undo brings back. Undo leaves
 # the file where it is but puts back text written from an earlier folder, so
@@ -95,11 +97,14 @@ def rebase_style_paths(target: str) -> None:
     text and settle_style_paths takes it back for a copy. Written straight to
     the store: the property's update would read the new text from the old
     folder, as bpy.data.filepath has not moved yet, and save_post reads it
-    once it has. A read walks a `..` up from a folder's real place, so the rewrite starts
-    from there too, not from the symlink a file was saved through."""
+    once it has. The setter never runs, so the approval of what a text named
+    moves to the new text here. A read walks a `..` up from a folder's real
+    place, so the rewrite starts from there too, not from the symlink a file
+    was saved through."""
     global _rebased_from
     _rebased_from = bpy.data.filepath
     _rebased.clear()
+    _carried.clear()
     if not _rebased_from:
         return
     store = FILE_SETTINGS["style_file"]
@@ -109,15 +114,18 @@ def rebase_style_paths(target: str) -> None:
         if scene.library is None and path.startswith("//"):
             rebased = style.rebased_path(path, old_folder, new_folder)
             if rebased != path:
+                if not prefs.guide_held(path, per_file=True):
+                    _carried.add(prefs.guide_key(rebased, target))
                 _rebased.append((scene, scene.whittle[store]))
                 scene.whittle[store] = rebased
 
 
-def settle_style_paths() -> None:
+def settle_style_paths(saved: bool = True) -> None:
     """After a save or a failed one: if the open file stayed where it was,
-    a copy was saved or nothing was, and its // paths still start from here.
+    a copy was saved or nothing was, and its paths are back as they were.
     A failed Save As leaves bpy.data.filepath alone too. Otherwise the file
-    moved, and the text rewritten says so."""
+    moved, and the text rewritten says so. Whatever was saved, a copy too, was
+    written with the new texts, so the approvals follow unless the save failed."""
     global _rebased_from, _start_folder, _latest_move
     left, _rebased_from = _rebased_from, ""
     if bpy.data.filepath == left:
@@ -130,15 +138,20 @@ def settle_style_paths() -> None:
         _moves[_latest_move] = _real_folder(bpy.data.filepath)
         for scene, _text in _rebased:
             scene.whittle[STYLE_MOVE] = _latest_move
+    if saved:
+        prefs.approve_keys(_carried)
+        prefs.settle_unsaved_approvals()
     _rebased.clear()
+    _carried.clear()
 
 
 def follow_style_paths() -> None:
     """After an undo or redo: a // path from before a Save As would be counted
     from the new folder, where it can name another file with no warning, so
-    it is rewritten to name what it named when it was written. The steps
-    themselves cannot hold this, as the rewrite makes none. Linked scenes are
-    their own files' to rewrite."""
+    it is rewritten to name what it named when it was written. The new text is
+    the one the save left, whose approval it carried, so none moves here. The
+    steps themselves cannot hold this, as the rewrite makes none. Linked scenes
+    are their own files' to rewrite."""
     if not _latest_move:
         return
     store = FILE_SETTINGS["style_file"]
@@ -170,8 +183,13 @@ def _file_setting(key: str) -> dict:
 
     def setter(props, value):
         props[FILE_SETTINGS[key]] = _clean(key, value)
-        if key == "style_file" and _latest_move:
-            props[STYLE_MOVE] = _latest_move
+        if key == "style_file":
+            # Blender runs this for a set and not for a load, so what a
+            # file brings with it stays unapproved. A script's set counts:
+            # a script could read the file itself.
+            prefs.approve_guide(value)
+            if _latest_move:
+                props[STYLE_MOVE] = _latest_move
 
     return {"get": getter, "set": setter}
 

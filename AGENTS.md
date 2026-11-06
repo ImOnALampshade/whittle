@@ -244,12 +244,17 @@ Auth and Distribution).
   what loads goes to the API, so keep the file-type check on the resolved path and the
   128 KiB cap. A save into another folder rewrites `//` overrides as strings only
   (`props.rebase_style_paths`): it never reads the guide, and it writes the store, not the
-  property, whose update reads. `style.portable_path` leaves rooted paths alone.
+  property, whose update reads. `style.portable_path` leaves rooted paths alone. Nothing but
+  **Read Now** may read a guide this install has not approved (`prefs.guide_held`,
+  ui.md §4.13): approvals are per guide path in the user folder's `guides.json`, never in the
+  `.blend`, keyed by string work with no `realpath`. Only a user's set approves (the setter and
+  the preference's update, which a load does not run), and a rewrite of the store carries the approval.
 - **Chats from another machine** (ui.md §3.11): every chat records the install that
   made it (`origin`, the random id in the user folder's `install.json`). A chat from
   another install opens with a **Continue this chat?** box; Send stays disabled
   until Continue (`whittle.chat_continue`) adds this install to the chat's `adopted`.
-  Anything that sends a turn must respect that gate.
+  Anything that sends a turn must respect that gate: call `operators.refuse_send`, which
+  also holds a style guide not yet approved.
 - **Agent-facing text** (system prompt, skills, tool descriptions, errors the agent
   reads) follows `docs/prompting.md`: practices with reasons, judgment over rules, normal
   volume, one home per fact, brief replies to the user, actionable errors.

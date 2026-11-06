@@ -193,7 +193,11 @@ once. `//` at the start of the path means the `.blend`'s folder. Empty leaves th
 Claude. Claude reads the guide as your preferences for that file, not as rules: a request's
 prompt or sketch still wins. Only `.md` and `.txt` files load, up to 128 KiB in all, since
 a `.blend` from someone else could name any file on your computer; the agent popover names
-what is sent, the first ten files and then how many more. A file that cannot load is a warning, and the turn still runs. Guides are read
+what is sent, the first ten files and then how many more. For the same reason Send stays disabled
+for a guide this computer has not approved, under a box with **Use This Guide**, **Read Now**
+and **Go Without It**: you are asked once per guide on each computer, not once per file, and
+nothing is added to the `.blend`. Choosing a guide yourself counts as approving it, and approving
+it covers what it imports. A file that cannot load is a warning, and the turn still runs. Guides are read
 again before each turn, so an edit applies from the next one.
 [Style guides](docs/site/guides/settings.md#style-guides) has a worked example.
 
@@ -295,8 +299,8 @@ environment sets that variable. What a turn sends:
 - details of the request: the target's object names, this file's triangle budget and
   self-check rounds, the file names of your references, and folder paths on your computer,
   which can include your user name;
-- the text of the style guide, if the file has one: every file it loads, of which the agent
-  popover names the first ten and counts the rest;
+- the text of the style guide, if the file has one and you approved it: every file it loads,
+  of which the agent popover names the first ten and counts the rest;
 - Whittle's system prompt and recipe skills, and the conversation so far.
 
 Anthropic's handling of API data is set out in its
@@ -318,8 +322,9 @@ also kept locally, in the chat cache and in the `.blend` when you save it, so a 
   these could try to steer Claude. That is why a chat made on another machine asks
   before it sends anything (see Use): start a **New Chat** on a file from elsewhere
   rather than continuing its chats, and do not run Whittle on files you do not trust.
-  Check **Style Notes** in the agent popover first, with **Read Now** if it offers it: the
-  `.blend` stores that path, and what it loads is sent with your turns.
+  The `.blend` also stores the path of its style guide, and what that loads is sent with your
+  turns, so a guide this computer has not approved asks first: press **Read Now** to see what it
+  would send before **Use This Guide**.
 - Blender's **Auto Run Python Scripts** setting does not cover Whittle: it only stops
   scripts stored in a file. Nothing Whittle stores in a file runs code by itself.
 - Links in Claude's replies open only `http`, `https` and `mailto` addresses.

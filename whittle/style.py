@@ -6,7 +6,11 @@ and hands over its text, the agent's prompt.build words it.
 A guide is a text file that can import others, one `@path` per line, so a
 project's files can share a base. The path to it is stored in the .blend, and
 a file from someone else could name anything on this machine, so only text
-files load and the total is capped: what loads goes to the API.
+files load and the total is capped: what loads goes to the API. For the same
+reason this install is asked before it sends a guide it has not approved: the
+paths it has are kept in its user folder, one per guide, so a repository of
+.blend files sharing a few guides asks once for each guide on each machine,
+and no .blend changes.
 
 A guide and the .blend files naming it often live in one repository, shared
 between Windows and Linux at different paths, so relative paths read the same
@@ -16,11 +20,20 @@ import os
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from pathlib import Path
+
+from . import formats
 
 MAX_GUIDE_BYTES = 128 * 1024
 # Judged on the path with its symlinks resolved, so a notes.md link to a
 # private key is refused.
 GUIDE_SUFFIXES = (".md", ".txt")
+
+# The user folder's record of the guides this install approved:
+# {"format": "whittle.guides", "version": 1, "guides": [key, ...]}, each key a
+# guide_key.
+APPROVALS_FORMAT = "whittle.guides"
+APPROVALS_NAME = "guides.json"
 
 NO_STYLE_GUIDE = "No style guide is set for this file, so the look is yours to choose from the object and the prompt."
 GUIDE_INCOMPLETE = ("Part of the user's style guide could not be loaded and is missing here. Decide what it would "
@@ -67,6 +80,22 @@ def portable_path(path: str) -> str:
     return path.replace("\\", "/")
 
 
+def absolute_path(path: str, flavour=os.path) -> str:
+    """Where a path with its // already resolved leads, for the user to read:
+    ~ expanded and normalised, or nothing if it is not absolute here, which
+    load_guide refuses without looking. Only strings, as with rebased_path:
+    real paths touch the disk, and on Windows a UNC path would reach the
+    network before anyone has said it may."""
+    expanded = flavour.expanduser(portable_path(path))
+    return flavour.normpath(expanded) if flavour.isabs(expanded) else ""
+
+
+def guide_key(path: str, flavour=os.path) -> str:
+    """What an approval is kept under: absolute_path, in one case where the
+    platform ignores case."""
+    return flavour.normcase(absolute_path(path, flavour))
+
+
 def rebased_path(path: str, old_folder: str, new_folder: str, flavour=os.path) -> str:
     """A // path written from old_folder, as new_folder has to say it to name
     the same file: forward slashes, so it stays portable, or the absolute path
@@ -84,6 +113,25 @@ def rebased_path(path: str, old_folder: str, new_folder: str, flavour=os.path) -
     except ValueError:
         return target
     return target if "\\" in relative else "//" + relative
+
+
+def read_approved(user_dir) -> set[str]:
+    """The guides this install approved. A record that cannot be read, or from
+    a later version, approves nothing: the user is asked again."""
+    try:
+        found = formats.read_json(Path(user_dir) / APPROVALS_NAME)
+    except (formats.FormatError, OSError):
+        return set()
+    guides = found.get("guides")
+    if found.get("format") != APPROVALS_FORMAT or found.get("version") != 1 or not isinstance(guides, list):
+        return set()
+    return {key for key in guides if isinstance(key, str) and key}
+
+
+def write_approved(user_dir, keys) -> None:
+    """Writes the record through a temp file, so a crash leaves the old one."""
+    formats.write_json_atomic(Path(user_dir) / APPROVALS_NAME,
+                              {"format": APPROVALS_FORMAT, "version": 1, "guides": sorted(keys)})
 
 
 def _import_target(line: str) -> str | None:

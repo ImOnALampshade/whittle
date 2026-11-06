@@ -152,9 +152,60 @@ For a repository of `.blend` files that share a look:
 5. Repeat for each `.blend`, and for each scene in it. There is no way to set many at once,
    and a new `.blend` has no guide until you set one.
 
+On each other machine with a clone, the first file that names a guide asks about it once.
+[Approving a guide](#approving-a-guide) says how that works.
+
 **Defaults** rarely fits a repository. A `//` path there counts from each open file's own
 folder, so it only works if every `.blend` sits at the same depth, and an absolute path only
 works on one machine. It suits a guide you want on everything you make.
+
+### Approving a guide
+
+A `.blend` can name any `.md` or `.txt` file on your computer, and what loads goes to Claude.
+So Whittle asks before it reads or sends a guide this computer has not approved. Until you
+answer, **Send** is disabled and a box over the prompt shows where the path leads.
+
+```{figure} ../images/guides-settings/guide-gate.png
+:alt: The sidebar. A box above the Sketch button asks Use this style guide? It says the file names the guide and that its text goes to Claude with each turn, shows the path /shared/art/style/crates.md, and has the buttons Use This Guide, Read Now and Go Without It. Send below it is greyed out.
+
+A file naming a guide this computer has not approved.
+```
+
+- **Use This Guide** approves it. Claude gets the guide from the next turn on.
+- **Read Now** lists the files it would send, and approves nothing. A file from outside the
+  guide's folder comes first and in full.
+- **Go Without It** empties **Style Notes** for this file, so it sends no guide. Save the file to keep that;
+  Ctrl+Z brings the path back.
+
+```{figure} ../images/guides-settings/guide-gate-read.png
+:alt: The same box after Read Now. Under It would send it lists /home/artist/notes/palette.md in full, then crates.md and base.md, then a warning that @props.md was not found.
+
+After **Read Now**, the box lists the files, with a file from elsewhere first.
+```
+
+Which paths ask:
+
+- A path set under **For This File**, unless you set it on this computer.
+- A `//` path in **Defaults**, since the open file decides where that leads.
+
+Which never do:
+
+- An absolute or `~` path in **Defaults**, which is yours, and a file naming that same guide.
+- An empty **Style Notes**.
+
+You approve a guide once on each computer, not once per file. The approval is kept with
+Whittle's own files, as the path the guide is at, and nothing is added to the `.blend`, so
+hundreds of `.blend` files sharing one guide ask once, and `git` sees no change. Clone the repository on another
+machine and each guide asks once there. A second clone in another folder on the same machine is
+another path, so it asks once too.
+
+Choosing a guide yourself counts as approving it: typing the path, or picking it, in **For
+This File** or **Defaults**. So does anything you run that sets the field, Claude's own Python
+included, as that can read your files anyway. Save As keeps the approval, and never asks.
+
+Approving a guide also covers the files it imports, which is why **Read Now** lists them. The
+approval is of the path: later edits to the guide, a new import in it included, are not
+asked about.
 
 ### Import other files
 
@@ -237,7 +288,8 @@ Change `base.md` once, and both follow.
   listed first, so it cannot hide past the tenth row; the rest follow in import order, and
   the text is sent in import order whatever the list shows. Their text goes to Anthropic
   with your turns, so look here in a `.blend` you did not make: the path is stored in the
-  file and could name something private of yours. **and N more files** means more is being sent than you can see, so in a
+  file and could name something private of yours. [Approving a guide](#approving-a-guide)
+  asks before that happens, but a guide you approved can change. **and N more files** means more is being sent than you can see, so in a
   file you do not trust, clear **Style Notes** rather than send.
 - **The last read.** The list and its warnings show what the last read found, not what is on
   disk now. After you edit a guide or fix an import, they catch up at the next turn or save,
@@ -246,7 +298,8 @@ Change `base.md` once, and both follow.
   name a network share. The field says **Read at the next turn.** until you send a turn,
   save the file or press **Read Now**, which lists the files before anything is sent. Any
   path with no read yet shows the same, as can happen after an undo or a scene switch. Once a
-  path has a read, the button goes.
+  path has a read, the button goes. A guide not yet approved says **Not sent until you
+  approve it in the sidebar.** instead, and only **Read Now** reads it: not a save, and not a turn.
 - **File types.** Only `.md` and `.txt` files load, as UTF-8 text. A link is judged by the
   file it leads to, so `notes.md` linking to a private key is refused.
 - **Size.** A guide can be 128 KiB in all. Reading stops at the file that would pass that,

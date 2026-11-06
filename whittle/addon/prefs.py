@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Add-on preferences, with defaults when the add-on is not registered."""
+"""Add-on preferences, with defaults when the add-on is not registered, and
+which style guides this install may read and send."""
 
+import logging
 import os
 from types import SimpleNamespace
 
@@ -9,6 +11,8 @@ from bpy.props import BoolProperty, IntProperty, StringProperty
 
 from .. import style
 from ..models import DEFAULT_MODEL
+
+log = logging.getLogger("whittle")
 
 PACKAGE = __package__.rpartition(".")[0]
 
@@ -48,6 +52,12 @@ MAX_GUIDES_KEPT = 8
 # How many files, and how many problems, a Style Notes field lists: a bad
 # guide can name thousands, and the list has to stay readable.
 GUIDE_ROWS = 10
+# The guides this install approved, with the user folder they came from: draw
+# code asks, so the record is read once and when a file loads. A // path set
+# while the file has no folder is approved once the first save gives it one.
+_approved: tuple[str | None, set[str]] | None = None
+_approved_unsaved: set[str] = set()
+HELD_NOTE = "Not sent until you approve it in the sidebar."
 LOG_LINES = 8
 # What the Preferences' main region keeps from its width for a line in one
 # of Whittle's boxes: the region's margins, the box's border and the icon.
@@ -79,6 +89,8 @@ def _key_changed(_self, _context):
 
 
 def _style_file_changed(p, _context):
+    # Runs when the path is set and not when the preferences load.
+    approve_guide(p.style_file)
     read_style_guide(p.style_file)
 
 
@@ -174,7 +186,8 @@ class WhittlePreferences(bpy.types.AddonPreferences):
         row.prop(self, "self_check_rounds")
         row.prop(self, "render_size")
         box.prop(self, "style_file")
-        draw_style_guide(box, self.style_file, lambda text: wrap_status(text, *_line_room()))
+        draw_style_guide(box, self.style_file, lambda text: wrap_status(text, *_line_room()),
+                         held=guide_held(self.style_file, per_file=False))
 
         box = layout.box()
         box.label(text="Files", icon="FILE_BLEND")
@@ -209,24 +222,31 @@ def draw_environment(layout, p, setup) -> None:
             col.label(text=line[:160])
 
 
-def draw_style_guide(layout, path: str, wrap) -> None:
+def draw_style_guide(layout, path: str, wrap, held: bool = False) -> None:
     """Under a Style Notes field, from the last read (style_guide): the files
     being sent, then what went wrong, in lines of their own so a warning
-    needs no tooltip. wrap breaks a text into lines for the layout."""
+    needs no tooltip. wrap breaks a text into lines for the layout. A held
+    guide waits for the user's approval, so no turn will read it."""
     if not path.strip():
         return
     guide = style_guide(path)
-    if guide is None:
+    if held or guide is None:
         col = layout.column(align=True)
         col.active = False
-        col.label(text="Read at the next turn.", icon="BLANK1")
+        col.label(text=HELD_NOTE if held else "Read at the next turn.", icon="BLANK1")
+    if guide is None:
         layout.operator("whittle.style_guide_read", icon="FILE_REFRESH").path = path
         return
+    draw_guide_read(layout, guide, wrap, "Would be sent:" if held else "Sent with each turn:")
+
+
+def draw_guide_read(layout, guide: style.Guide, wrap, title: str) -> None:
+    """What a read of a guide found: its files under title, then its problems."""
     if guide.files:
         col = layout.column(align=True)
         heading = col.column(align=True)
         heading.active = False
-        heading.label(text="Sent with each turn:", icon="BLANK1")
+        heading.label(text=title, icon="BLANK1")
         for name in guide.names()[:GUIDE_ROWS]:
             for i, line in enumerate(wrap(name)):
                 col.label(text=line, icon="FILE_TEXT" if i == 0 else "BLANK1")
@@ -366,10 +386,127 @@ def _guide_key(path: str) -> tuple[str, str]:
 def refresh_style_guides(scene=None) -> None:
     """Reads the guide the next session would send, and the preferences' own
     for their Defaults box. Runs before each turn and when the path may have
-    changed, so an edited guide reaches the next turn; never from a redraw."""
-    wanted = {session_values(scene)["style_file"], get().style_file}
-    for path in wanted:
+    changed, so an edited guide reaches the next turn; never from a redraw,
+    and never a guide waiting for the user's approval."""
+    wanted = (_style_path(scene), (get().style_file, False))
+    for path in {path for path, per_file in wanted if not guide_held(path, per_file=per_file)}:
         read_style_guide(path)
+
+
+def _style_path(scene=None) -> tuple[str, bool]:
+    """The Style Notes path a session of this scene gets, and whether it is
+    the file's own rather than the preferences'."""
+    from . import props
+
+    if scene is None:
+        scene = getattr(bpy.context, "scene", None)
+    found = props.file_settings(scene).get("style_file")
+    return (get().style_file, False) if found is None else (found, True)
+
+
+def _resolved(path: str, blend: str) -> str:
+    return "" if path.startswith("//") and not blend else \
+        bpy.path.abspath(style.portable_path(path), start=os.path.dirname(blend))
+
+
+def guide_key(path: str, blend: str | None = None) -> str:
+    """What this install's approval of a path is kept under, with // counted
+    from blend, by default the open file. Nothing for a path that cannot be
+    read as it stands: load_guide refuses it, and there is nothing to approve.
+    Only strings, so asking whether a path is approved reaches nothing."""
+    return style.guide_key(_resolved(path.strip(), bpy.data.filepath if blend is None else blend))
+
+
+def guide_location(path: str) -> str:
+    """Where a path leads from the open file, for the user to read."""
+    return style.absolute_path(_resolved(path.strip(), bpy.data.filepath))
+
+
+def _approved_keys() -> set[str]:
+    global _approved
+    from . import paths
+
+    # The variable and not the folder itself: this runs from redraws.
+    folder = os.environ.get("WHITTLE_USER_DIR")
+    if _approved is None or _approved[0] != folder:
+        try:
+            _approved = (folder, style.read_approved(paths.user_dir()))
+        except OSError as exc:
+            log.warning("cannot read the approved style guides: %s", exc)
+            _approved = (folder, set())
+    return _approved[1]
+
+
+def forget_approvals() -> None:
+    """A file was loaded: the record is read again at the next question, so
+    what another Blender approved counts here too."""
+    global _approved
+    _approved = None
+    _approved_unsaved.clear()
+
+
+def approve_keys(keys) -> bool:
+    """Adds to the guides this install approved, and to its record if it can:
+    they count until Blender closes either way. Returns whether the record has
+    them. What another Blender added since this one read it stays."""
+    global _approved
+    from . import paths
+
+    keys = set(keys) - {""}
+    known = _approved_keys()
+    if keys <= known:
+        return True
+    _approved = (_approved[0], known | keys)
+    try:
+        folder = paths.user_dir()
+        _approved = (_approved[0], _approved[1] | style.read_approved(folder))
+        style.write_approved(folder, _approved[1])
+    except OSError as exc:
+        log.warning("cannot keep the approved style guides: %s", exc)
+        return False
+    return True
+
+
+def approve_guide(path: str) -> bool:
+    """This install may read and send the guide at path, here and in any file
+    that leads to it. For what the user did: their Use This Guide, or their
+    setting a Style Notes field. Returns whether that was recorded."""
+    path = path.strip()
+    if path.startswith("//") and not bpy.data.filepath:
+        _approved_unsaved.add(path)
+        return True
+    return approve_keys({guide_key(path)})
+
+
+def settle_unsaved_approvals() -> None:
+    """After a save: a // path set in the unsaved file names a guide now."""
+    if bpy.data.filepath:
+        approve_keys({guide_key(path) for path in _approved_unsaved})
+        _approved_unsaved.clear()
+
+
+def guide_held(path: str, *, per_file: bool) -> bool:
+    """Whether a path waits for the user to approve it before anything reads
+    it. A file's own path does, and a // one in the preferences, since the
+    open file decides where that leads, unless this install approved where it
+    leads. The rest of the preferences' are the user's own, and so is a
+    file's path to the guide they name. Never touches the disk: this decides
+    whether anything may."""
+    path = path.strip()
+    if not per_file and not path.startswith("//"):
+        return False
+    key = guide_key(path)
+    if not key or key in _approved_keys():
+        return False
+    own = get().style_file.strip()
+    return own.startswith("//") or key != guide_key(own)
+
+
+def held_guide(scene=None) -> str:
+    """The path the next turn from this scene would send and may not until the
+    user answers; empty if there is none. Fit for a redraw."""
+    path, per_file = _style_path(scene)
+    return path.strip() if guide_held(path, per_file=per_file) else ""
 
 
 def read_own_style_guide() -> None:
@@ -404,9 +541,13 @@ def session_settings(scene=None) -> dict:
     the path, so a guide that changed on disk changes the settings and
     restarts the agent like any other change. A path with no read yet is read
     now: not read is not the same as no guide. So this is for sending, not
-    for drawing."""
+    for drawing. A guide waiting for the user's approval gives nothing, Read
+    Now's text included, whichever route got here."""
     settings = session_values(scene)
-    guide = style_guide(settings["style_file"]) or read_style_guide(settings["style_file"])
+    if held_guide(scene):
+        guide = style.Guide()
+    else:
+        guide = style_guide(settings["style_file"]) or read_style_guide(settings["style_file"])
     settings["style_guide"] = guide.text
     settings["style_incomplete"] = bool(guide.problems)
     return settings

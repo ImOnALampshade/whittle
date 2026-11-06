@@ -33,6 +33,10 @@ FROM_PREFS = {**{key: getattr(PREFS, key) for key in prefs.SESSION_SETTINGS},
 class FileSettingsCase(AddonTestCase):
     def setUp(self):
         super().setUp()
+        # Setting Style Notes approves its guide, in the user folder.
+        self._user = TempUserDir()
+        self.folder = self._user.__enter__()
+        self.addCleanup(self._user.__exit__, None, None, None)
         for key in props.FILE_SETTINGS:
             props.reset_file_setting(self.scene, key)
         self.addCleanup(lambda: [props.reset_file_setting(self.scene, k) for k in props.FILE_SETTINGS])
@@ -437,6 +441,27 @@ class StylePathSaveTest(unittest.TestCase):
                          {"path": "//../../../work/repo/style/a.md", "guide": "Right.", "problems": []})
         self.assertEqual(self.r["symlink"]["out_of"], {"path": "//../style/a.md", "guide": "Right.", "problems": []})
 
+    def test_a_relative_path_set_before_the_first_save_was_set_here(self):
+        found = self.r["relative_before_a_save"]
+        self.assertEqual(found["before"], "", "it leads nowhere yet")
+        self.assertEqual(found["after"], {"path": "//beside.md", "held": ""})
+
+    def test_approval_survives_save_as_undo_and_copy(self):
+        found = self.r["approvals"]
+        self.assertEqual(found["save_as"], {"path": "//../../style/g.md", "held": ""})
+        self.assertEqual(found["undo"], {"path": "//../../style/g.md", "held": ""})
+        self.assertEqual(found["copy"], {"path": "//../style/g.md", "held": ""})
+
+    def test_a_save_as_neither_approves_nor_reads_what_was_not(self):
+        self.assertEqual(self.r["approvals"]["unapproved"],
+                         {"path": "//../../style/other.md", "held": "//../../style/other.md", "reads": 0})
+
+    def test_approval_follows_the_guide_through_a_symlinked_folder(self):
+        found = self.r["approvals"]
+        if "symlink_save_as" not in found:
+            self.skipTest("no symlinks here")
+        self.assertEqual((found["symlink_save_as"]["held"], found["symlink_save_as"]["guide"]), ("", "Approved."))
+
     def test_a_backslash_in_a_folder_name_survives_a_move(self):
         if self.r["backslash_folder"] is None:
             self.skipTest("a backslash is a separator here")
@@ -446,12 +471,6 @@ class StylePathSaveTest(unittest.TestCase):
 
 class StyleFileTest(FileSettingsCase):
     """Style Notes as a path: resolved by the add-on, cached for the popover."""
-
-    def setUp(self):
-        super().setUp()
-        self._user = TempUserDir()
-        self.folder = self._user.__enter__()
-        self.addCleanup(self._user.__exit__, None, None, None)
 
     def write(self, name: str, text: str):
         path = self.folder / name

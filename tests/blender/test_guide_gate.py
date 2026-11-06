@@ -1,0 +1,430 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""The question before a style guide this install has not approved goes out:
+which paths ask, what approves, that nothing reads an unapproved guide, the
+box over the composer and every route that sends."""
+
+import json
+import os
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+import bpy
+
+from tests.blender.test_chats import ChatCase
+from tests.blender.test_file_settings import PREFS, FileSettingsCase
+from tests.blender.test_keys import press_enter
+from tests.blender.ui_helpers import RecordingLayout
+from whittle import style
+import whittle.addon as addon
+from whittle.addon import history, operators, prefs, props, shortcut, turn, ui
+
+STORE = props.FILE_SETTINGS["style_file"]
+
+
+def saved_as(blend) -> mock._patch:
+    """The open file as if saved at blend, for code that only asks where it is."""
+    return mock.patch.object(prefs, "bpy", SimpleNamespace(data=SimpleNamespace(filepath=str(blend)), path=bpy.path,
+                                                           context=bpy.context))
+
+
+class GateCase(FileSettingsCase):
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(prefs.forget_approvals)
+        prefs.forget_approvals()
+        # PREFS is shared with the file's other tests.
+        self.addCleanup(setattr, PREFS, "style_file", PREFS.style_file)
+        PREFS.style_file = ""
+        self.guide = self.write("style.md", "Theirs.")
+
+    def write(self, name: str, text: str) -> Path:
+        path = self.folder / name
+        path.write_text(text)
+        return path
+
+    def arrive(self, path) -> str:
+        """The file holds path as a load brings it: nothing set it here."""
+        self.scene.whittle[STORE] = str(path)
+        return str(path)
+
+    def draw(self, ctl=None) -> RecordingLayout:
+        layout = RecordingLayout()
+        ui.draw_main(layout, ui.Ctx(scene=self.scene, hist=None, ctl=ctl, comparing=None, width=240))
+        return layout
+
+
+class WhichPathsTest(GateCase):
+    def held(self) -> str:
+        return prefs.held_guide(self.scene)
+
+    def test_a_files_own_path_asks(self):
+        self.assertEqual(self.held(), "")
+        path = self.arrive(self.guide)
+        self.assertEqual(self.held(), path)
+
+    def test_a_relative_path_in_a_saved_file_asks(self):
+        self.arrive("//style.md")
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(self.held(), "//style.md")
+
+    def test_a_relative_preference_asks_as_the_file_decides_where_it_leads(self):
+        PREFS.style_file = "//style.md"
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(self.held(), "//style.md")
+
+    def test_the_users_own_preference_never_asks(self):
+        for path in (str(self.guide), "~/style.md"):
+            PREFS.style_file = path
+            self.assertEqual(self.held(), "", path)
+            self.assertFalse(prefs.guide_held(path, per_file=False))
+
+    def test_an_empty_path_never_asks(self):
+        self.arrive("")
+        self.assertEqual(self.held(), "")
+        self.arrive("   ")
+        self.assertEqual(self.held(), "")
+
+    def test_a_path_that_cannot_be_read_as_it_stands_never_asks(self):
+        self.arrive("style.md")
+        self.assertEqual(self.held(), "", "load_guide refuses it unread")
+        self.arrive("//style.md")
+        self.assertEqual(self.held(), "", "an unsaved file: it leads nowhere yet")
+
+    def test_a_file_naming_the_users_own_preference_is_their_guide(self):
+        PREFS.style_file = str(self.guide)
+        self.arrive(self.guide)
+        self.assertEqual(self.held(), "")
+
+    def test_another_scene_answers_for_itself(self):
+        other = bpy.data.scenes.new("Other")
+        self.addCleanup(bpy.data.scenes.remove, other)
+        self.arrive(self.guide)
+        self.assertEqual(prefs.held_guide(other), "")
+
+    def test_the_key_is_a_string_and_the_same_for_the_same_file(self):
+        inside = self.folder / "sub"
+        with mock.patch("os.path.realpath", side_effect=AssertionError("touched the disk")), \
+                mock.patch("os.stat", side_effect=AssertionError("touched the disk")):
+            key = prefs.guide_key(str(self.guide))
+            self.assertEqual(prefs.guide_key("//../style.md", str(inside / "a.blend")), key)
+            self.assertEqual(prefs.guide_key(f"{inside}/../style.md"), key)
+
+
+class ApprovalTest(GateCase):
+    def test_setting_the_path_approves_it(self):
+        self.props.style_file = str(self.guide)
+        self.assertEqual(prefs.held_guide(self.scene), "")
+        self.assertEqual(style.read_approved(self.folder), {prefs.guide_key(str(self.guide))})
+
+    def test_setting_the_preference_approves_it(self):
+        with saved_as(self.folder / "a.blend"):
+            prefs._style_file_changed(SimpleNamespace(style_file="//style.md"), None)
+            self.arrive("//style.md")
+            self.assertEqual(prefs.held_guide(self.scene), "")
+
+    def test_a_load_approves_nothing(self):
+        self.arrive(self.guide)
+        with mock.patch.object(addon.chats, "after_load"), mock.patch.object(addon.history, "sync_from_scene"), \
+                mock.patch.object(addon.history, "invalidate"):
+            addon._after_load()
+        self.assertTrue(prefs.held_guide(self.scene))
+        self.assertFalse((self.folder / style.APPROVALS_NAME).exists())
+
+    def test_nothing_goes_in_the_file(self):
+        self.arrive(self.guide)
+        before = dict(self.props.items())
+        self.assertEqual(bpy.ops.whittle.style_guide_approve(), {"FINISHED"})
+        self.assertEqual(dict(self.props.items()), before)
+
+    def test_it_lasts_past_this_blender(self):
+        self.arrive(self.guide)
+        bpy.ops.whittle.style_guide_approve()
+        prefs.forget_approvals()
+        self.assertEqual(prefs.held_guide(self.scene), "", "read back from the user folder")
+
+    def test_one_approval_covers_every_file_leading_there(self):
+        self.arrive(self.guide)
+        bpy.ops.whittle.style_guide_approve()
+        self.arrive("//../style.md")
+        with saved_as(self.folder / "sub" / "a.blend"):
+            self.assertEqual(prefs.held_guide(self.scene), "")
+
+    def test_another_blenders_approval_is_kept_and_found(self):
+        other = prefs.guide_key(str(self.write("other.md", "Other.")))
+        prefs.held_guide(self.scene)
+        style.write_approved(self.folder, {other})
+        self.arrive(self.guide)
+        bpy.ops.whittle.style_guide_approve()
+        self.assertEqual(style.read_approved(self.folder), {other, prefs.guide_key(str(self.guide))})
+
+    def test_a_record_that_cannot_be_read_asks_again(self):
+        self.arrive(self.guide)
+        bpy.ops.whittle.style_guide_approve()
+        (self.folder / style.APPROVALS_NAME).write_text("{")
+        prefs.forget_approvals()
+        self.assertTrue(prefs.held_guide(self.scene))
+
+    def test_a_record_that_cannot_be_written_lasts_until_blender_closes(self):
+        self.arrive(self.guide)
+        with mock.patch.object(style, "write_approved", side_effect=OSError("read-only")):
+            self.assertFalse(prefs.approve_guide(str(self.guide)))
+        self.assertEqual(prefs.held_guide(self.scene), "")
+
+    def test_the_record_is_read_once_and_not_by_a_redraw(self):
+        self.arrive(self.guide)
+        prefs.held_guide(self.scene)
+        with mock.patch.object(style, "read_approved", side_effect=AssertionError("read in a redraw")):
+            self.draw()
+            prefs.held_guide(self.scene)
+
+
+class NoReadTest(GateCase):
+    """load_guide is the one way to the disk: counted through every route."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(style, "load_guide", wraps=style.load_guide)
+        self.load = patcher.start()
+        self.addCleanup(patcher.stop)
+        self.path = self.arrive(self.guide)
+
+    def test_a_refresh_leaves_it(self):
+        prefs.refresh_style_guides()
+        prefs.refresh_style_guides(self.scene)
+        self.load.assert_not_called()
+
+    def test_the_settings_leave_it(self):
+        settings = prefs.session_settings(self.scene)
+        self.assertEqual((settings["style_guide"], settings["style_incomplete"]), ("", False))
+        self.load.assert_not_called()
+
+    def test_a_refresh_still_reads_the_users_own(self):
+        PREFS.style_file = str(self.write("mine.md", "Mine."))
+        prefs.refresh_style_guides()
+        self.assertEqual([c.args[0] for c in self.load.call_args_list], [PREFS.style_file])
+
+    def test_a_save_leaves_it(self):
+        with mock.patch.object(addon.chats, "after_save"), mock.patch.object(addon.chats, "before_save"):
+            addon._before_save(str(self.folder / "a.blend"))
+            addon._after_save(str(self.folder / "a.blend"))
+        self.load.assert_not_called()
+
+    def test_a_reset_to_a_held_default_leaves_it(self):
+        PREFS.style_file = "//style.md"
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(bpy.ops.whittle.file_setting_reset(key="style_file"), {"FINISHED"})
+        self.load.assert_not_called()
+
+    def test_drawing_leaves_it(self):
+        self.draw()
+        self.load.assert_not_called()
+
+    def test_read_now_reads_and_approves_nothing(self):
+        self.assertEqual(bpy.ops.whittle.style_guide_read(path=self.path), {"FINISHED"})
+        self.load.assert_called_once()
+        self.assertEqual(prefs.style_guide(self.path).text, "Theirs.")
+        self.assertEqual(prefs.held_guide(self.scene), self.path)
+        self.assertEqual(prefs.session_settings(self.scene)["style_guide"], "", "listed, and still not sent")
+
+    def test_use_this_guide_reads_it(self):
+        bpy.ops.whittle.style_guide_approve()
+        self.load.assert_called_once()
+        self.assertEqual(prefs.session_settings(self.scene)["style_guide"], "Theirs.")
+
+
+class GateBoxTest(GateCase):
+    def test_a_box_over_the_composer(self):
+        path = self.arrive(self.guide)
+        self.props.prompt = "Add a lid."
+        layout = self.draw()
+        self.assertIn(ui.GUIDE_TITLE, layout.labels())
+        self.assertIn("go to Claude", layout.text())
+        self.assertIn(os.path.basename(path), layout.text())
+        self.assertEqual([c["idname"] for c in layout.operators()
+                          if c["idname"].startswith("whittle.style_guide")],
+                         ["whittle.style_guide_approve", "whittle.style_guide_read", "whittle.style_guide_skip"])
+        (read,) = layout.operators("whittle.style_guide_read")
+        self.assertEqual(read["props"].path, path)
+        (send,) = layout.operators("whittle.submit")
+        self.assertFalse(layout.is_enabled(send))
+
+    def test_the_box_shows_the_absolute_path_of_a_relative_one(self):
+        self.arrive("//sub/../style.md")
+        with saved_as(self.folder / "a.blend"):
+            lines = "".join(self.draw().labels())
+        self.assertIn(str(self.guide), lines)
+
+    def test_read_now_lists_the_files(self):
+        self.write("base.md", "Base.")
+        path = self.arrive(self.write("top.md", "@base.md\n@gone.md"))
+        bpy.ops.whittle.style_guide_read(path=path)
+        layout = self.draw()
+        self.assertIn(ui.GUIDE_FILES, layout.labels())
+        self.assertIn("base.md", layout.labels())
+        self.assertIn("gone.md", layout.text(), "and what is missing")
+        self.assertTrue(layout.operators("whittle.style_guide_approve"), "the question stands")
+
+    def test_no_box_once_approved(self):
+        self.arrive(self.guide)
+        bpy.ops.whittle.style_guide_approve()
+        self.assertNotIn(ui.GUIDE_TITLE, self.draw().labels())
+        self.assertFalse(bpy.ops.whittle.style_guide_approve.poll(), "never asked again")
+
+    def test_no_box_during_a_turn(self):
+        self.arrive(self.guide)
+        with mock.patch.object(ui.Ctx, "busy", True):
+            self.assertNotIn(ui.GUIDE_TITLE, self.draw().labels())
+
+    def test_going_without_it(self):
+        self.arrive(self.guide)
+        self.assertEqual(bpy.ops.whittle.style_guide_skip(), {"FINISHED"})
+        self.assertEqual(props.file_settings(self.scene)["style_file"], "", "no guide for this file, set")
+        self.assertEqual(prefs.held_guide(self.scene), "")
+        self.assertFalse(style.read_approved(self.folder), "and nothing approved")
+        self.assertEqual(prefs.session_settings(self.scene)["style_guide"], "")
+
+    def test_going_without_a_held_default_overrides_it_for_this_file(self):
+        PREFS.style_file = "//style.md"
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(bpy.ops.whittle.style_guide_skip(), {"FINISHED"})
+            self.assertEqual(prefs.held_guide(self.scene), "")
+
+    def test_the_popover_says_it_is_held(self):
+        path = self.arrive(self.guide)
+        layout = self.popover()
+        self.assertIn(prefs.HELD_NOTE, layout.labels())
+        self.assertNotIn("Read at the next turn.", layout.labels(), "no turn will read it")
+        self.assertEqual([b["props"].path for b in layout.operators("whittle.style_guide_read")], [path])
+        bpy.ops.whittle.style_guide_read(path=path)
+        labels = self.popover().labels()
+        self.assertIn("Would be sent:", labels)
+        self.assertNotIn("Sent with each turn:", labels)
+
+
+class SendRoutesTest(ChatCase):
+    """Every way to send, with a file holding a guide nothing approved."""
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(prefs.forget_approvals)
+        prefs.forget_approvals()
+        self.addCleanup(props.reset_file_setting, self.scene, "style_file")
+        self.addCleanup(prefs._guides.clear)
+        self.guide = self.user_dir / "style.md"
+        self.guide.write_text("Theirs.")
+        patcher = mock.patch.object(style, "load_guide", wraps=style.load_guide)
+        self.load = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def arrive(self) -> None:
+        self.scene.whittle[STORE] = str(self.guide)
+
+    def refused(self) -> None:
+        """Every route is refused, the draft stays and nothing read the guide."""
+        self.assertEqual(self.props.prompt, "Add a lid.")
+        self.load.assert_not_called()
+
+    def test_send(self):
+        self.arrive()
+        self.props.prompt = "Add a lid."
+        self.assertFalse(bpy.ops.whittle.submit.poll(), "its tooltip says why")
+        with self.assertRaisesRegex(RuntimeError, operators.GUIDE_HELD):
+            operators.submit_sketch(bpy.context, self.fake)
+        self.refused()
+
+    def test_the_tooltip_says_why(self):
+        self.arrive()
+        with self.assertRaisesRegex(RuntimeError, operators.GUIDE_HELD):
+            bpy.ops.whittle.submit()
+
+    def test_the_send_key(self):
+        self.arrive()
+        self.props.prompt = "Add a lid."
+        with mock.patch.object(operators, "submit_sketch") as submit:
+            self.assertEqual(bpy.ops.whittle.send_key(), {"CANCELLED"})
+        submit.assert_not_called()
+        self.refused()
+
+    def test_enter_and_the_ask_claude_prompt(self):
+        # The popup types into the same field, and Enter sends it the same way.
+        self.arrive()
+        self.props.prompt = "Add a lid."
+        self.assertEqual(shortcut.field(None), "prompt")
+        with mock.patch.object(operators, "submit_sketch") as submit:
+            self.assertEqual(press_enter(), ({"PASS_THROUGH"}, []))
+        submit.assert_not_called()
+        self.refused()
+
+    def test_retry_changes_nothing_first(self):
+        ctl, node = self.send("Make the crate bigger.")
+        history.active().tree.node(node).status = "failed"
+        current = history.active().current
+        self.load.reset_mock()
+        self.arrive()
+        self.assertFalse(operators.can_retry(history.active(), ctl, node), "the button is disabled")
+        with self.assertRaisesRegex(RuntimeError, operators.GUIDE_HELD):
+            operators.retry(bpy.context, node, self.fake)
+        self.assertEqual(history.active().current, current, "no branch was taken")
+        self.load.assert_not_called()
+
+    def test_run_bundle(self):
+        self.arrive()
+        with self.assertRaisesRegex(RuntimeError, operators.GUIDE_HELD):
+            operators.run_bundle(bpy.context, self.fake)
+        self.load.assert_not_called()
+
+    def test_a_controller_made_some_other_way_still_has_no_guide(self):
+        # Start Agent, a start point: no turn, but they make a controller.
+        self.arrive()
+        ctl = operators.controller(self.fake)
+        self.controllers.append(ctl)
+        self.assertEqual(ctl.commands.settings["style_guide"], "")
+        self.load.assert_not_called()
+
+    def test_amend_reads_nothing(self):
+        ctl, _node = self.send("Make the crate bigger.")
+        self.load.reset_mock()
+        self.arrive()
+        ctl.turn_id, ctl._accepted = "n0009", True
+        ctl.bundle = SimpleNamespace(request=SimpleNamespace(parent="n0001", target=[]))
+        ctl._from_sketch = True
+        real = ctl.process
+        self.addCleanup(setattr, ctl, "process", real)
+        ctl.process = mock.MagicMock(bridge=mock.MagicMock(interrupted=False))
+        with mock.patch.object(turn.bundle, "write_bundle"), mock.patch.object(turn.sketch, "pending_count", return_value=1), \
+                mock.patch.object(turn.sketch, "stamp_pending"):
+            ctl.amend("And the lid.")
+        self.load.assert_not_called()
+
+    def test_answer_reads_nothing(self):
+        self.arrive()
+        ctl = mock.MagicMock(answer=mock.MagicMock(return_value=True))
+        self.props.ask_answer = "Oak."
+        with mock.patch.object(turn, "current", return_value=ctl):
+            self.assertTrue(operators.answer(bpy.context))
+        self.load.assert_not_called()
+
+    def test_the_turn_runs_with_the_guide_once_approved(self):
+        self.arrive()
+        self.assertEqual(bpy.ops.whittle.style_guide_approve(), {"FINISHED"})
+        ctl, node = self.send("Add a lid.")
+        self.assertEqual(ctl.session_starts[-1]["settings"]["style_guide"], "Theirs.")
+        self.assertEqual(json.loads((ctl.session.request_dir(node) / "request.json").read_text())
+                         ["settings"]["style_file"], str(self.guide))
+
+    def test_approving_restarts_an_agent_started_without_the_guide(self):
+        self.arrive()
+        ctl = operators.controller(self.fake)
+        self.controllers.append(ctl)
+        self.start_ready(ctl)
+        self.assertFalse(ctl.launch_changed)
+        bpy.ops.whittle.style_guide_approve()
+        self.assertTrue(ctl.launch_changed, "the next turn gets the guide")
+
+    def test_going_without_it_sends(self):
+        self.arrive()
+        self.assertEqual(bpy.ops.whittle.style_guide_skip(), {"FINISHED"})
+        ctl, _node = self.send("Add a lid.")
+        self.assertEqual(ctl.session_starts[-1]["settings"]["style_guide"], "")
+        self.load.assert_not_called()
