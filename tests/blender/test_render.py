@@ -101,8 +101,9 @@ class RenderTest(unittest.TestCase):
         strokes = render.load_pixels(data["strokes_path"])
         solid = strokes[strokes[..., 3] > 0.95][:, :3]
         self.assertGreater(len(solid), 20)
-        # Unlit strokes come out at full white, not darkened by Workbench lighting.
-        self.assertGreater(solid.min(axis=1).max(), 0.9)
+        # Unlit strokes come out at their full red, not darkened by Workbench lighting.
+        self.assertGreater(solid[:, 0].max(), 0.9)
+        self.assertLess(solid[:, 1:].max(), 0.3)
 
     def test_scene_is_left_unchanged(self):
         before = scene_state(self.scene)

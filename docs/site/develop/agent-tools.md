@@ -143,7 +143,7 @@ its error lists the turn's view ids. A `view` render keeps that view's aspect, a
 square.
 
 ```{figure} ../images/develop-agent-tools/render-modes.png
-:alt: Four renders of a crate with a lid from one sketch view, in a two by two grid. Top left, overlay, with a white outline around the lid and a white oval on the side. Top right, shaded. Bottom left, wireframe, with the crate as thin lines and the lid solid. Bottom right, matcap.
+:alt: Four renders of a crate with a lid from one sketch view, in a two by two grid. Top left, overlay, with a red outline around the lid and a red oval on the side. Top right, shaded. Bottom left, wireframe, with the crate as thin lines and the lid solid. Bottom right, matcap.
 
 The four modes from one sketch view, as the agent gets them: overlay and shaded on top,
 wireframe and matcap below. The crate is the target. The lid was made this turn, so it is not a

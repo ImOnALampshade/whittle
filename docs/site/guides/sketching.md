@@ -40,7 +40,7 @@ Your strokes stay, and you can pick up where you left off.
 
 ## Say what the strokes mean
 
-Every stroke is the same plain white line, like a redline on a drawing. The prompt is what
+Every stroke is the same plain red line, like a redline on a drawing. The prompt is what
 tells Claude what it means, so one kind of mark does every job: "cut a slot here", "build
 the lid out to this line", "sharpen this edge" or "paint this panel". When strokes mean
 different things, say which is which: "the loop is a slot, the line is an edge to sharpen".
@@ -100,7 +100,7 @@ While you sketch, a small camera marks each view in the viewport, pointing the w
 view looked.
 
 ```{figure} ../images/guides-sketching/view-markers.png
-:alt: The viewport pulled back from the crate. A white outline and a small white loop are drawn on the crate, and two small wireframe cameras float around it, one blue and one light grey, each pointing at it.
+:alt: The viewport pulled back from the crate. A red outline and a small red loop are drawn on the crate, and two small wireframe cameras float around it, one blue and one light grey, each pointing at it.
 
 Two view markers. The blue one is the current view.
 ```

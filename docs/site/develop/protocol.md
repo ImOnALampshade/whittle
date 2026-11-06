@@ -264,7 +264,7 @@ alone, the one new strokes go to, and with no views at all there is no `views/` 
 overlay draws all of the bundle's strokes, not only those tagged with its view.
 
 ```{figure} ../images/develop-protocol/overlay.png
-:alt: The crate from a three-quarter view, a white closed stroke above its top and another on its front face.
+:alt: The crate from a three-quarter view, a red closed stroke above its top and another on its front face.
 
 `views/1/overlay.png` from `n0001`'s bundle, the sketched turn, whose strokes use views 1
 and 2. It is shown in Blender's Image Editor.

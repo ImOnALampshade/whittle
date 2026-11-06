@@ -35,7 +35,9 @@ AMEND_ATTRIBUTE = "whittle_amend"
 FILL_ATTRIBUTE = "fill_id"
 # Built-in: a stroke with this set draws no outline.
 HIDE_ATTRIBUTE = "hide_stroke"
-STROKE_COLOUR = (1.0, 1.0, 1.0)
+# Redline red, in linear scene colour: it stays red over wood, grey clay and
+# the agent's grey backdrop.
+STROKE_COLOUR = (0.9, 0.02, 0.02)
 POLL_INTERVAL = 0.25
 # Every layer keeps its one drawing keyed at Blender's lowest frame, so the
 # sketch is the same wherever the playhead is and the draw tool, which paints

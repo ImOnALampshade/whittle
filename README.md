@@ -15,7 +15,7 @@ newer than the latest release.
 
 I made this because Claude Design is going away, and I found it extremely useful for quick modeling tasks when using my Wacom tablet to draw redlines over a 3D object. This project is the evolution of that feature. Everything here has been vibe coded over the course of a few days, so don’t expect it to be perfect - but it does everything I need it to, so I’m happy with it.
 
-![Blender with a wooden crate in the 3D viewport, sketched over in white strokes: an
+![Blender with a wooden crate in the 3D viewport, sketched over in red strokes: an
 outline where a latch should go, a slot to carve into the lid, a line along the lid's edge,
 a panel on the side and an arrow. Beside it the Whittle sidebar shows
 the earlier turns with their renders and the next prompt, ready to send](docs/images/hero.png)

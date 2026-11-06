@@ -21,7 +21,7 @@ from . import sketch as sketch_strokes
 CAMERA_NAME = "Whittle Render Camera"
 WIRE_MODIFIER = "_whittle_wire"
 # Renders are transparent; agent-facing images get a flat mid-grey backdrop so
-# white strokes and pale materials stay visible.
+# pale materials, and the white strokes of older files, stay visible.
 BACKGROUND = (0.32, 0.32, 0.32)
 # The render tool's own bounds (its schema says the same).
 MIN_SIZE = 64

@@ -679,8 +679,8 @@ never left changed.
 - Resolution: `size` on the long side, the view's aspect kept (square for a `camera`
   param). `view_transform = "Standard"` so stroke colours stay flat. Renders are made with
   `film_transparent = True`, then every agent-facing PNG is flattened over a mid-grey
-  backdrop (`render.BACKGROUND`), because a transparent background hides white strokes
-  and pale materials. `strokes.png` stays transparent.
+  backdrop (`render.BACKGROUND`), because a transparent background hides pale materials
+  and the white strokes older files can hold. `strokes.png` stays transparent.
 - Camera: a temporary object `"Whittle Render Camera"` with fresh camera data, built
   from `camera.json` (§8) or from the `camera` param, set as `scene.camera`, and removed
   (object and data) afterwards.
@@ -1178,8 +1178,8 @@ Modules: `addon/sketch.py` (object, layers, tags, the sketch session), `addon/vi
   on one layer, `sketch.LAYER_NAME` (`"Strokes"`), made with
   `layers.new(name, set_active=False)`; `ensure_sketch_layer` always makes it active, so
   the draw tool lands there. Its one drawing is keyed at `SKETCH_FRAME`, Blender's lowest
-  frame, so the sketch is the same wherever the playhead is. Strokes are white:
-  `layer.tint_color` with `tint_factor = 1.0` over one shared white stroke material
+  frame, so the sketch is the same wherever the playhead is. Strokes are red, as in a redline (`sketch.STROKE_COLOUR`):
+  `layer.tint_color` with `tint_factor = 1.0` over one shared stroke material
   `"Whittle Stroke"` (`bpy.data.materials.create_gpencil_data`), so a brush's own colour
   never shows. The layer sets `use_lights = False`: lit strokes render at about a quarter
   of their tint in Workbench (a pure green tint read back as 0.25). Every layer of the

@@ -153,10 +153,12 @@ class BundleTest(unittest.TestCase):
         x, y = views.to_pixel(self.view2, A_POINTS[4], 128, 96)
         self.assertAlmostEqual(patch_max(strokes, x, y, "alpha"), 0.5, delta=0.02, msg="its opacity")
         r, g, b, _a = patch_max(strokes, x, y, "rgb")
-        self.assertGreater(min(r, g, b), 0.9, "strokes are white")
+        self.assertGreater(r, 0.9, "strokes are red")
+        self.assertLess(max(g, b), 0.3, "strokes are red")
         row, col = overlay.shape[0] - 1 - int(y), int(x)
-        self.assertGreater(overlay[row, col, :3].sum(), overlay[row + 8, col, :3].sum() + 0.3,
-                           "over the render they lighten what they cross")
+        self.assertGreater(overlay[row, col, 0] - overlay[row, col, 1],
+                           overlay[row + 8, col, 0] - overlay[row + 8, col, 1] + 0.2,
+                           "over the render they redden what they cross")
 
     def test_scene_is_untouched(self):
         before = render.snapshot_settings(self.scene)

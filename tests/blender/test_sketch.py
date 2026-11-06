@@ -42,7 +42,8 @@ class SketchTest(unittest.TestCase):
         layer = obj.data.layers[sketch.LAYER_NAME]
         self.assertFalse(layer.use_lights)
         self.assertEqual(layer.tint_factor, 1.0)
-        self.assertEqual(tuple(layer.tint_color), sketch.STROKE_COLOUR)
+        for got, want in zip(layer.tint_color, sketch.STROKE_COLOUR):
+            self.assertAlmostEqual(got, want, places=5)
 
     def test_reloading_replaces_strokes(self):
         sketch.load_strokes(bpy.context.scene, self.bundle.strokes)
@@ -113,6 +114,13 @@ class OlderFileTest(unittest.TestCase):
         self.obj = sketch.ensure_sketch_object(self.scene)
         add_stroke(self.obj, [(0, 0, 0), (1, 0, 0)], view=1, layer="free")
         add_stroke(self.obj, [(0, 0, 0), (0, 1, 0), (0, 2, 0)], view=1, layer="carve")
+
+    def test_older_layers_keep_their_colours(self):
+        white = (1.0, 1.0, 1.0)
+        self.obj.data.layers["free"].tint_color = white
+        sketch.ensure_sketch_layer(self.scene)
+        self.assertEqual(tuple(self.obj.data.layers["free"].tint_color), white)
+        self.assertLess(self.obj.data.layers[sketch.LAYER_NAME].tint_color[1], 0.1, "new strokes are red")
 
     def test_every_layer_is_read(self):
         self.assertEqual(sorted(len(s.points) for s in sketch.iter_strokes(self.obj)), [2, 3])

@@ -57,7 +57,7 @@ work, and streams everything back to Blender.
 **Sketch capture** (design §3, §9 item 2). The user sketches over the model and submits;
 Whittle writes a request bundle from the live sketch and runs it.
 
-- `addon/sketch.py`: the "Whittle Sketch" GP object with a white, unlit layer for
+- `addon/sketch.py`: the "Whittle Sketch" GP object with a red, unlit layer for
   new strokes (`Strokes`) and per-stroke tags `whittle_view` and `whittle_turn` (curve
   attributes). Every layer of the object is read, and each keeps a single drawing keyed at Blender's lowest frame (`SKETCH_FRAME`), so the sketch is the
   same wherever the playhead is; a layer keyed elsewhere is moved onto that key.

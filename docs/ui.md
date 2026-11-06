@@ -1533,7 +1533,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `delete_confirm` | the confirmation of 🗑 on a chat: its title, turns and size, "leaves this file the next time you save" |
 | `delete_many` | the Delete Chats dialog on `Older Than a Month`, with the count and size line |
 | `model_menu` | the model menu over a chat on Sonnet 5.5: Opus 5.5, Sonnet 5.5 (✓), Haiku 5.5, Fable 5.1, then Older Models ▸ and Other Model…, the dim Effort heading, Low, Medium, High (✓), `Use Sonnet 5.5 for New Chats`, the dim source line `Listed by the Models API 1 hour ago`; names whole, icons in one column; no item hovered |
-| `hero` | the whole window at 1600×1000, no desktop around it: the crate with its lid and rope handles in matcap shading, no selection outlines; white strokes over it (the latch's outline, a slot, an edge, a side panel and an arrow); the sidebar widened, in sketch mode, scrolled to its end: the last turn with its render, the sketch row, `6 strokes · 2 views`, the prompt typed |
+| `hero` | the whole window at 1600×1000, no desktop around it: the crate with its lid and rope handles in matcap shading, no selection outlines; red strokes over it (the latch's outline, a slot, an edge, a side panel and an arrow); the sidebar widened, in sketch mode, scrolled to its end: the last turn with its render, the sketch row, `6 strokes · 2 views`, the prompt typed |
 | `model_menu_older` | the Older Models submenu with the chat on Opus 4.6: one column per family under its dim name, newest first, ✓ on Opus 4.6; no title or rule over the first column alone |
 
 Popover and menu scenarios end by returning a `Popup` (`tests/screens/scenarios.py`):
@@ -1552,4 +1552,5 @@ General checks on every shot: no text clipped by Blender's own `...` at 280 px (
 shortens with `…` at a word's end), except inside a one-line text field; nothing said
 twice (a draft, a busy sign, a list and its heading); no row wider than the sidebar;
 text lines use the width they have; red only in `error_turn`, `folded_failure`,
-`too_large` and `crashed`.
+`too_large` and `crashed`, apart from the strokes themselves, which are red wherever a
+viewport or render shows them.

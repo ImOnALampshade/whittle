@@ -97,7 +97,7 @@ Orbit to the front of the crate and draw five strokes:
 - an arrow pointing at the latch, in two strokes: the shaft, then the head
 
 ```{figure} images/walkthrough/sketch-front.png
-:alt: The crate from the front, drawn over in white: an outline below the lid, a slot on the lid, a line along the lid's front edge and an arrow pointing at the outline.
+:alt: The crate from the front, drawn over in red: an outline below the lid, a slot on the lid, a line along the lid's front edge and an arrow pointing at the outline.
 
 Five strokes from the first view: the arrow is two of them.
 ```
@@ -107,7 +107,7 @@ The side panel can't be seen from here, so orbit round to the side. Press **Capt
 different angle records one for you. Outline the panel.
 
 ```{figure} images/walkthrough/sketch-side.png
-:alt: The crate from its left side with a white outline drawn low on the side. The earlier strokes can be seen edge-on at the top right.
+:alt: The crate from its left side with a red outline drawn low on the side. The earlier strokes can be seen edge-on at the top right.
 
 An outline from the second view. The first view's strokes stay where they were drawn.
 ```
