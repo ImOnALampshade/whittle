@@ -658,6 +658,18 @@ def guide_gate_read(stage: Stage):
 
 
 @scenario
+def guide_absolute(stage: Stage):
+    """The agent popover of a saved file whose path is absolute: it reads
+    here, and the line says it will not on a clone."""
+    stage.crate()
+    bpy.ops.wm.save_as_mainfile(filepath=str(stage.work / "crate.blend"))
+    stage.props.style_file = SHARED_GUIDE
+    prefs._guides[prefs._guide_key(SHARED_GUIDE)] = style.Guide(files=(SHARED_GUIDE,))
+    yield 0.5
+    return Popup("panel", "WHITTLE_PT_agent")
+
+
+@scenario
 def references(stage: Stage):
     stage.crate()
     for name, colour, pinned in (("crate_front", (0.8, 0.5, 0.2), True), ("crate_side", (0.3, 0.5, 0.8), False)):

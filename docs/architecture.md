@@ -261,8 +261,7 @@ Agent or a start point, with no guide, and approving then changes the text, so t
 restarts before the next turn as for any changed setting.
 
 A save into another folder rewrites the `//` overrides. `save_pre` gets the target path while
-`bpy.data.filepath` is still the file being left (empty before a first save, so nothing to
-do), and Save As and Save Copy look the same there, so `props.rebase_style_paths` rewrites
+`bpy.data.filepath` is still the file being left, and Save As and Save Copy look the same there, so `props.rebase_style_paths` rewrites
 every local scene's `file_style_file` with `style.rebased_path`, straight into the store so the
 update callback's read does not run, and keeps the old text. Afterwards
 `props.settle_style_paths`, from `save_post` and `save_post_fail`, puts the old text back if
@@ -270,7 +269,19 @@ update callback's read does not run, and keeps the old text. Afterwards
 written keeps the new text. Writing the store passes the setter, so `rebase_style_paths` notes the key of
 each new text whose old text was approved, and `settle_style_paths` approves them unless
 the save failed: through a symlinked folder the new text can have another key as a string, and a Save As must
-not ask. An unapproved path stays so. An undo that rewrites a text arrives at the text the
+not ask. An unapproved path stays so.
+
+The first save of a file has no folder to leave (`bpy.data.filepath` is empty), and a guide picked
+before it was stored absolute, which would not work on a clone. So there the same pass turns
+each local absolute override into a `//` path with `style.relative_path`, which shares
+`rebased_path`'s rules, strings only, and leaves the text alone where no `//` path reaches, as
+onto another Windows drive. Only `os.path.isabs` paths: `~` already travels. A Save Copy or a failed save of a
+file never saved takes the text back as before, since `bpy.data.filepath` stays empty. Later saves
+leave an absolute path alone, as a path set absolute in a saved file was meant.
+
+The undo story of a first save is a Save As's: `settle_style_paths` notes a move with the file's folder as the start, and
+an undo bringing back the absolute text finds no stamp from a move, so `follow_style_paths`
+makes it relative again (`props._first_save_moved` says this applies, and a path set later has a stamp). An undo that rewrites a text arrives at the text the
 save left, whose key is in the record already. Both folders are the `.blend`'s with symlinks resolved, since a
 read's `realpath` walks a `..` up from a folder's real place; the guide's own path is never
 looked at. `rebased_path` falls back on the absolute path where a relative one would carry a
@@ -283,7 +294,8 @@ stamp beside each rewritten path (`props.STYLE_MOVE`, a key of `props._moves`, w
 folder that move reached; the property's setter stamps a path typed after one). From `undo_post`
 and `redo_post`, `props.follow_style_paths` takes each local `//` path stamped with anything but
 the latest move and rewrites it from its stamp's folder, or from the folder before the first
-move if it has none or one from another session, to the file's folder. Stamp and text travel
+move if it has none or one from another session, to the file's folder, and each absolute path
+from before a first save that rewrote one. Stamp and text travel
 together, so a scene an undo keeps in place, rewritten as it is, is left alone. `load_post`
 forgets the moves: a stamp saved in a file means nothing, and what a file holds counts from
 where it is. An unset override, and the preferences' path, are not touched.

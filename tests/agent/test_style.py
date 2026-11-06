@@ -472,6 +472,34 @@ class GuideKeyTest(unittest.TestCase):
         self.assertEqual(style.guide_key("C:style.md", ntpath), "", "against the drive's current folder")
 
 
+class IsAbsoluteTest(unittest.TestCase):
+    def test_rooted_on_any_platform(self):
+        for path in ("/repo/a.md", "C:\\repo\\a.md", "c:/repo/a.md", "\\\\nas\\art\\a.md"):
+            self.assertTrue(style.is_absolute(path), path)
+
+    def test_the_paths_that_travel(self):
+        for path in ("", "//a.md", "//../a.md", "~/a.md", "a.md"):
+            self.assertFalse(style.is_absolute(path), path)
+
+
+class RelativePathTest(unittest.TestCase):
+    def test_from_the_folder_saved_to(self):
+        self.assertEqual(style.relative_path("/repo/style/a.md", "/repo/props", posixpath), "//../style/a.md")
+        self.assertEqual(style.relative_path("/repo/props/a.md", "/repo/props", posixpath), "//a.md")
+        self.assertEqual(style.relative_path("C:\\repo\\style\\a.md", "C:\\repo\\props", ntpath), "//../style/a.md")
+
+    def test_another_drive_stays_as_it_was(self):
+        self.assertEqual(style.relative_path("D:\\style\\a.md", "C:\\repo", ntpath), "D:\\style\\a.md")
+        self.assertEqual(style.relative_path("\\\\nas\\art\\a.md", "C:\\repo", ntpath), "\\\\nas\\art\\a.md")
+
+    def test_a_backslash_in_a_folder_stays_as_it_was(self):
+        self.assertEqual(style.relative_path("/odd\\name/a.md", "/work", posixpath), "/odd\\name/a.md")
+
+    def test_only_an_absolute_path_changes(self):
+        for path in ("", "//../a.md", "~/a.md", "a.md"):
+            self.assertEqual(style.relative_path(path, "/repo", posixpath), path)
+
+
 class ApprovedTest(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()

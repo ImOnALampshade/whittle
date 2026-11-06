@@ -535,6 +535,11 @@ def draw_file_settings(layout, scene) -> None:
     wrap = Ctx(scene=None, hist=None, ctl=None, comparing=None, width=POPOVER_LINE).wrap
     prefs.draw_style_guide(layout, scene.whittle.style_file, lambda text: wrap(text, POPOVER_LINE),
                            held=bool(prefs.held_guide(scene)))
+    warning = prefs.absolute_guide_warning(scene)
+    if warning:
+        col = layout.column(align=True)
+        for i, line in enumerate(wrap(warning, POPOVER_LINE)):
+            col.label(text=line, icon="ERROR" if i == 0 else "BLANK1")
 
 
 def draw_agent(layout, ctl, scene=None) -> None:

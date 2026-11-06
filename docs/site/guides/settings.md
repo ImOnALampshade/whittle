@@ -122,6 +122,20 @@ working wherever the repository is cloned. Windows and Linux can share one, as a
 a `//` path or an `@` import reads as a slash on every platform. A path with a drive or a
 network share in it only means something on the machine it was written on.
 
+In a file that has never been saved, the file browser writes an absolute path, as there is no
+folder to count from. The first save turns it into a `//` path, in every scene that sets one
+under **For This File**, so it needn't stay that way. A **Save Copy** of such a file does this for the
+copy only. It stays absolute only where no `//` path reaches, as onto another Windows drive.
+
+A path you set absolute in a file already saved is left alone, and **Style Notes** warns that it
+won't travel with the file:
+
+```{figure} ../images/guides-settings/guide-absolute.png
+:alt: The agent popover. Style Notes holds /shared/art/style/crates.md, and under the list of files sent a warning says This path is absolute, so it will not travel with the file.
+
+An absolute path in a saved file. Pick the guide again with **Relative Path** ticked to change it.
+```
+
 **Save As** into another folder rewrites the `//` path of every scene that sets one under
 **For This File**, so it still names the same guide. **Save Copy** does the same for the
 copy and leaves the open file alone. A `//` path in **Defaults** is not rewritten: it is
@@ -142,13 +156,12 @@ the path between them stays the same.
 
 For a repository of `.blend` files that share a look:
 
-1. Put the guides in the repository, and save the `.blend` there first. In a file that has
-   never been saved, the file browser writes an absolute path, with no warning.
+1. Put the guides in the repository, with the `.blend` you are setting up.
 2. Click the gear at the right of the panel's header. Under **For This File**, pick the guide
    with the icon at the end of **Style Notes**.
-3. Check that the field starts with `//`. If it doesn't, pick the guide again with **Relative
-   Path** ticked in the file browser.
-4. Save the `.blend`, and commit the guides with it.
+3. Save the `.blend` in the repository, and check that the field starts with `//`. If it doesn't,
+   pick the guide again with **Relative Path** ticked in the file browser.
+4. Commit the `.blend` and the guides.
 5. Repeat for each `.blend`, and for each scene in it. There is no way to set many at once,
    and a new `.blend` has no guide until you set one.
 
@@ -201,7 +214,7 @@ another path, so it asks once too.
 
 Choosing a guide yourself counts as approving it: typing the path, or picking it, in **For
 This File** or **Defaults**. So does anything you run that sets the field, Claude's own Python
-included, as that can read your files anyway. Save As keeps the approval, and never asks.
+included, as that can read your files anyway. A first save and Save As keep the approval, and never ask.
 
 Approving a guide also covers the files it imports, which is why **Read Now** lists them. The
 approval is of the path: later edits to the guide, a new import in it included, are not

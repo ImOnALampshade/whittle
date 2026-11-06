@@ -18,4 +18,5 @@ SHOTS = [
     Shot("agent-popover", "The agent popover: two of For This File's settings set, a guide loaded, one import missing.", scenario="agent_popover"),
     Shot("guide-gate", "A file naming a guide this computer has not approved: the box over the prompt, Send disabled.", scenario="guide_gate"),
     Shot("guide-gate-read", "The same box after Read Now, listing what the guide would send.", scenario="guide_gate_read"),
+    Shot("guide-absolute", "The agent popover warning that an absolute path will not travel with the file.", scenario="guide_absolute"),
 ]

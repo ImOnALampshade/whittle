@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Real saves of // Style Notes paths in one fresh Blender, for
+"""Real saves of Style Notes paths in one fresh Blender, for
 tests/blender/test_file_settings.py:
 
     blender -b --factory-startup --python tests/blender/style_path_file.py -- ROOT
@@ -10,8 +10,9 @@ Copy, a failed Save As, a Save As into another folder and an undo; a file linkin
 a scene from it through a Save As of its own; then each file saved is opened to
 see what it carries. Then undo and redo across two moves, where a guide of the
 same name waits in the new folder, and saves through a symlink and out of a folder
-with a backslash in its name. Then what happens to approvals on the way. Prints
-one RESULT line of JSON."""
+with a backslash in its name. Then first saves of files never saved, each
+followed by what it left, and what happens to approvals on the way. Prints one
+RESULT line of JSON."""
 
 import json
 import os
@@ -31,7 +32,7 @@ from whittle.addon import prefs, props  # noqa: E402
 ROOT = Path(sys.argv[sys.argv.index("--") + 1])
 STORE = props.FILE_SETTINGS["style_file"]
 SCENES = {"Scene": "//../style/base.md", "Windows": "//..\\style\\base.md", "Inside": "//local.md",
-          "Absolute": str(ROOT / "style" / "base.md"), "Cleared": ""}
+          "Picked": str(ROOT / "style" / "base.md"), "Cleared": ""}
 reads = []
 during_saves = []
 
@@ -171,6 +172,18 @@ def out_of_a_backslash_folder() -> dict | None:
     return state()
 
 
+def unsaved_file(path: str, stored: bool = False) -> None:
+    """A new file with Style Notes set to path, or holding it as if it had
+    come with something appended, which no setter saw."""
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    scene = bpy.data.scenes.new("Scene") if not bpy.data.scenes else bpy.data.scenes[0]
+    scene.name = "Scene"
+    if stored:
+        scene.whittle[STORE] = path
+    else:
+        scene.whittle.style_file = path
+
+
 def stored_path() -> str:
     return bpy.data.scenes["Scene"].whittle.get(STORE)
 
@@ -179,17 +192,78 @@ def held() -> str:
     return prefs.held_guide(bpy.data.scenes["Scene"])
 
 
-def relative_before_a_save() -> dict:
-    """A // path set before there was a folder to count from was still set here."""
+def first_saves() -> dict:
+    result = {}
+    save_as = bpy.ops.wm.save_as_mainfile
     root = ROOT / "first"
+    guide = root / "style" / "g.md"
+    write(guide, "First.")
+    (root / "props").mkdir()
+
+    # An undo after the first save brings back the text from before it.
+    unsaved_file(str(guide))
+    step_back_and_forth()
+    blend = root / "props" / "a.blend"
+    save_as(filepath=str(blend))
+    result["saved"] = stored_path()
+    result["saved_held"] = held()
+    bpy.ops.ed.undo()
+    result["undone"] = stored_path()
+    bpy.ops.ed.redo()
+    result["redone"] = stored_path()
+
+    # A later save, and an absolute path set in the saved file, are left alone.
+    bpy.ops.wm.save_mainfile()
+    result["plain_save"] = stored_path()
+    bpy.ops.wm.open_mainfile(filepath=str(blend))
+    result["on_disk"] = stored_path()
+    bpy.data.scenes["Scene"].whittle.style_file = str(guide)
+    bpy.ops.ed.undo_push(message="Set absolute")
+    bpy.data.scenes["Scene"].frame_current = 30
+    bpy.ops.ed.undo_push(message="Later")
+    bpy.ops.wm.save_mainfile()
+    result["set_in_a_saved_file"] = stored_path()
+    bpy.ops.ed.undo()
+    result["set_in_a_saved_file_undone"] = stored_path()
+
+    # A Save As after it: the undo goes back past both.
+    unsaved_file(str(guide))
+    step_back_and_forth()
+    save_as(filepath=str(blend))
+    (root / "chars" / "orc").mkdir(parents=True)
+    save_as(filepath=str(root / "chars" / "orc" / "a.blend"))
+    result["moved_after"] = stored_path()
+    bpy.ops.ed.undo()
+    result["moved_after_undone"] = stored_path()
+
+    # A copy of a file never saved, and a save that fails.
+    unsaved_file(str(guide))
+    copy = root / "props" / "copy.blend"
+    save_as(filepath=str(copy), copy=True)
+    result["copy_open"] = (bpy.data.filepath, stored_path())
+    try:
+        save_as(filepath=str(root / "missing" / "folder" / "a.blend"))
+    except RuntimeError:
+        result["failed"] = (bpy.data.filepath, stored_path())
+    bpy.ops.wm.open_mainfile(filepath=str(copy))
+    result["copy_on_disk"] = stored_path()
+    result["copy_held"] = held()
+
+    # A path nothing approved stays so, and a save does not read it.
+    other = root / "style" / "other.md"
+    write(other, "Unasked.")
+    unsaved_file(str(other), stored=True)
+    reads.clear()
+    save_as(filepath=str(root / "props" / "b.blend"))
+    result["unapproved"] = {"path": stored_path(), "held": held(), "reads": len(reads)}
+
+    # A // path set before there was a folder to count from was still set here.
     write(root / "props" / "beside.md", "Beside.")
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    scene = bpy.data.scenes.new("Scene") if not bpy.data.scenes else bpy.data.scenes[0]
-    scene.name = "Scene"
-    scene.whittle.style_file = "//beside.md"
-    before = held()
-    bpy.ops.wm.save_as_mainfile(filepath=str(root / "props" / "c.blend"))
-    return {"before": before, "after": {"path": stored_path(), "held": held()}}
+    unsaved_file("//beside.md")
+    result["relative_before"] = held()
+    save_as(filepath=str(root / "props" / "c.blend"))
+    result["relative_after"] = {"path": stored_path(), "held": held()}
+    return result
 
 
 def approvals() -> dict:
@@ -221,7 +295,7 @@ def approvals() -> dict:
     save_as(filepath=str(root / "chars" / "orc" / "c.blend"))
     result["unapproved"] = {"path": stored_path(), "held": held(), "reads": len(reads)}
 
-    # Text a symlinked folder makes lead somewhere else as a string: the
+    # Text that a symlinked folder makes lead somewhere else as a string: the
     # approval goes with what the path names, not with the old text.
     (root / "nas" / "deep" / "shots").mkdir(parents=True)
     try:
@@ -232,6 +306,9 @@ def approvals() -> dict:
     fresh_file(root / "props" / "d.blend", "//../style/g.md")
     save_as(filepath=str(root / "work" / "shots" / "d.blend"))
     result["symlink_save_as"] = {"path": stored_path(), "held": held(), "guide": state()["guide"]}
+    unsaved_file(str(guide))
+    save_as(filepath=str(root / "work" / "shots" / "e.blend"))
+    result["symlink_first_save"] = {"path": stored_path(), "held": held(), "guide": state()["guide"]}
     return result
 
 
@@ -243,15 +320,18 @@ def main() -> dict:
     (ROOT / "style" / "base.md").write_text("Worn edges.")
     (ROOT / "props" / "local.md").write_text("Local.")
     bpy.context.scene.name = "Scene"
-    for name in list(SCENES)[1:] + ["Unset"]:
+    for name in list(SCENES)[1:] + ["Absolute", "Unset"]:
         bpy.data.scenes.new(name)
     for name, path in SCENES.items():
         bpy.data.scenes[name].whittle.style_file = path
 
     blend = ROOT / "props" / "scene.blend"
     save_as = bpy.ops.wm.save_as_mainfile
-    result["set"] = values()
+    result["unsaved"] = values()
     result["first_save"] = saved(save_as, filepath=str(blend))
+    # Set absolute once the file is saved, so that is what the user wants.
+    bpy.data.scenes["Absolute"].whittle.style_file = str(ROOT / "style" / "base.md")
+    result["set"] = values()
     result["plain_save"] = saved(bpy.ops.wm.save_mainfile)
     beside = ROOT / "props" / "beside.blend"
     result["same_folder"] = saved(save_as, filepath=str(beside))
@@ -307,7 +387,7 @@ def main() -> dict:
     result["undo_across_moves"] = undo_across_moves()
     result["symlink"] = through_a_symlink()
     result["backslash_folder"] = out_of_a_backslash_folder()
-    result["relative_before_a_save"] = relative_before_a_save()
+    result["first_saves"] = first_saves()
     result["approvals"] = approvals()
     return result
 

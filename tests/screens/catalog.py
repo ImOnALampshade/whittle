@@ -37,6 +37,8 @@ SCENARIOS = {
     "guide_gate": "A file naming a style guide this install has not approved: the box over the prompt, "
                   "Send disabled.",
     "guide_gate_read": "The same after Read Now: the box lists the guide's files, and a missing import.",
+    "guide_absolute": "The agent popover of a saved file whose Style Notes path is absolute: the line "
+                      "saying it will not travel.",
     "references": "Two reference images attached, one of them pinned.",
     "developer": "Developer Extras on, with the development tools shown after a turn.",
     "chat_menu": "The chat menu over three chats, the second-newest current.",

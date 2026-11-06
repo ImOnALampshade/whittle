@@ -58,6 +58,7 @@ GUIDE_ROWS = 10
 _approved: tuple[str | None, set[str]] | None = None
 _approved_unsaved: set[str] = set()
 HELD_NOTE = "Not sent until you approve it in the sidebar."
+ABSOLUTE_GUIDE = "This path is absolute, so it will not travel with the file."
 LOG_LINES = 8
 # What the Preferences' main region keeps from its width for a line in one
 # of Whittle's boxes: the region's margins, the box's border and the icon.
@@ -507,6 +508,15 @@ def held_guide(scene=None) -> str:
     user answers; empty if there is none. Fit for a redraw."""
     path, per_file = _style_path(scene)
     return path.strip() if guide_held(path, per_file=per_file) else ""
+
+
+def absolute_guide_warning(scene) -> str:
+    """The line for a saved file whose own guide path names this machine's
+    folders; empty otherwise. A string check: a redraw draws it."""
+    from . import props
+
+    found = props.file_settings(scene).get("style_file", "").strip()
+    return ABSOLUTE_GUIDE if bpy.data.filepath and style.is_absolute(found) else ""
 
 
 def read_own_style_guide() -> None:

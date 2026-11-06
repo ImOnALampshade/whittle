@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The question before a style guide this install has not approved goes out:
 which paths ask, what approves, that nothing reads an unapproved guide, the
-box over the composer and every route that sends."""
+box over the composer, every route that sends, and the warning for a file's
+absolute path."""
 
 import json
 import os
@@ -300,6 +301,45 @@ class GateBoxTest(GateCase):
         labels = self.popover().labels()
         self.assertIn("Would be sent:", labels)
         self.assertNotIn("Sent with each turn:", labels)
+
+
+class AbsoluteWarningTest(GateCase):
+    def warnings(self) -> list[str]:
+        return [line for line in self.popover().labels() if "travel" in line]
+
+    def test_a_saved_files_absolute_path_warns(self):
+        self.props.style_file = str(self.guide)
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(prefs.absolute_guide_warning(self.scene), prefs.ABSOLUTE_GUIDE)
+            with mock.patch.object(ui.prefs, "absolute_guide_warning", wraps=prefs.absolute_guide_warning):
+                self.assertTrue(self.warnings())
+
+    def test_a_windows_path_warns_on_any_platform(self):
+        self.arrive("C:\\repo\\style.md")
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(prefs.absolute_guide_warning(self.scene), prefs.ABSOLUTE_GUIDE)
+
+    def test_an_unsaved_file_has_the_first_save_to_come(self):
+        self.props.style_file = str(self.guide)
+        self.assertEqual(prefs.absolute_guide_warning(self.scene), "")
+        self.assertEqual(self.warnings(), [])
+
+    def test_a_path_that_travels_does_not_warn(self):
+        for path in ("//style.md", "~/style.md", ""):
+            self.arrive(path)
+            with saved_as(self.folder / "a.blend"):
+                self.assertEqual(prefs.absolute_guide_warning(self.scene), "", path)
+
+    def test_the_preferences_default_is_not_the_files_to_carry(self):
+        PREFS.style_file = str(self.guide)
+        with saved_as(self.folder / "a.blend"):
+            self.assertEqual(prefs.absolute_guide_warning(self.scene), "")
+
+    def test_it_touches_no_disk(self):
+        self.arrive(self.guide)
+        with saved_as(self.folder / "a.blend"), mock.patch("os.stat", side_effect=AssertionError("touched the disk")), \
+                mock.patch.object(style, "load_guide", side_effect=AssertionError("read")):
+            prefs.absolute_guide_warning(self.scene)
 
 
 class SendRoutesTest(ChatCase):

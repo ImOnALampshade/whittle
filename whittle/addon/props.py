@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Per-scene state: scene.whittle, and keeping a file's // style guide path
-naming the same guide through Save As and undo."""
+"""Per-scene state: scene.whittle, and keeping a file's style guide path
+naming the same guide through a first save, Save As and undo."""
 
 import os
 import uuid
@@ -53,10 +53,13 @@ _carried: set[str] = set()
 # _moves, this session's Save As moves to a new folder and where each went. No
 # stamp, or one from another session, means the folder before the first move.
 # A stamp means nothing outside this session: a file is read from where it is.
+# A first save that made a path relative is a move too, from nowhere: an undo
+# then brings back the absolute text, which no stamp marks as set since.
 STYLE_MOVE = "style_file_move"
 _start_folder = ""
 _moves: dict[str, str] = {}
 _latest_move = ""
+_first_save_moved = False
 
 
 def _clean(key: str, value):
@@ -93,31 +96,41 @@ def rebase_style_paths(target: str) -> None:
     """Before a save (save_pre, where bpy.data.filepath is still the file
     being left): if it goes to another folder, every scene's // Style Notes is
     rewritten to name the same file from there, as Blender does for its own
-    paths. Save As and Save Copy look the same here, so both write the new
-    text and settle_style_paths takes it back for a copy. Written straight to
-    the store: the property's update would read the new text from the old
-    folder, as bpy.data.filepath has not moved yet, and save_post reads it
-    once it has. The setter never runs, so the approval of what a text named
-    moves to the new text here. A read walks a `..` up from a folder's real
-    place, so the rewrite starts from there too, not from the symlink a file
-    was saved through."""
+    paths. The first save of a file has no folder to leave, and turns a path
+    picked in it, which Blender stores absolute, into a // path instead: a
+    path set absolute in a saved file was meant, and stays. Save As and Save
+    Copy look the same here, so both write the new text and settle_style_paths
+    takes it back for a copy. Written straight to the store: the property's
+    update would read the new text from the old folder, as bpy.data.filepath
+    has not moved yet, and save_post reads it once it has. The setter never
+    runs, so the approval of what a text named moves to the new text here. A
+    read walks a `..` up from a folder's real place, so the rewrite starts
+    from there too, not from the symlink a file was saved through."""
     global _rebased_from
     _rebased_from = bpy.data.filepath
     _rebased.clear()
     _carried.clear()
-    if not _rebased_from:
-        return
     store = FILE_SETTINGS["style_file"]
-    old_folder, new_folder = _real_folder(_rebased_from), _real_folder(target)
+    new_folder = _real_folder(target)
+    old_folder = _real_folder(_rebased_from) if _rebased_from else ""
     for scene in bpy.data.scenes:
         path = file_settings(scene).get("style_file", "").strip()
-        if scene.library is None and path.startswith("//"):
-            rebased = style.rebased_path(path, old_folder, new_folder)
-            if rebased != path:
-                if not prefs.guide_held(path, per_file=True):
-                    _carried.add(prefs.guide_key(rebased, target))
-                _rebased.append((scene, scene.whittle[store]))
-                scene.whittle[store] = rebased
+        if scene.library is not None:
+            continue
+        rebased = _rewritten(path, old_folder, new_folder)
+        if rebased != path:
+            if not prefs.guide_held(path, per_file=True):
+                _carried.add(prefs.guide_key(rebased, target))
+            _rebased.append((scene, scene.whittle[store]))
+            scene.whittle[store] = rebased
+
+
+def _rewritten(path: str, old_folder: str, new_folder: str) -> str:
+    """A Style Notes text as a save from old_folder (none: the first save) to
+    new_folder leaves it."""
+    if not old_folder:
+        return style.relative_path(path, new_folder)
+    return style.rebased_path(path, old_folder, new_folder) if path.startswith("//") else path
 
 
 def settle_style_paths(saved: bool = True) -> None:
@@ -126,18 +139,20 @@ def settle_style_paths(saved: bool = True) -> None:
     A failed Save As leaves bpy.data.filepath alone too. Otherwise the file
     moved, and the text rewritten says so. Whatever was saved, a copy too, was
     written with the new texts, so the approvals follow unless the save failed."""
-    global _rebased_from, _start_folder, _latest_move
+    global _rebased_from, _start_folder, _first_save_moved
     left, _rebased_from = _rebased_from, ""
     if bpy.data.filepath == left:
         for scene, text in _rebased:
             scene.whittle[FILE_SETTINGS["style_file"]] = text
-    elif left and _real_folder(left) != _real_folder(bpy.data.filepath):
+    elif not left:
+        if _rebased:
+            _start_folder = _real_folder(bpy.data.filepath)
+            _first_save_moved = True
+            _note_move()
+    elif _real_folder(left) != _real_folder(bpy.data.filepath):
         if not _moves:
             _start_folder = _real_folder(left)
-        _latest_move = uuid.uuid4().hex
-        _moves[_latest_move] = _real_folder(bpy.data.filepath)
-        for scene, _text in _rebased:
-            scene.whittle[STYLE_MOVE] = _latest_move
+        _note_move()
     if saved:
         prefs.approve_keys(_carried)
         prefs.settle_unsaved_approvals()
@@ -145,29 +160,49 @@ def settle_style_paths(saved: bool = True) -> None:
     _carried.clear()
 
 
+def _note_move() -> None:
+    """The file is in a new folder: the scenes just rewritten count from it."""
+    global _latest_move
+    _latest_move = uuid.uuid4().hex
+    _moves[_latest_move] = _real_folder(bpy.data.filepath)
+    for scene, _text in _rebased:
+        scene.whittle[STYLE_MOVE] = _latest_move
+
+
 def follow_style_paths() -> None:
     """After an undo or redo: a // path from before a Save As would be counted
     from the new folder, where it can name another file with no warning, so
-    it is rewritten to name what it named when it was written. The new text is
-    the one the save left, whose approval it carried, so none moves here. The
-    steps themselves cannot hold this, as the rewrite makes none. Linked scenes
-    are their own files' to rewrite."""
+    it is rewritten to name what it named when it was written, and an absolute
+    path from before the first save becomes the // path that save made of it.
+    The new text is the one the save left, whose approval it carried, so none
+    moves here. The steps themselves cannot hold this, as the rewrite makes
+    none. Linked scenes are their own files' to rewrite."""
     if not _latest_move:
         return
     store = FILE_SETTINGS["style_file"]
     for scene in bpy.data.scenes:
         stamp = str(scene.whittle.get(STYLE_MOVE, ""))
         path = file_settings(scene).get("style_file", "").strip()
-        if scene.library is None and stamp != _latest_move and path.startswith("//"):
-            scene.whittle[store] = style.rebased_path(path, _moves.get(stamp, _start_folder), _moves[_latest_move])
-            scene.whittle[STYLE_MOVE] = _latest_move
+        if scene.library is not None or stamp == _latest_move:
+            continue
+        if path.startswith("//"):
+            rewritten = style.rebased_path(path, _moves.get(stamp, _start_folder), _moves[_latest_move])
+        elif _first_save_moved and stamp not in _moves:
+            rewritten = style.relative_path(path, _moves[_latest_move])
+            if rewritten == path:
+                continue
+        else:
+            continue
+        scene.whittle[store] = rewritten
+        scene.whittle[STYLE_MOVE] = _latest_move
 
 
 def forget_style_moves() -> None:
     """A file was loaded: what it holds counts from where it is, and no undo
     reaches back past this."""
-    global _latest_move
+    global _latest_move, _first_save_moved
     _latest_move = ""
+    _first_save_moved = False
     _moves.clear()
 
 

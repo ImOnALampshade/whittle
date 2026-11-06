@@ -257,7 +257,7 @@ The conversation says this once, as a warning, when a turn starts without all of
 load, and is told part of the guide is missing.
 
 To see what went wrong, click the gear at the right of the panel's header. Each file that
-did not load has a warning under **Style Notes**:
+did not load has a warning under **Style Notes**, as does a path that won't work elsewhere:
 
 | The warning says | What to do |
 |---|---|
@@ -268,6 +268,7 @@ did not load has a warning under **Style Notes**:
 | `… cannot be read: …` with another reason | Check that you can open the file, and that its drive or share is there. |
 | `… is not an absolute path.` | Start the path in the field with `//`, `~` or the full path. |
 | `… is relative to the .blend: save the file to use it.` | Save the `.blend`. |
+| `This path is absolute, so it will not travel with the file.` | It works here, and the turn is complete. For a clone or another machine, pick the guide again with **Relative Path** ticked in the file browser. |
 
 The warnings are from the last read, so one you have fixed stays until the next turn or save,
 or until you pick the file again.

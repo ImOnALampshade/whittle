@@ -242,7 +242,8 @@ Auth and Distribution).
   changed setting. Nothing about a guide fails a turn: a problem is a warning for the
   user and one line for the agent. A `.blend` from someone else can name any path and
   what loads goes to the API, so keep the file-type check on the resolved path and the
-  128 KiB cap. A save into another folder rewrites `//` overrides as strings only
+  128 KiB cap. A save into another folder rewrites `//` overrides, and a first save makes
+  absolute overrides `//`, as strings only
   (`props.rebase_style_paths`): it never reads the guide, and it writes the store, not the
   property, whose update reads. `style.portable_path` leaves rooted paths alone. Nothing but
   **Read Now** may read a guide this install has not approved (`prefs.guide_held`,

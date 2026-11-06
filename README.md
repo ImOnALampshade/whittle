@@ -189,8 +189,9 @@ reset button beside a set one goes back to it. They are saved with the .blend.
 A style guide is a `.md` or `.txt` file saying how things should look: colours, edges,
 materials, mood, in your own words. Many `.blend` files can point at one guide, and a guide
 can import others with a line holding only `@path`, so a project's base look is written
-once. `//` at the start of the path means the `.blend`'s folder. Empty leaves the look to
-Claude. Claude reads the guide as your preferences for that file, not as rules: a request's
+once. `//` at the start of the path means the `.blend`'s folder, and a file's first save
+turns a picked path into one where it can, so it works on a clone; a saved file's absolute
+path has a warning. Empty leaves the look to Claude. Claude reads the guide as your preferences for that file, not as rules: a request's
 prompt or sketch still wins. Only `.md` and `.txt` files load, up to 128 KiB in all, since
 a `.blend` from someone else could name any file on your computer; the agent popover names
 what is sent, the first ten files and then how many more. For the same reason Send stays disabled

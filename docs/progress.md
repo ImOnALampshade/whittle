@@ -312,11 +312,13 @@ session can start from the scene, from nothing, from a primitive or from an asse
   slashes on every platform, in the field and in imports, and a Save As or Save Copy into
   another folder rewrites each scene's `//` override (`props.rebase_style_paths`), with no
   read and no restart of the agent, and an undo or redo across it rewrites what it brings back
-  (`props.follow_style_paths`), so the path goes on naming the same guide.
+  (`props.follow_style_paths`), so the path goes on naming the same guide. The first save of a
+  file does the same for an absolute override, making it a `//` path where one reaches
+  (`style.relative_path`), and a saved file's absolute path has a warning under Style Notes.
   Old `palette`, `bevel_style` and `style_notes` values are ignored, in preferences, scenes
   and bundles alike. Tests: `tests/agent/test_style.py`, `test_file_settings.StyleFileTest`,
   `test_file_settings.StylePathSaveTest` (real saves, `tests/blender/style_path_file.py`),
-  `test_guide_gate.py` (which paths ask, what approves, no read, the box, every route that sends),
+  `test_guide_gate.py` (which paths ask, what approves, no read, the box, every route that sends, the warning),
   `test_runner.py` (`.system_prompt.md`), the GUI checks `style_notes_picker` and `guide_gate`.
 - **Style in the system prompt**: the prompt ends with "Style for this file", the guide in
   `<style_guide>` tags as the user's for the file, applied with judgement and speaking to
@@ -787,7 +789,9 @@ them at each save. Nothing is written beside the `.blend`.
   that would pass the 128 KiB cap ends the guide there, the rest of the files still open
   included, so a single guide over it sends nothing,
   and a non-UTF-8 file is refused, so a Latin-1 file with one accented letter gives a
-  warning: both are as built, for the maintainer to confirm. Sending a guide unasked is closed
+  warning: both are as built, for the maintainer to confirm. A path set absolute in a saved file stays
+  absolute, as decided, with a warning, and a `~` path does not warn.
+  Sending a guide unasked is closed
   by the question before it goes (ui.md §4.13). What remains: an approval is of a path, so a file
   that later changes, or a new `@` import in it, is not asked about again, and neither is a
   different file that a change of symlink puts at that path; the key is a string, so a `..` after a
@@ -1098,5 +1102,6 @@ agent or **Development → Fake Script** (Developer Extras on; the scripts named
     `.system_prompt.md` then says no guide is set. In an unsaved file, a `//` path warns and a turn still runs.
     Save As into another folder through the file browser: the field shows the rewritten path
     and the guide stays listed, and Ctrl+Z and Ctrl+Shift+Z across it leave the guide listed. A `.blend` and guides shared with a Windows machine read there too.
+    In a new file, pick a guide and save inside the repository: the field then starts with `//`, and Ctrl+Z keeps it so.
     On a second machine with a clone of the repository (`guide_gate` covers one machine): open one `.blend`, approve the guide,
     open another naming it, and nothing asks; `git status` shows no `.blend` changed.

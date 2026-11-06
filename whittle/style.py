@@ -75,9 +75,13 @@ def portable_path(path: str) -> str:
     \server made //server would read as relative to the .blend. The same on
     every platform, so a relative path cannot name a file with a backslash in
     its name."""
-    if not path.startswith("//") and (path[:1] in ("/", "\\") or _DRIVE.match(path)):
-        return path
-    return path.replace("\\", "/")
+    return path if is_absolute(path) else path.replace("\\", "/")
+
+
+def is_absolute(path: str) -> bool:
+    """Whether a Style Notes path is rooted on some platform, whichever this
+    one is: it then names one machine's folders, unlike a // path or one under ~."""
+    return not path.startswith("//") and (path[:1] in ("/", "\\") or bool(_DRIVE.match(path)))
 
 
 def absolute_path(path: str, flavour=os.path) -> str:
@@ -107,9 +111,23 @@ def rebased_path(path: str, old_folder: str, new_folder: str, flavour=os.path) -
     same = [flavour.normcase(flavour.normpath(folder)) for folder in (old_folder, new_folder)]
     if same[0] == same[1]:
         return path
-    target = flavour.normpath(flavour.join(old_folder, portable_path(path)[2:]))
+    return _from_folder(flavour.normpath(flavour.join(old_folder, portable_path(path)[2:])), new_folder, flavour)
+
+
+def relative_path(path: str, folder: str, flavour=os.path) -> str:
+    """An absolute path as a // path from folder, by rebased_path's rules, or
+    the text as it was if it is not absolute or has no way there. Only strings."""
+    # A // path is absolute to the platform on Linux and macOS.
+    if path.startswith("//") or not flavour.isabs(path):
+        return path
+    found = _from_folder(flavour.normpath(path), folder, flavour)
+    return found if found.startswith("//") else path
+
+
+def _from_folder(target: str, folder: str, flavour) -> str:
+    """The // path naming target from folder, or target if there is none."""
     try:
-        relative = flavour.relpath(target, new_folder).replace(flavour.sep, "/")
+        relative = flavour.relpath(target, folder).replace(flavour.sep, "/")
     except ValueError:
         return target
     return target if "\\" in relative else "//" + relative

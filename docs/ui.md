@@ -179,8 +179,13 @@ redraw never touches the disk (architecture §1, Style guides):
 - `Not sent until you approve it in the sidebar.` (dim, `prefs.HELD_NOTE`) in place of that
   line while the guide waits for this install's approval (§4.13). Read Now stays, and what
   it finds is headed `Would be sent:` rather than `Sent with each turn:`.
+- `This path is absolute, so it will not travel with the file.` (`prefs.ABSOLUTE_GUIDE`) on an
+  `ERROR` line after those, in the popover only, when this file's own path in a saved file is rooted on any platform.
+  A string check (`prefs.absolute_guide_warning`), so a redraw can make it. Not for a `~` path, a
+  `//` path, the preferences' path, or an unsaved file, whose first save makes the path relative
+  where it can (architecture §1, Style guides).
 
-The Defaults box in the preferences draws the same lines under its own field. A problem does
+The Defaults box in the preferences draws the same lines under its own field, the last one aside. A problem does
 not stop a turn. The conversation also says `Part of the style guide did not load. The agent
 popover says what is missing.` as a warning, once while that stays so, since the popover can
 go unopened.
@@ -1579,6 +1584,7 @@ width and, for `conversation`, `markdown` and `long_session`, the wide variant t
 | `agent_popover` | §3.1; Agent, Model and Effort lines and For This File starting in one column (no agent yet, so no Chats line); For This File with `Triangle Budget (default)` and `Render Size (default)`, their resets greyed; `Self-check Rounds` and `Style Notes` without "(default)", their resets enabled; after a small gap, the Style Notes field on its own line under its label, the label at the field's left edge, with its file icon; under it the dim `Sent with each turn:`, `crates.md` and `base.md`, then the warning that `@props.md` was not found, whole on `ERROR` lines; every reset on its field's line, all in one column; Start Agent and Preferences… |
 | `guide_warning` | a finished turn whose style guide has a missing import: the conversation shows `Part of the style guide did not load` once, not in red |
 | `guide_gate` | 4.13; the `Use this style guide?` box above the sketch row, its note dim and wrapped, the absolute path whole with its `FILE_TEXT` icon; Use This Guide alone on its row, Read Now and Go Without It sharing one, neither cut; Send disabled; the draft kept; nothing red |
+| `guide_absolute` | §3.1; a saved file's absolute path in the agent popover: `This path is absolute, so it will not travel with the file.` on an `ERROR` line after the file list, wrapped to the popover |
 | `guide_gate_read` | 4.13 after Read Now: `It would send:` dim, the file from elsewhere first and in full, the rest by name, the missing import on an `ERROR` line, wrapped, and the buttons still there |
 | `developer` | Developer Extras on: Development panel shown; off (every other scenario): absent |
 | `chat_menu` | three chats, the second-newest current: New Chat first; Conversations; each entry's title whole, its dim `N turns · <age> · <size>` line; ✓ on the current entry (marked by its check mark only, not highlighted), 🗑 on the others; the footer total and three items; nothing red |

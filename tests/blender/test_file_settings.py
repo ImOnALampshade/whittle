@@ -368,7 +368,7 @@ class StylePathSaveTest(unittest.TestCase):
         assert line is not None, out.stdout[-3000:] + out.stderr[-3000:]
         cls.r = json.loads(line[len("RESULT "):])
         cls.moved = {**cls.r["set"], "Scene": "//../../style/base.md", "Windows": "//../../style/base.md",
-                     "Inside": "//../../props/local.md"}
+                     "Inside": "//../../props/local.md", "Picked": "//../../style/base.md"}
         cls.copied = {**cls.r["set"], "Scene": "//../style/base.md", "Windows": "//../style/base.md",
                       "Inside": "//../props/local.md"}
 
@@ -378,7 +378,7 @@ class StylePathSaveTest(unittest.TestCase):
         self.assertEqual(self.r["cached_windows"], "Worn edges.", "the last read is found by the text as written")
 
     def test_saves_in_the_folder_change_nothing(self):
-        for step in ("first_save", "plain_save", "same_folder"):
+        for step in ("plain_save", "same_folder"):
             self.assertEqual(self.r[step], self.r["set"], step)
         for name in ("first", "beside"):
             self.assertEqual(self.r["on_disk"][name]["values"], self.r["set"], name)
@@ -441,10 +441,48 @@ class StylePathSaveTest(unittest.TestCase):
                          {"path": "//../../../work/repo/style/a.md", "guide": "Right.", "problems": []})
         self.assertEqual(self.r["symlink"]["out_of"], {"path": "//../style/a.md", "guide": "Right.", "problems": []})
 
+    def test_a_first_save_makes_a_picked_path_relative(self):
+        self.assertEqual(self.r["unsaved"]["Picked"], str(self.root / "style" / "base.md"))
+        self.assertEqual(self.r["first_save"], {**self.r["unsaved"], "Picked": "//../style/base.md"},
+                         "and nothing else: a // path has a folder to count from now")
+        first = self.r["first_saves"]
+        self.assertEqual(first["saved"], "//../style/g.md")
+        self.assertEqual(first["on_disk"], "//../style/g.md", "the file saved has the // path")
+
+    def test_a_first_save_approves_what_it_rewrites(self):
+        self.assertEqual(self.r["first_saves"]["saved_held"], "")
+
+    def test_undo_after_a_first_save_keeps_the_relative_path(self):
+        first = self.r["first_saves"]
+        self.assertEqual((first["undone"], first["redone"]), ("//../style/g.md", "//../style/g.md"))
+        self.assertEqual((first["moved_after"], first["moved_after_undone"]),
+                         ("//../../style/g.md", "//../../style/g.md"), "past a Save As too")
+
+    def test_only_the_first_save_does_this(self):
+        first = self.r["first_saves"]
+        guide = str(self.root / "first" / "style" / "g.md")
+        self.assertEqual(first["plain_save"], "//../style/g.md")
+        self.assertEqual(first["set_in_a_saved_file"], guide, "set absolute in a saved file: left alone")
+        self.assertEqual(first["set_in_a_saved_file_undone"], guide, "and an undo leaves it too")
+
+    def test_a_copy_of_a_file_never_saved_leaves_the_open_file(self):
+        first = self.r["first_saves"]
+        guide = str(self.root / "first" / "style" / "g.md")
+        self.assertEqual(first["copy_open"], ["", guide])
+        self.assertEqual(first["copy_on_disk"], "//../style/g.md", "the copy is relative")
+        self.assertEqual(first["copy_held"], "", "and its guide is approved")
+
+    def test_a_failed_first_save_leaves_the_open_file(self):
+        self.assertEqual(self.r["first_saves"]["failed"], ["", str(self.root / "first" / "style" / "g.md")])
+
+    def test_a_first_save_approves_nothing_that_was_not(self):
+        self.assertEqual(self.r["first_saves"]["unapproved"],
+                         {"path": "//../style/other.md", "held": "//../style/other.md", "reads": 0})
+
     def test_a_relative_path_set_before_the_first_save_was_set_here(self):
-        found = self.r["relative_before_a_save"]
-        self.assertEqual(found["before"], "", "it leads nowhere yet")
-        self.assertEqual(found["after"], {"path": "//beside.md", "held": ""})
+        first = self.r["first_saves"]
+        self.assertEqual(first["relative_before"], "", "it leads nowhere yet")
+        self.assertEqual(first["relative_after"], {"path": "//beside.md", "held": ""})
 
     def test_approval_survives_save_as_undo_and_copy(self):
         found = self.r["approvals"]
@@ -461,6 +499,7 @@ class StylePathSaveTest(unittest.TestCase):
         if "symlink_save_as" not in found:
             self.skipTest("no symlinks here")
         self.assertEqual((found["symlink_save_as"]["held"], found["symlink_save_as"]["guide"]), ("", "Approved."))
+        self.assertEqual((found["symlink_first_save"]["held"], found["symlink_first_save"]["guide"]), ("", "Approved."))
 
     def test_a_backslash_in_a_folder_name_survives_a_move(self):
         if self.r["backslash_folder"] is None:
